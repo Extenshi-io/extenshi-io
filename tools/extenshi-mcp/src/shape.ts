@@ -280,6 +280,18 @@ export function scannerPhrase(scanner: unknown): string | undefined {
 	return SCANNER_PHRASES[scanner.toLowerCase()] ?? 'Security analysis'
 }
 
+/**
+ * Some rule ids carry the scanner key as a namespace (`jstap:document-cookie-access`);
+ * the same string is often the finding title. Drop a known scanner prefix so the
+ * tool name never leaks through the rule or title either.
+ */
+export function stripScannerPrefix(value: unknown): unknown {
+	if (typeof value !== 'string') return value
+	const i = value.indexOf(':')
+	if (i <= 0) return value
+	return value.slice(0, i).toLowerCase() in SCANNER_PHRASES ? value.slice(i + 1) : value
+}
+
 /** Curate a finding group to the essentials. */
 function shapeFinding(f: unknown): Obj {
 	if (!isObj(f)) return { value: compact(f) }
@@ -288,9 +300,9 @@ function shapeFinding(f: unknown): Obj {
 		: undefined
 	return prune({
 		scanner: scannerPhrase(f.scanner),
-		rule: f.rule_id ?? f.ruleId,
+		rule: stripScannerPrefix(f.rule_id ?? f.ruleId),
 		severity: f.severity,
-		title: f.title,
+		title: stripScannerPrefix(f.title),
 		count: f.count,
 		files: locations,
 	})

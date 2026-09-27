@@ -93,6 +93,14 @@ describe('shapeSecurity with install-dialog preview', () => {
 						{ scanner: 'semgrep', severity: 'HIGH', count: 1 },
 						{ scanner: 'YARA', severity: 'HIGH', count: 1 },
 						{ scanner: 'some_new_tool', severity: 'HIGH', count: 1 },
+						{
+							scanner: 'jstap',
+							rule_id: 'jstap:document-cookie-access',
+							title: 'jstap:document-cookie-access',
+							severity: 'HIGH',
+							count: 1,
+						},
+						{ scanner: 'semgrep', rule_id: 'note:keep-me', title: 'Ratio: 3:1', severity: 'HIGH', count: 1 },
 					],
 				},
 			},
@@ -101,7 +109,11 @@ describe('shapeSecurity with install-dialog preview', () => {
 		expect(json).toContain('Code vulnerability analysis')
 		expect(json).toContain('Malware signature matching')
 		expect(json).toContain('Security analysis')
-		for (const raw of ['semgrep', 'YARA', 'some_new_tool']) expect(json).not.toContain(raw)
+		for (const raw of ['semgrep', 'YARA', 'some_new_tool', 'jstap']) expect(json).not.toContain(raw)
+		expect(json).toContain('"document-cookie-access"')
+		// Only known scanner namespaces are stripped.
+		expect(json).toContain('note:keep-me')
+		expect(json).toContain('Ratio: 3:1')
 	})
 
 	it('omits the preview key when none is provided', () => {
