@@ -72,7 +72,7 @@ export const PAY_OPERATIONS = [
 		'list',
 		'payApp.list',
 		false,
-		'List your independent Pay applications. No development project required. Follow nextCursor for more results.',
+		'List your independent Pay applications. No development project required. Paginated: nextCursor is set while more results exist.',
 	],
 	[
 		'createPayApp',
@@ -80,7 +80,7 @@ export const PAY_OPERATIONS = [
 		'create',
 		'payApp.create',
 		true,
-		'Create an independent Pay application; linking a development project is optional. Creates a new application on every call: do not retry blindly after a timeout.',
+		'Create an independent Pay application; linking a development project is optional. Not idempotent: each call creates a new application, including a call repeated after a timeout.',
 	],
 	[
 		'getPayApp',
@@ -120,7 +120,7 @@ export const PAY_OPERATIONS = [
 		'archive',
 		'payApp.archive',
 		true,
-		'Archive your application and stop new checkout. Preserve payment records and existing entitlements.',
+		'Archive your application and stop new checkout. Payment records and existing entitlements are preserved.',
 	],
 	[
 		'exportPayData',
@@ -128,7 +128,7 @@ export const PAY_OPERATIONS = [
 		'export',
 		'payApp.export',
 		false,
-		'Export one page of your application data. Follow nextCursor until null for a complete export. Customer/payment data is sensitive: save only to an author-controlled destination; never paste into public issues.',
+		'Export one page of one resource (offers, payments, subscriptions, entitlements or customers). nextCursor is null on the last page. The output contains sensitive customer and payment data.',
 	],
 	[
 		'getPaySeller',
@@ -136,7 +136,7 @@ export const PAY_OPERATIONS = [
 		'seller',
 		'paySeller.get',
 		false,
-		'Read seller connection, public profile, offers and publishable SDK key. Agreement signing and KYC require the author in the browser.',
+		'Read seller connection, public profile, offers, the publishable SDK key and the public entitlement verification key. Those two keys are the ones meant to be embedded in extension code; secret keys are not part of the response. Agreement signing and KYC take place in the browser.',
 	],
 	[
 		'connectPaySeller',
@@ -144,7 +144,7 @@ export const PAY_OPERATIONS = [
 		'connect',
 		'paySeller.connect',
 		true,
-		'Start Stripe Connect onboarding and return a browser action URL. The author must complete KYC and legal acceptance; never do these on their behalf.',
+		'Start Stripe Connect onboarding and return a browser action URL. KYC and legal acceptance are completed by the author at that URL; this tool does not perform them.',
 	],
 	[
 		'refreshPaySeller',
@@ -160,7 +160,7 @@ export const PAY_OPERATIONS = [
 		'profile',
 		'paySeller.setPublicProfile',
 		true,
-		'Save author-confirmed public seller identity, support and terms links. Never invent legal identity or terms.',
+		'Save the public seller profile: display name, support URL or email, and terms URL. The values are stored as provided and are publicly visible.',
 	],
 	[
 		'upsertPayOffer',
@@ -168,7 +168,7 @@ export const PAY_OPERATIONS = [
 		'offer-upsert',
 		'paySeller.upsertOffer',
 		true,
-		'Create or update an offer by stable SKU. Price is in minor currency units. Use only the author-approved price, billing interval and features.',
+		'Create or update an offer keyed by a stable SKU. Price is in minor currency units. Subscriptions keep the given billing interval; one-time and lifetime offers store no interval. Price and features are stored as provided.',
 	],
 	[
 		'archivePayOffer',
@@ -176,7 +176,7 @@ export const PAY_OPERATIONS = [
 		'offer-archive',
 		'paySeller.archiveOffer',
 		true,
-		'Stop offering a SKU for new checkout; preserve historical purchases.',
+		'Stop offering a SKU for new checkout; historical purchases are preserved.',
 	],
 	[
 		'setPayEnabled',
@@ -184,7 +184,7 @@ export const PAY_OPERATIONS = [
 		'enable',
 		'paySeller.setEnabled',
 		true,
-		'Explicitly enable or disable new payments. Enabling is a live commerce change: only do so with author authorization and after checking readiness. Backend prerequisites remain enforced.',
+		'Enable or disable new payments for the application; requires a connected payment provider. Enabling re-reads the seller status from the provider (charges and payouts). It does not verify the public profile, agreement or offer sync: buyers can check out only when every readiness check reported by get_pay_readiness passes. Enabling is a live commerce change.',
 	],
 	[
 		'rotatePayKey',
@@ -192,7 +192,7 @@ export const PAY_OPERATIONS = [
 		'rotate-key',
 		'paySeller.rotatePublishableKey',
 		true,
-		'Generate a new publishable SDK key. Prior keys remain accepted for installed extension builds; this is not secret revocation. Never retry blindly.',
+		'Generate a new publishable SDK key. Not idempotent: each call issues another key. Prior keys remain accepted for installed extension builds; this does not revoke any secret.',
 	],
 ] as const
 

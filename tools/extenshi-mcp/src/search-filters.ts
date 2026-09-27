@@ -51,7 +51,7 @@ export const STORE_SPECIFIC_FILTERS: readonly StoreSpecificFilter[] = [
 export function describeStoreConstraints(): string {
 	const lines = STORE_SPECIFIC_FILTERS.map(
 		(f) =>
-			`\`${f.field}\` only applies to ${f.supportedStores.join('/')} — omit it or include one of those stores in \`stores\``,
+			`\`${f.field}\` only applies to ${f.supportedStores.join('/')}; combining it with a \`stores\` filter that excludes those stores is rejected`,
 	)
 	return `Store-specific constraints (validated client-side, before any request): ${lines.join('; ')}.`
 }

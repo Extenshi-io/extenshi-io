@@ -1029,6 +1029,62 @@ describe('published input schemas', () => {
 	})
 })
 
+describe('tool descriptions (Anthropic Software Directory Policy §2)', () => {
+	// Descriptions state what a tool does, returns and changes. They carry no
+	// instructions to the model, no steering toward other tools and no hidden text.
+	const IMPERATIVE = /\b(never|always|do not|don't|must)\b/i
+	const STEERING =
+		/\b(then call|call this|re-read|before telling|omit (to|for|the)|limit to|include extensions)\b/i
+	const tools: Array<{ name: string; description?: string; parameters?: any }> = []
+	registerTools(
+		{ addTool: (t: { name: string }) => tools.push(t) } as unknown as Parameters<typeof registerTools>[0],
+		depsFor(['read', 'docs', 'scan', 'publish']),
+	)
+	const paramDescriptions = (node: unknown, out: string[] = []): string[] => {
+		if (Array.isArray(node)) for (const item of node) paramDescriptions(item, out)
+		else if (node && typeof node === 'object')
+			for (const [key, value] of Object.entries(node)) {
+				if (key === 'description' && typeof value === 'string') out.push(value)
+				else paramDescriptions(value, out)
+			}
+		return out
+	}
+	const texts = tools.flatMap((t) => [
+		[t.name, t.description ?? ''] as const,
+		...(t.parameters
+			? paramDescriptions(t.parameters['~standard'].jsonSchema.input({ target: 'draft-07' })).map(
+					(d) => [`${t.name} (parameter)`, d] as const,
+				)
+			: []),
+	])
+
+	it('registers every tool with a description', () => {
+		expect(tools.length).toBeGreaterThan(40)
+		for (const t of tools) expect(t.description, t.name).toBeTruthy()
+	})
+
+	it.each(texts)('%s has no imperative or steering wording', (_name, text) => {
+		expect(text).not.toMatch(IMPERATIVE)
+		expect(text).not.toMatch(STEERING)
+		// No hidden or encoded text: printable characters only (plus newlines).
+		const hidden = [...text].filter((ch) => {
+			const code = ch.codePointAt(0) ?? 0
+			return (
+				(code < 0x20 && code !== 0x0a) ||
+				(code >= 0x200b && code <= 0x200f) ||
+				(code >= 0x2060 && code <= 0x2064) ||
+				code === 0xfeff
+			)
+		})
+		expect(hidden).toEqual([])
+	})
+
+	it('states the extension-safe keys fact once, on get_pay_seller', () => {
+		const withFact = tools.filter((t) => /embedded in extension code/.test(t.description ?? ''))
+		expect(withFact.map((t) => t.name)).toEqual(['get_pay_seller'])
+	})
+})
+
 describe('Pay error guidance', () => {
 	const trpcError = (message: string, httpStatus: number) =>
 		Object.assign(new Error(message), { data: { httpStatus } })

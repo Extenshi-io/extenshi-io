@@ -390,8 +390,8 @@ const EXTENSION_REF_SHAPE = {
 		.optional()
 		.describe(
 			'Alternative to extension_id: the extension’s id in its store URL (e.g. Chrome ' +
-				'"cjpalhdlnbpafiamejdnhcphjbkeiagm"). For a Chrome/Edge id (32 letters a–p) you MUST also ' +
-				'pass `store` — both stores share that format. Firefox ids (slug / GUID / email) are ' +
+				'"cjpalhdlnbpafiamejdnhcphjbkeiagm"). A Chrome/Edge id (32 letters a–p) also requires ' +
+				'`store`: both stores share that format. Firefox ids (slug / GUID / email) are ' +
 				'unambiguous. Resolving a store_id is free; only the read that follows costs a credit.',
 		),
 	store: z
@@ -674,7 +674,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		for (const [method, name, , , mutation, description] of PAY_OPERATIONS) {
 			add({
 				name,
-				description: `${description} Requires ${mutation ? 'pay.write' : 'pay.read'} permission. Never put developer API keys or Stripe secrets in extension code.`,
+				description: `${description} Requires ${mutation ? 'pay.write' : 'pay.read'} permission.`,
 				parameters: paySchemas[method],
 				annotations: {
 					readOnlyHint: !mutation,
@@ -717,7 +717,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'import_manifest',
 			description:
-				'Import an existing manifest.json into the Dojo manifest editor and project labels. Pass parsed JSON and optional default-locale messages. Source import fills supported fields and preserves all other JSON; built imports remain separate observations. Default dryRun=true returns changes and expectedStateHash; apply with dryRun=false and that hash. Never infers data collection, prices, or publication. Requires project.write.' +
+				'Import an existing manifest.json into the Dojo manifest editor and project labels. Input: parsed JSON and optional default-locale messages. Source import fills supported fields and preserves all other JSON; built imports remain separate observations. Default dryRun=true returns changes and expectedStateHash without writing; dryRun=false with that hash applies them. Does not infer data collection, prices, or publication. Requires project.write.' +
 				PROVENANCE_HINT,
 			parameters: importManifestSchema,
 			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true, openWorldHint: true },
@@ -737,10 +737,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			],
 			[
 				'get_release_readiness',
-				'Explain readiness for the recorded browser and artifact by locale. Local or agent reports never become CI attestations. Stale evidence does not pass. Requires a Pro project. ' +
+				'Explain readiness for the recorded browser and artifact by locale. Local or agent reports are not treated as CI attestations. Stale evidence does not pass. Requires a Pro project. ' +
 					'Readiness is measured against the release recorded in the workspace: until apply_project_patch sets patch.release ' +
 					'(browser, version, artifactDigest, manifestDigest, locales, paymentRequired, and commit or dirtyTreeDigest) it reports ' +
-					'RELEASE_NOT_RECORDED; evidence must then match that release artifactDigest.',
+					'RELEASE_NOT_RECORDED; after that, evidence counts only when it matches that release artifactDigest.',
 				'getReleaseReadiness',
 			],
 		] as const
@@ -772,7 +772,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'connection_diagnostics',
 			description:
-				'Verify authentication, granted scopes, supported workspace contracts and actual write permissions (incl. hosted.write, evidence uploads and, for a projectId, CI ingest configuration). Includes credit balances; never returns credentials or secrets. On auth failures run `extenshi login --recover` (CLI) or reissue the API key from dojo.extenshi.io/api-keys.',
+				'Verify authentication, granted scopes, supported workspace contracts and actual write permissions (incl. hosted.write, evidence uploads and, for a projectId, CI ingest configuration). Includes credit balances; credentials and secrets are not included. Auth failures are recoverable with `extenshi login --recover` (CLI) or a reissued API key from dojo.extenshi.io/api-keys.',
 			annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 			parameters: z.object({}),
 			execute: async (_args, context) => {
@@ -796,7 +796,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				name,
 				description: dryRun
 					? `Preview a three-way metadata diff against a server-held base revision. No writes.${PROVENANCE_HINT}`
-					: `Apply a typed project metadata patch with expectedRevision and idempotencyKey. Preserve source and built manifests separately, including unknown keys. Missing fields never delete; tombstones explicitly delete. No source upload or scaffold overwrite. Record a release (patch.release) here before asking get_release_readiness. Requires project.write OAuth scope.${PROVENANCE_HINT}`,
+					: `Apply a typed project metadata patch with expectedRevision and idempotencyKey. Source and built manifests are stored separately, including unknown keys. Omitted fields are left unchanged; tombstones explicitly delete. No source upload or scaffold overwrite. patch.release records the release that get_release_readiness measures against. Requires project.write OAuth scope.${PROVENANCE_HINT}`,
 				annotations: {
 					readOnlyHint: dryRun,
 					idempotentHint: true,
@@ -815,7 +815,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'create_ci_ingest_secret',
 			description:
-				'Create or rotate the per-project secret the extenshi-evidence-action uses to POST CI evidence (POST /projects/:id/evidence/ingest). The secret is displayed ONCE — put it into the repository GitHub Actions secret EXTENSHI_EVIDENCE_SECRET. Creating again invalidates the previous secret. Requires project.write.',
+				'Create or rotate the per-project secret the extenshi-evidence-action uses to POST CI evidence (POST /projects/:id/evidence/ingest). The secret is returned only once; the action reads it from the repository GitHub Actions secret EXTENSHI_EVIDENCE_SECRET. Not idempotent: creating again invalidates the previous secret. Requires project.write.',
 			annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: true, openWorldHint: true },
 			parameters: z.object({ projectId: z.string().uuid() }),
 			execute: async (args, context) => {
@@ -828,7 +828,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		})
 		add({
 			name: 'upsert_hosted_page',
-			description: `Register the project's homepage or support page URL (HTTPS only, must be publicly reachable; the server hashes the body). The registered homepage URL feeds HOMEPAGE_URL when the integration config file is regenerated. Requires hosted.write. API reference: ${HOSTED_PAGES_DOCS}`,
+			description: `Register the project's homepage or support page URL (HTTPS only; the server fetches the public page and hashes the body, so the URL has to be publicly reachable). The registered homepage URL feeds HOMEPAGE_URL when the integration config file is regenerated. Requires hosted.write. API reference: ${HOSTED_PAGES_DOCS}`,
 			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
 			parameters: z.object({
 				projectId: z.string().uuid(),
@@ -892,7 +892,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'record_project_evidence',
 			description:
-				'Record test/scan/listing/privacy/payment evidence metadata bound to a browser, artifact hash and input hash. Source is local or agent, never CI — CI evidence is written by the verified ingest endpoint only. Attachment files upload via the CLI (extenshi evidence push --attach); this tool records metadata only. Requires evidence.write OAuth scope.' +
+				'Record test/scan/listing/privacy/payment evidence metadata bound to a browser, artifact hash and input hash. Source is local or agent; CI evidence is written only by the verified ingest endpoint. Attachment files upload via the CLI (extenshi evidence push --attach); this tool records metadata only. Requires evidence.write OAuth scope.' +
 				PROVENANCE_HINT,
 			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
 			parameters: agentEvidenceSchema,
@@ -908,10 +908,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			name: 'search_extensions',
 			description:
 				'Search the cross-store extension catalog (Chrome, Firefox, Edge) with hybrid relevance. ' +
-				'ALL filters are applied server-side by the catalog database — always narrow with the ' +
-				'parameters below (rating/users/reviews thresholds, store, category, pricing, risk, ' +
-				'permissions, freshness, manifest version, trader status) rather than fetching a broad ' +
-				'list and filtering the results yourself. Use `skip` to page through large result sets. ' +
+				'All filters (rating/reviews thresholds, store, category, pricing, risk, permissions, ' +
+				'freshness, manifest version, trader status) are applied server-side by the catalog ' +
+				'database, so a filtered request returns only the matching subset. `skip` pages through ' +
+				'large result sets. ' +
 				`${describeStoreConstraints()} ` +
 				'Returns a compact list for market research and competitive analysis.',
 			parameters: z.object({
@@ -919,7 +919,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				stores: z
 					.array(z.enum(['CHROME', 'FIREFOX', 'EDGE']))
 					.optional()
-					.describe('Limit to stores: CHROME, FIREFOX, and/or EDGE.'),
+					.describe('Stores to search: CHROME, FIREFOX and/or EDGE.'),
 				categories: z.array(z.string()).optional().describe('Catalog category slugs to include.'),
 				pricing: z
 					.array(z.enum(['FREE', 'FREEMIUM', 'IN_APP_PURCHASES', 'SUBSCRIPTION']))
@@ -937,9 +937,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					.min(0)
 					.optional()
 					.describe(
-						'Minimum weekly downloads — FIREFOX-ONLY metric (Chrome/Edge do not report it). ' +
-							'For Chrome/Edge popularity use sortBy:"popular" instead. Conflicts with a ' +
-							'Chrome/Edge-only `stores` filter and will be rejected.',
+						'Minimum weekly downloads — FIREFOX-ONLY metric (not reported by Chrome/Edge). ' +
+							'Chrome/Edge popularity is available through sortBy:"popular". A request combining ' +
+							'it with a Chrome/Edge-only `stores` filter is rejected.',
 					),
 				minReviews: z.number().min(0).optional().describe('Minimum number of store reviews/ratings.'),
 				updatedWithin: z
@@ -965,7 +965,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				includeDelisted: z
 					.boolean()
 					.optional()
-					.describe('Include extensions whose store listing was removed (default: hidden).'),
+					.describe('Whether extensions whose store listing was removed are included (default: excluded).'),
 				sortBy: z
 					.enum(['relevance', 'popular', 'rating', 'recent', 'name', 'safety', 'trader', 'size'])
 					.optional()
@@ -1039,10 +1039,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'reviews link). Chrome Web Store review rows are NOT returned (their text cannot be redistributed) — ' +
 				'for a Chrome extension the `aggregate` (with a link to the store reviews tab) is the only public ' +
 				'review content. Reviewer identity is intentionally omitted. ' +
-				'Paginated newest-first by default — pass `cursor` (the `nextCursor` from a previous ' +
-				'call) to fetch the next page, or sort by highest rating. Cursors are sort-specific: ' +
-				'keep the same `sort` while paging, and start over if you change it. Reads existing ' +
-				'scraped reviews; use `min_rating` to see only positive or only critical feedback.',
+				'Paginated newest-first by default (or by highest rating); `cursor` takes the `nextCursor` ' +
+				'from a previous call. Cursors are sort-specific: a cursor is valid only with the `sort` ' +
+				'it was issued for. Reads existing scraped reviews; `min_rating` narrows to positive or ' +
+				'critical feedback.',
 			parameters: z.object({
 				...EXTENSION_REF_SHAPE,
 				limit: z.number().int().min(1).max(50).default(20).describe('Max reviews to return (1–50).'),
@@ -1050,7 +1050,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					.number()
 					.int()
 					.optional()
-					.describe('Pagination cursor — pass the `nextCursor` returned by a previous call.'),
+					.describe('Pagination cursor: the `nextCursor` value returned by a previous call.'),
 				language_id: z.number().int().optional().describe('Only reviews in this catalog language id.'),
 				min_rating: z
 					.number()
@@ -1090,9 +1090,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Get the security analysis for an extension: safety score (0–100, higher = safer — the ' +
 				'same coefficient the website shows), risk category, finding counts by ' +
 				'severity, and the top grouped findings (scanner, rule, severity, count). Also returns ' +
-				'the install-dialog preview — exactly what Chrome/Firefox show users in the permission ' +
-				'prompt at install (consolidated + deduped from the manifest), available even for ' +
-				'unscanned extensions. Reads existing scan results — does not trigger a new scan. ' +
+				'an approximate install-dialog preview computed from the store-listed permissions ' +
+				'(consolidated + deduped), available even for unscanned extensions. Reads existing scan results — does not trigger a new scan. ' +
 				'Identify the extension by numeric `extension_id` OR `store_id` (+`store` for Chrome/Edge). ' +
 				'NB: this tool costs 3 read credits (it fetches security, risk, and install-preview data).',
 			parameters: z.object({ ...EXTENSION_REF_SHAPE }),
@@ -1125,15 +1124,15 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Look up the safety score and risk category for MANY extensions at once, addressed by their ' +
 				'STORE ids (the id in the store URL) — the inventory case: you have a list of what a user has ' +
 				`installed and need risk for all of it. Up to ${MAX_BATCH_EXTENSIONS} extensions per call, and ` +
-				'the WHOLE call costs 1 read credit (not 1 per extension), so prefer this over calling ' +
-				'get_security in a loop — that would cost 3 credits each. Returns safety score (0–100, higher ' +
+				'the WHOLE call costs 1 read credit (not 1 per extension; get_security costs 3 credits ' +
+				'per extension). Returns safety score (0–100, higher ' +
 				'= safer, the same number the website shows), risk category, severity counts, last scan date ' +
 				'and the catalog URL per extension. Each store id is resolved through its cross-store cluster ' +
 				'to the same listing the extension page renders, so these answers agree with the website. ' +
 				'`store` is REQUIRED per entry — Chrome and Edge ids share one format. An extension with no ' +
 				'score has not been scanned yet (`scanned: false`); ids with no catalog listing come back ' +
-				'under `notInCatalog`. Neither means "safe". For the full findings list of ONE extension, use ' +
-				'get_security instead.',
+				'under `notInCatalog`. Neither means "safe". The full findings list of ONE extension comes ' +
+				'from get_security.',
 			parameters: z.object({
 				extensions: z
 					.array(
@@ -1151,8 +1150,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					.min(1)
 					.max(MAX_BATCH_EXTENSIONS)
 					.describe(
-						`The extensions to look up (max ${MAX_BATCH_EXTENSIONS}). Split a longer list into ` +
-							`batches of ${MAX_BATCH_EXTENSIONS}; each batch costs 1 read credit.`,
+						`The extensions to look up (max ${MAX_BATCH_EXTENSIONS}). A longer list takes several ` +
+							`calls of up to ${MAX_BATCH_EXTENSIONS}; each call costs 1 read credit.`,
 					),
 			}),
 			execute: async (args, context) => {
@@ -1238,15 +1237,15 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'get_credit_balance',
 			description:
-				'Check your remaining Extenshi credits BEFORE running a batch, so you never guess whether a ' +
-				'large request is safe. Returns every credit pool for your API key: `read` (spent one-per-call by ' +
+				'Report your remaining Extenshi credits — for checking whether a large request fits the ' +
+				'balance before running it. Returns every credit pool for your API key: `read` (spent one-per-call by ' +
 				'search_extensions / get_extension / get_reviews / market_overview / get_risk_by_store_ids — the ' +
 				'last one covers up to 40 extensions for that single credit; get_security costs 3) and ' +
 				'`scan` (spent by scan_extension), plus `icon` and `inventory`. Each pool reports `remaining` — the ' +
 				'number that actually gates calls (one-time free grant + purchased credits) — and `freeRemaining` ' +
-				'(how much of the never-renewing signup grant is left). FREE to call: checking your balance never ' +
-				'spends a credit. Rule of thumb: to fetch N extensions you need read.remaining ≥ N (≥ 3N if you ' +
-				'also call get_security on each).',
+				'(how much of the one-time, non-renewing signup grant is left). FREE to call: checking the balance ' +
+				'spends no credit. Fetching N extensions takes read.remaining ≥ N (≥ 3N with get_security ' +
+				'on each).',
 			parameters: z.object({}),
 			execute: async (_args, context) => {
 				try {
@@ -1270,9 +1269,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			description:
 				"List the extension projects owned by this API key — the developer's own workspaces on " +
 				'extenshi.io. Returns id, name, status, target browsers, the bound GitHub repo (if any) and ' +
-				'the claimed store listing (if any). Start here when the developer says "my extension" or ' +
-				'"my project": the id you get back is what get_project_state takes. FREE — reading your own ' +
-				'projects never spends a credit.',
+				'the claimed store listing (if any). Applies when the developer refers to "my extension" or ' +
+				'"my project": the returned id is what get_project_state takes. FREE — reading your own ' +
+				'projects spends no credit.',
 			parameters: z.object({}),
 			execute: async (_args, context) => {
 				try {
@@ -1290,23 +1289,23 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'they picked (popup / side panel / page enhancer / in-page assistant), the required ' +
 				'permissions those types force, the exact manifest.json the project produces for each target ' +
 				'browser, the files that type needs, live hosted URLs (uninstall survey), and an index of ' +
-				'every saved tool state with its size. Use it before writing code so the manifest you ship ' +
-				'matches what the developer configured on the site — and re-read it after they change ' +
-				'something rather than assuming. The additive workspace envelope holds revisioned local observations separately from these scaffold drafts. It also returns the integration contract: review local changes before writing ' +
-				'`integration.file` to `integration.path` VERBATIM to wire the extension to this project — ' +
-				"those bytes carry a fingerprint extenshi.io uses to tell the developer's edits from its " +
-				'own, so an equivalent file you assemble yourself makes the site stop managing every value ' +
-				'in it. `integration.unwired` names the links this project has not set up yet — offer them ' +
-				'rather than inventing URLs. Tool-state payloads are NOT inlined by default (a single ' +
-				'row can be 256 KiB); name the keys you actually need in includeToolStates. FREE — never ' +
-				'spends a credit. Combine with list_extension_templates for what each type means.',
+				'every saved tool state with its size. It reflects the site configuration at the time of the ' +
+				'call; later changes on the site appear in a later read. The additive workspace envelope ' +
+				'holds revisioned local observations separately from these scaffold drafts. It also returns ' +
+				'the integration contract: `integration.file` is the exact content for `integration.path` ' +
+				'that wires the extension to this project. Those bytes carry a fingerprint extenshi.io uses ' +
+				"to tell the developer's edits from its own; a reassembled equivalent file lacks it, and the " +
+				'site then stops managing the values in it. `integration.unwired` lists the links this ' +
+				'project has not set up yet (no URLs exist for them). Tool-state payloads are NOT inlined by ' +
+				'default (a single row can be 256 KiB); includeToolStates selects which keys to inline. ' +
+				'FREE — spends no credit. Type definitions are in list_extension_templates.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				includeToolStates: z
 					.array(z.string())
 					.optional()
 					.describe(
-						'Tool keys whose saved payload to inline, e.g. ["manifest-generator", "privacy-policy-generator"]. Omit to get the index only.',
+						'Tool keys whose saved payload to inline, e.g. ["manifest-generator", "privacy-policy-generator"]. When omitted, only the index is returned.',
 					),
 			}),
 			execute: async (args, context) => {
@@ -1328,18 +1327,18 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				"The starter extension one of the developer's own projects produces, as FILES ready to " +
 				'write: manifest.json for the target browser, the background worker, the panel or ' +
 				"content-script files that project's types need, placeholder icons, and " +
-				'src/extenshi.config.js. Write the files VERBATIM — the config carries a fingerprint ' +
-				"that lets extenshi.io keep recognising the repository as this project's, and rebuilding " +
-				'it by hand makes the site stop managing those values. Use this for a NEW extension; never overwrite an existing repository. Prefer this over writing a manifest ' +
-				'yourself: it is the same set the site commits, so what you write and what the site ' +
-				"expects cannot disagree. One browser per call (default: the project's first target). " +
-				'FREE — never spends a credit.',
+				'src/extenshi.config.js. The config carries a fingerprint that lets extenshi.io recognise ' +
+				"the repository as this project's; a hand-rebuilt config lacks it, and the site then stops " +
+				'managing those values. Intended for a NEW extension: it is a complete starter set whose ' +
+				'files would replace same-named files in an existing repository. It is the same file set ' +
+				"the site commits. One browser per call (default: the project's first target). " +
+				'FREE — spends no credit.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				browser: z
 					.enum(['chrome', 'firefox', 'edge'])
 					.optional()
-					.describe("Target browser. Omit for the project's first declared target."),
+					.describe("Target browser; defaults to the project's first declared target."),
 			}),
 			execute: async (args, context) => {
 				try {
@@ -1375,8 +1374,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'get_privacy_policy_version',
 			description:
-				'Read the markdown (and HTML) of one hosted privacy-policy version. Use list_privacy_policy_versions ' +
-				'first. Pro only. Does not spend a credit.',
+				'Read the markdown (and HTML) of one hosted privacy-policy version; version numbers come from ' +
+				'list_privacy_policy_versions. Pro only. Does not spend a credit.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				versionNumber: z
@@ -1397,17 +1396,19 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'publish_privacy_policy',
 			description:
-				'Publish a hosted privacy policy for a Pro project. Omit bodyMarkdown to generate version 1 from ' +
-				'the saved form and manifest (always the first version). Pass bodyMarkdown to publish an edited ' +
-				'(or AI-updated) draft — that goes live at the same public URL. After a successful publish, ' +
-				're-read get_project_state so PRIVACY_POLICY_URL in integration.file is the hosted URL. ' +
-				'Show the author the URL before telling them it is live. Pro only.',
+				'Publish a hosted privacy policy for a Pro project. Changes the live public policy page. ' +
+				'Without bodyMarkdown it generates the policy from the saved form and manifest (the first ' +
+				'version is produced this way); with bodyMarkdown it publishes that edited (or AI-updated) ' +
+				'draft at the same public URL. Once published, PRIVACY_POLICY_URL in the integration.file ' +
+				'from get_project_state is the hosted URL. Pro only.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				bodyMarkdown: z
 					.string()
 					.optional()
-					.describe('Full policy markdown. Omit to generate from current form + manifest.'),
+					.describe(
+						'Full policy markdown. When omitted, the policy is generated from the saved form and manifest.',
+					),
 				kind: z
 					.enum(['generated', 'edited', 'ai_updated', 'reverted'])
 					.optional()
@@ -1428,8 +1429,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			name: 'update_privacy_policy_with_ai',
 			description:
 				"Propose an updated privacy policy that keeps the author's custom wording and adds sections " +
-				'required by new permissions or data practices. Does NOT go live — show proposedMarkdown to the ' +
-				'author, then call publish_privacy_policy with that markdown (kind ai_updated). Requires a ' +
+				'required by new permissions or data practices. Returns proposedMarkdown only; nothing goes ' +
+				'live. Publishing it is a separate step (publish_privacy_policy, kind ai_updated). Requires a ' +
 				'policy that is already published. Pro only.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
@@ -1449,7 +1450,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'get_development_guide',
 			description:
-				'Start here when developing an extension: get the complete tool inventory for THIS connection, ' +
+				'For extension-development tasks: returns the complete tool inventory for THIS connection, ' +
 				'the Extenshi service directory with access requirements and docs links, GitHub/code placement ' +
 				'guidance, and the ordered workflow from idea and repository through implementation, assets, ' +
 				'privacy, tests/CI, store submission and maintenance. Distinguishes MCP tools from cabinet, ' +
@@ -1462,16 +1463,15 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			name: 'search_docs',
 			description:
 				'Search the official Extenshi documentation (docs.extenshi.io) — product guides plus the ' +
-				'full @extenshi/cli command reference (scan, review-risk, publish, login). Use it to answer ' +
-				'"how do I…" questions and to give developers exact CLI commands and flags instead of ' +
-				'guessing. Free: reads public docs, no API key or quota required. Omit the query to list ' +
-				'every available documentation page.',
+				'full @extenshi/cli command reference (scan, review-risk, publish, login). Applies to ' +
+				'"how do I…" questions and to exact CLI commands and flags. Free: reads public docs, no ' +
+				'API key or quota required. Without a query it lists every available documentation page.',
 			parameters: z.object({
 				query: z
 					.string()
 					.optional()
 					.describe(
-						'What to look up, e.g. "scan a zip in CI", "review-risk flags", "publish to edge", "get an API key". Omit to list every page.',
+						'What to look up, e.g. "scan a zip in CI", "review-risk flags", "publish to edge", "get an API key". When omitted, every page is listed.',
 					),
 				limit: z
 					.number()
@@ -1530,11 +1530,11 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			name: 'generate_welcome_page_workflow',
 			description:
 				'Get the design brief for a browser-extension welcome page — the page a user lands on ' +
-				'right after installing. Returns the one action the page must drive (pin the extension, ' +
+				'right after installing. Returns the one action the page is built to drive (pin the extension, ' +
 				'keep the new-tab change, use it on a site), exactly which illustrations to produce for ' +
 				'that goal, how to capture and crop them, how to place numbered/arrow markers showing ' +
-				'where to click, the limits enforced on save, and the block JSON to hand back. Pair with ' +
-				'get_extension to reuse the store screenshots Extenshi already hosts. Static content: no ' +
+				'where to click, the limits enforced on save, and the block JSON format. Store screenshots ' +
+				'Extenshi already hosts (from get_extension) can serve as illustrations. Static content: no ' +
 				'API key, no network, no credits.',
 			parameters: z.object({
 				extension_name: z.string().max(120).optional().describe('Extension display name.'),
@@ -1593,16 +1593,16 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'The kinds of browser extension you can build, with the permissions each one REQUIRES: ' +
 				'Popup (toolbar window), Side panel (docked beside the page), Page enhancer (runs on sites ' +
 				'you list), In-page assistant (your own UI over any site). Types combine, and the required ' +
-				'permissions are the union. Call this BEFORE writing a manifest so you request the minimum ' +
-				'a shape actually needs instead of guessing — padded permissions are what store review ' +
-				'pushes back on. Also states the cross-browser rules (Chromium side_panel vs Firefox ' +
-				'sidebar_action) and the rule that a manifest must never name a file the package lacks. ' +
-				"FREE: no API key, no quota. For a specific project's chosen types use get_project_state.",
+				'permissions are the union. Applies when choosing manifest permissions: it gives the minimum ' +
+				'each shape needs (store review flags padded permissions). Also states the cross-browser ' +
+				'rules (Chromium side_panel vs Firefox sidebar_action) and the rule that a manifest may not ' +
+				'name a file the package lacks. ' +
+				"FREE: no API key, no quota. A specific project's chosen types are in get_project_state.",
 			parameters: z.object({
 				types: z
 					.array(z.string())
 					.optional()
-					.describe('Limit to these type ids (popup, sidepanel, content, overlay). Omit for all four.'),
+					.describe('Type ids to include (popup, sidepanel, content, overlay); all four when omitted.'),
 			}),
 			execute: async (args) => renderExtensionTemplates(args.types),
 		})
@@ -1671,14 +1671,15 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'publish_extension',
 			description:
-				'Publish an extension artifact (.zip/.crx/.xpi) to Chrome Web Store, Firefox AMO, and/or Edge Add-ons. ' +
+				'Publish an extension artifact (.zip/.crx/.xpi) to Chrome Web Store, Firefox AMO, and/or Edge Add-ons: ' +
+				'uploads and submits a new version to each selected store. ' +
 				'FREE and fully local: the upload goes from this machine straight to the store APIs using store ' +
 				'credentials from the MCP server environment (CHROME_APP_ID/CHROME_CLIENT_ID/CHROME_CLIENT_SECRET/' +
 				'CHROME_REFRESH_TOKEN, FIREFOX_ADDON_GUID/FIREFOX_JWT_ISSUER/FIREFOX_JWT_SECRET, ' +
 				'EDGE_PRODUCT_ID/EDGE_CLIENT_ID/EDGE_CLIENT_SECRET/EDGE_TENANT_ID). The upload itself is local, but ' +
-				'publishing is in an active testing phase: a quick Extenshi access check runs first (set EXTENSHI_API_KEY ' +
-				'so it can recognize your account). Edge submissions are polled to a terminal status. ' +
-				'Recommended flow: scan_extension first, then publish.',
+				'publishing is in an active testing phase: a quick Extenshi access check runs first (it identifies your ' +
+				'account by EXTENSHI_API_KEY). Edge submissions are polled to a terminal status. The artifact is ' +
+				'not security-scanned by this tool (scanning is scan_extension).',
 			parameters: z.object({
 				artifact_path: z
 					.string()
