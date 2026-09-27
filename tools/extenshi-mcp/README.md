@@ -56,8 +56,17 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_development_guide` | Complete tool inventory for this connection, service directory, GitHub guidance and the ordered development-to-maintenance plan | Free (no key) |
 | `list_extension_templates` | Extension shapes, minimum permissions and browser-specific manifest requirements | Free (no key) |
 | `connection_diagnostics` | Authentication, scopes, backend workspace contracts and capabilities | Free; identity required |
-| `import_manifest` | Import manifest JSON into the Dojo editor and project labels; preview changes and apply with a state hash | Requires project.write for OAuth |
+| `import_manifest` | Import manifest JSON into the Dojo editor and project labels; preview changes and apply with a state hash. | Requires project.write for OAuth |
+| `get_project_workspace` | Revisioned repository metadata, source/built manifests, scope and release snapshot | Free; identity required |
+| `diff_project_state` | Three-way metadata preview against a server-held base revision | Free; project read access |
+| `apply_project_patch` | Apply a typed metadata patch with conflicts, tombstones and idempotency | Requires project.write for OAuth |
+| `create_ci_ingest_secret` | Create or rotate the CI evidence ingest secret (shown once, store in Actions secrets) | Requires project.write for OAuth |
+| `upsert_hosted_page` | Register the project homepage/support URL (HTTPS, reachable, hashed) | Requires hosted.write for OAuth |
+| `verify_hosted_artifact` | Re-fetch and compare a hosted page against its record (verified/changed/unreachable) | Requires hosted.write for OAuth |
+| `remove_hosted_page` | Forget a registered homepage/support URL (public page keeps working) | Requires hosted.write for OAuth |
+| `list_hosted_pages` | Registered hosted pages with verification status | Free; identity required |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
+| `get_release_readiness` | Explain current, stale and missing release checks by browser and locale | Pro project; project read access |
 | `list_my_projects` | Your projects, repository bindings and claimed listings | Free; identity required |
 | `get_project_state` | Manifest, selected types, saved-state index, hosted URLs and exact integration file | Free; identity required |
 | `get_project_scaffold` | Starter files for one project and target browser | Free; identity required |
@@ -66,6 +75,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `update_privacy_policy_with_ai` | Propose a policy update for the author to review | Pro project; daily update limit applies |
 | `publish_privacy_policy` | Publish a policy at the project's hosted URL | Pro project; changes the live page |
 | `search_docs` | Search the Extenshi docs + `@extenshi/cli` reference so the assistant can quote exact commands | Free (no key) |
+| `localize_workflow` | Local message translation contract, CLI validation and manual review gates | Free (no key) |
 | `generate_icon_workflow` | Icon design requirements + the local agent-draws-SVG → `npx @extenshi/cli@latest icon preview` → export workflow | Free (no key) |
 | `generate_welcome_page_workflow` | Design brief for the post-install welcome page: the one action it must drive, which illustrations to produce, where to place click markers, and the block JSON to return | Free (no key) |
 | `scan_extension` | Pre-publish security scan of a local artifact (.zip/.crx/.xpi), with live progress | 1 scan |
@@ -112,3 +122,31 @@ EXTENSHI_API_KEY=ek_… npx @modelcontextprotocol/inspector node dist/index.js
 
 Publishing is handled by `./scripts/publish.sh` (npm Automation token from Infisical;
 `DRY_RUN=1 ./scripts/publish.sh` to validate). Requires Node ≥20.
+
+See the [project synchronization workflow](https://docs.extenshi.io/developers/project-sync) for CLI commands, revision conflicts, evidence freshness and OAuth recovery.
+
+
+### Standalone Pay applications
+
+These tools require a backend with standalone Pay support. A development project is optional. Request explicit `pay.read` and/or `pay.write` OAuth scopes, or grant Pay permissions to a local API key in [API keys](https://dojo.extenshi.io/api-keys). Older credentials have no Pay access. Tool registration does not prove backend rollout or SDK npm publication.
+
+| Tool | Permission | Behavior |
+| --- | --- | --- |
+| `list_pay_apps` | `pay.read` | List your independent Pay applications. No development project required. Follow nextCursor for more results. |
+| `create_pay_app` | `pay.write` | Create an independent Pay application; linking a development project is optional. Creates a new application on every call: do not retry blindly after a timeout. |
+| `get_pay_app` | `pay.read` | Read your Pay application and optional project link. |
+| `get_pay_readiness` | `pay.read` | Check current checkout and launch prerequisites. A passing checkout check does not prove a live external purchase or SDK publication. |
+| `link_pay_app` | `pay.write` | Link your Pay application to your development project. Existing purchases remain attached to the Pay application. |
+| `unlink_pay_app` | `pay.write` | Remove the optional development-project link without deleting Pay data. |
+| `archive_pay_app` | `pay.write` | Archive your application and stop new checkout. Preserve payment records and existing entitlements. |
+| `export_pay_data` | `pay.read` | Export one page of your application data. Follow nextCursor until null for a complete export. Customer/payment data is sensitive: save only to an author-controlled destination; never paste into public issues. |
+| `get_pay_seller` | `pay.read` | Read seller connection, public profile, offers and publishable SDK key. Agreement signing and KYC require the author in the browser. |
+| `connect_pay_seller` | `pay.write` | Start Stripe Connect onboarding and return a browser action URL. The author must complete KYC and legal acceptance; never do these on their behalf. |
+| `refresh_pay_seller` | `pay.write` | Refresh current payment-provider onboarding status. This does not complete KYC or accept agreements. |
+| `set_pay_seller_profile` | `pay.write` | Save author-confirmed public seller identity, support and terms links. Never invent legal identity or terms. |
+| `upsert_pay_offer` | `pay.write` | Create or update an offer by stable SKU. Price is in minor currency units. Use only the author-approved price, billing interval and features. |
+| `archive_pay_offer` | `pay.write` | Stop offering a SKU for new checkout; preserve historical purchases. |
+| `set_pay_enabled` | `pay.write` | Explicitly enable or disable new payments. Enabling is a live commerce change: only do so with author authorization and after checking readiness. Backend prerequisites remain enforced. |
+| `rotate_pay_key` | `pay.write` | Generate a new publishable SDK key. Prior keys remain accepted for installed extension builds; this is not secret revocation. Never retry blindly. |
+
+The author completes legal acceptance and Stripe KYC in the browser. Read `get_pay_readiness` before enabling checkout; enablement, key rotation and offer changes require explicit author authorization. Export pages contain private financial data and must remain in an author-controlled destination. Only the publishable SDK key belongs in an extension, never a developer API key or Stripe secret.

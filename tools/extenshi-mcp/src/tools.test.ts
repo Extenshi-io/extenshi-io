@@ -86,6 +86,35 @@ function depsFor(capabilities: Capability[]): ToolDeps {
 }
 
 const READ_TOOLS = [
+	'list_pay_apps',
+	'create_pay_app',
+	'get_pay_app',
+	'get_pay_readiness',
+	'link_pay_app',
+	'unlink_pay_app',
+	'archive_pay_app',
+	'export_pay_data',
+	'get_pay_seller',
+	'connect_pay_seller',
+	'refresh_pay_seller',
+	'set_pay_seller_profile',
+	'upsert_pay_offer',
+	'archive_pay_offer',
+	'set_pay_enabled',
+	'rotate_pay_key',
+
+	'import_manifest',
+	'get_project_workspace',
+	'get_release_readiness',
+	'connection_diagnostics',
+	'diff_project_state',
+	'apply_project_patch',
+	'record_project_evidence',
+	'create_ci_ingest_secret',
+	'upsert_hosted_page',
+	'verify_hosted_artifact',
+	'remove_hosted_page',
+	'list_hosted_pages',
 	'search_extensions',
 	'get_extension',
 	'get_reviews',
@@ -108,16 +137,17 @@ const DOCS_TOOLS = [
 	'search_docs',
 	'list_extension_templates',
 	'generate_icon_workflow',
+	'localize_workflow',
 	'generate_welcome_page_workflow',
 ]
 const LOCAL_ONLY_TOOLS = ['scan_extension', 'publish_extension']
 
 describe('registerTools capability gating', () => {
-	it('stdio (all capabilities) registers all 21 tools', () => {
+	it('stdio (all capabilities) registers all registered tools', () => {
 		const { names, server } = recordingServer()
 		registerTools(server, depsFor(['read', 'docs', 'scan', 'publish']))
 		expect(names.sort()).toEqual([...READ_TOOLS, ...DOCS_TOOLS, ...LOCAL_ONLY_TOOLS].sort())
-		expect(names).toHaveLength(21)
+		expect(names).toHaveLength(READ_TOOLS.length + DOCS_TOOLS.length + LOCAL_ONLY_TOOLS.length)
 	})
 
 	it('remote (read + docs only) registers the 19 hosted tools and NO local-only tools', () => {
@@ -470,7 +500,7 @@ describe('directory tool annotations', () => {
 	it('every registered tool declares a title and a readOnlyHint', () => {
 		const { tools, server } = recordingServer()
 		registerTools(server, depsFor(['read', 'docs', 'scan', 'publish']))
-		expect(tools).toHaveLength(21)
+		expect(tools).toHaveLength(READ_TOOLS.length + DOCS_TOOLS.length + LOCAL_ONLY_TOOLS.length)
 		for (const t of tools) {
 			expect(t.annotations?.title, `${t.name} title`).toBeTruthy()
 			expect(typeof t.annotations?.readOnlyHint, `${t.name} readOnlyHint`).toBe('boolean')
@@ -482,26 +512,51 @@ describe('directory tool annotations', () => {
 	// Pinned per-tool because adding a NEW entry to the annotation map is exactly
 	// how the previous two hints got silently re-attributed away from
 	// generate_icon_workflow — a `title` + `readOnlyHint` check did not notice.
-	it.each(['get_development_guide', 'generate_icon_workflow', 'generate_welcome_page_workflow'])(
-		'%s declares the full static-guide annotation set',
-		(name) => {
-			const { tools, server } = recordingServer()
-			registerTools(server, depsFor(['docs']))
-			const tool = tools.find((t) => t.name === name)
-			expect(tool, `${name} registered`).toBeTruthy()
-			expect(tool?.annotations).toMatchObject({
-				readOnlyHint: true,
-				idempotentHint: true,
-				openWorldHint: false,
-			})
-			expect(tool?.annotations?.title).toBeTruthy()
-		},
-	)
+	it.each([
+		'get_development_guide',
+		'generate_icon_workflow',
+		'generate_welcome_page_workflow',
+		'localize_workflow',
+	])('%s declares the full static-guide annotation set', (name) => {
+		const { tools, server } = recordingServer()
+		registerTools(server, depsFor(['docs']))
+		const tool = tools.find((t) => t.name === name)
+		expect(tool, `${name} registered`).toBeTruthy()
+		expect(tool?.annotations).toMatchObject({
+			readOnlyHint: true,
+			idempotentHint: true,
+			openWorldHint: false,
+		})
+		expect(tool?.annotations?.title).toBeTruthy()
+	})
 
 	it('all remote-exposed (read + docs) tools are read-only except hosted-project writes', () => {
 		const { tools, server } = recordingServer()
 		registerTools(server, depsFor(['read', 'docs']))
-		const hostedWrites = new Set(['publish_privacy_policy', 'update_privacy_policy_with_ai'])
+		const hostedWrites = new Set([
+			'create_pay_app',
+			'link_pay_app',
+			'unlink_pay_app',
+			'archive_pay_app',
+			'connect_pay_seller',
+			'refresh_pay_seller',
+			'set_pay_seller_profile',
+			'upsert_pay_offer',
+			'archive_pay_offer',
+			'set_pay_enabled',
+			'rotate_pay_key',
+
+			'import_manifest',
+			'publish_privacy_policy',
+			'update_privacy_policy_with_ai',
+			'apply_project_patch',
+			'record_project_evidence',
+			'create_ci_ingest_secret',
+			'upsert_hosted_page',
+			// Re-fetches and records the observed status server-side.
+			'verify_hosted_artifact',
+			'remove_hosted_page',
+		])
 		for (const t of tools) {
 			if (hostedWrites.has(t.name)) {
 				expect(t.annotations?.readOnlyHint, `${t.name} mutates the hosted policy`).toBe(false)
@@ -758,6 +813,40 @@ describe('isExpectedError', () => {
 	})
 })
 
+describe('localize_workflow execute', () => {
+	it('returns offline guidance without account access and keeps the translation/release boundaries explicit', async () => {
+		const { tools, server } = recordingServer()
+		const deps = depsFor(['docs'])
+		deps.getBff = vi.fn(() => {
+			throw new Error('Unexpected account access')
+		})
+		deps.requireApiKey = vi.fn(() => {
+			throw new Error('Unexpected key access')
+		})
+		registerTools(server, deps)
+		const tool = tools.find((t) => t.name === 'localize_workflow') as unknown as {
+			execute: (args: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<string>
+		}
+		const out = await tool.execute({}, {})
+		for (const expected of [
+			'extenshi localize prepare ./extension --lang fr,de,es --output ./localization --protect MyBrand',
+			'extenshi localize apply ./extension --translations ./localization/translations.json --protect MyBrand',
+			'extenshi localize check ./extension --protect MyBrand',
+			'sourceHashes',
+			'own provider and tokens',
+			'npm latest',
+			'fluent reviewer',
+			'review-risk',
+			'RTL',
+			'no API key',
+		])
+			expect(out).toContain(expected)
+		expect(await tool.execute({}, {})).toBe(out)
+		expect(deps.getBff).not.toHaveBeenCalled()
+		expect(deps.requireApiKey).not.toHaveBeenCalled()
+	})
+})
+
 describe('generate_icon_workflow execute', () => {
 	it('returns the static workflow with the extension name inlined', async () => {
 		const { tools, server } = recordingServer()
@@ -878,5 +967,64 @@ describe('get_risk_by_store_ids', () => {
 		const match = bffSource.match(/METERED_BATCH_MAX_EXTENSIONS\s*=\s*(\d+)/)
 		expect(match, 'METERED_BATCH_MAX_EXTENSIONS not found in catalog-bff').not.toBeNull()
 		expect(Number(match?.[1])).toBe(MAX_BATCH_EXTENSIONS)
+	})
+})
+
+describe('import_manifest execute', () => {
+	it('defaults to preview, forwards all manifest fields and requires the preview hash to apply', async () => {
+		const imported = vi.fn(async () => ({ dryRun: true, expectedStateHash: 'a'.repeat(64), changes: [] }))
+		const tool = readToolsWith({ importManifest: imported }).import_manifest
+		const envelope = {
+			projectId: '11111111-1111-4111-8111-111111111111',
+			schemaVersion: 1,
+			expectedRevision: 0,
+			idempotencyKey: '22222222-2222-4222-8222-222222222222',
+			browser: 'chrome',
+			provenance: { source: 'agent', toolVersion: 'test', observedAt: '2026-09-10T12:00:00Z' },
+			manifest: {
+				manifest_version: 3,
+				name: '__MSG_name__',
+				version: '0.1.0',
+				commands: { custom: { description: 'keep' } },
+			},
+			messages: { name: { message: 'Reader' } },
+		}
+		const input = tool.parameters.parse(envelope)
+		expect(input.dryRun).toBe(true)
+		await tool.execute(input, {})
+		expect(imported).toHaveBeenCalledWith(input)
+		expect(() => tool.parameters.parse({ ...envelope, dryRun: false })).toThrow('expectedStateHash')
+		expect(() => tool.parameters.parse({ ...envelope, tombstones: ['/release'] })).toThrow('tombstones')
+	})
+})
+
+describe('published input schemas', () => {
+	// The connector directory rejects untyped parameters, and zod-to-json-schema's
+	// default turns every reused zod instance into a bare `$ref` (inputDigest,
+	// expectedStateHash, toolVersion, …). fastmcp reads `~standard.jsonSchema`
+	// first, so that is the schema clients and the directory actually see.
+	const tools: Array<{ name: string; parameters?: any }> = []
+	registerTools(
+		{ addTool: (t: { name: string }) => tools.push(t) } as unknown as Parameters<typeof registerTools>[0],
+		depsFor(['read', 'docs', 'scan', 'publish']),
+	)
+
+	it.each(tools.filter((t) => t.parameters).map((t) => [t.name, t.parameters]))(
+		'%s has no $ref and a type on every property',
+		(_name, parameters) => {
+			const schema = parameters['~standard'].jsonSchema.input({ target: 'draft-07' })
+			expect(JSON.stringify(schema)).not.toContain('$ref')
+			for (const [key, prop] of Object.entries<Record<string, unknown>>(schema.properties ?? {}))
+				expect(
+					'type' in prop || 'anyOf' in prop || 'enum' in prop || 'const' in prop,
+					`${key} is untyped`,
+				).toBe(true)
+		},
+	)
+
+	it('keeps zod validation on the wrapped schema', () => {
+		const record = tools.find((t) => t.name === 'record_project_evidence')?.parameters
+		expect(record['~standard'].jsonSchema.input().properties.inputDigest).toMatchObject({ type: 'string' })
+		expect(record.safeParse({}).success).toBe(false)
 	})
 })

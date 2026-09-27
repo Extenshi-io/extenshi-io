@@ -254,6 +254,32 @@ export function shapeInstallDialog(preview: unknown): Obj | undefined {
 	})
 }
 
+// Public capability phrase per raw scanner key. We never disclose which tools the
+// pipeline runs, and MCP output is public (it lands in chats, screenshots and
+// the connector-directory review). Mirrors
+// catalog/catalog-frontend/src/lib/scanner-display-names.ts — keep them in sync.
+const SCANNER_PHRASES: Readonly<Record<string, string>> = {
+	static_scan: 'Manifest & permission analysis',
+	jstap: 'Behavioral & obfuscation analysis',
+	app_inspector: 'API & capability inspection',
+	jsluice: 'Network endpoint & exfiltration analysis',
+	clamav: 'Antivirus malware scan',
+	wallet_chain: 'Cryptocurrency & wallet abuse',
+	obfuscation_detector: 'Obfuscation & evasion detection',
+	llm_analysis: 'AI code-intent analysis',
+	semgrep: 'Code vulnerability analysis',
+	library_hash: 'Known-vulnerable dependency detection',
+	yara: 'Malware signature matching',
+	threat_intel: 'Threat intelligence correlation',
+	link_reputation: 'Outbound link reputation',
+}
+
+/** Capability phrase for a scanner key; unknown keys get a generic phrase, never the raw name. */
+export function scannerPhrase(scanner: unknown): string | undefined {
+	if (typeof scanner !== 'string' || !scanner) return undefined
+	return SCANNER_PHRASES[scanner.toLowerCase()] ?? 'Security analysis'
+}
+
 /** Curate a finding group to the essentials. */
 function shapeFinding(f: unknown): Obj {
 	if (!isObj(f)) return { value: compact(f) }
@@ -261,7 +287,7 @@ function shapeFinding(f: unknown): Obj {
 		? (f.locations as unknown[]).slice(0, 5).map((l) => (isObj(l) ? l.file : l))
 		: undefined
 	return prune({
-		scanner: f.scanner,
+		scanner: scannerPhrase(f.scanner),
 		rule: f.rule_id ?? f.ruleId,
 		severity: f.severity,
 		title: f.title,

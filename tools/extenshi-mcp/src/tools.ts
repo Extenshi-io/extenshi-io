@@ -26,19 +26,23 @@
  *               list_my_projects, get_project_state, get_project_scaffold,
  *               list/get/publish/update privacy policy (hosted; Pro)
  *   'docs'    → get_development_guide, search_docs, list_extension_templates, generate_icon_workflow,
- *               generate_welcome_page_workflow        (free; no key)
+ *               generate_welcome_page_workflow, localize_workflow (free; no key)
  *   'scan'    → scan_extension             (local artifact; stdio only)
  *   'publish' → publish_extension          (local creds; stdio only)
  *
  * stdout is the MCP protocol channel for stdio — nothing here may write to it.
  */
 
+import { agentEvidenceSchema, importManifestSchema, workspacePatchSchema } from '@extenshi/contracts'
 import { type FastMCP, type FastMCPSessionAuth, type Tool, type ToolParameters, UserError } from 'fastmcp'
 import { z } from 'zod'
+import { zodToJsonSchema } from 'zod-to-json-schema'
 import type { Bff } from './bff.js'
 import { buildDevelopmentGuide, type GuideTool } from './development-guide.js'
 import { DocsError, getDocsIndex, searchDocs } from './docs.js'
 import { renderIconWorkflow } from './icon-workflow.js'
+import { renderLocalizeWorkflow } from './localize-workflow.js'
+import { PAY_OPERATIONS, paySchemas } from './pay.js'
 import {
 	PublishSetupError,
 	publishArtifact,
@@ -59,6 +63,7 @@ import { renderWelcomeWorkflow } from './welcome-workflow.js'
 export const KEY_PAGE = 'https://dojo.extenshi.io/api-keys'
 export const SIGNUP_PAGE = 'https://auth.extenshi.io/signup'
 export const BILLING_PAGE = 'https://dojo.extenshi.io/billing'
+export const HOSTED_PAGES_DOCS = 'https://docs.extenshi.io/developers/project-sync#hosted-pages-from-the-api'
 
 export const MISSING_KEY_MESSAGE =
 	"This tool needs an Extenshi API key, and you don't have one set up yet — " +
@@ -92,10 +97,10 @@ export const SERVER_INSTRUCTIONS =
 	'get_development_guide (free): it lists every tool on this connection, the service directory, ' +
 	'account/local prerequisites, documentation links, GitHub repository guidance and the ordered ' +
 	'plan from scope and research through code, assets, privacy, CI, store release and maintenance. ' +
-	'Keep a checklist covering the whole requested lifecycle. Use search_docs (free) for current ' +
+	'Keep a checklist covering the whole requested lifecycle. For standalone Pay, start with list_pay_apps; create_pay_app needs no development project or repository. Request explicit pay.read/pay.write scopes, use get_pay_readiness, and leave agreement acceptance and KYC to the author in the browser. Only the publishable SDK key and public verification key belong in extension code. Use search_docs (free) for current ' +
 	'product details and exact CLI flags. With identity, call list_my_projects then get_project_state ' +
 	'to reuse the existing project and repository. Use list_extension_templates before the manifest, ' +
-	'and get_project_scaffold for a new project. Preserve existing source; write integration.file ' +
+	'and get_project_scaffold for a new project. Preserve existing source. For an existing extension, read get_project_workspace then preview and apply import_manifest to fill Dojo from its real manifest and default-locale messages before configuring services. Review the integration diff and preserve local edits; write integration.file ' +
 	'verbatim to integration.path, check integration.unwired and re-read state after cabinet edits. ' +
 	'Check get_credit_balance before metered work. get_risk_by_store_ids covers up to 40 store IDs ' +
 	'for one read; get_security costs three reads for detailed findings. Hosted policy tools require ' +
@@ -302,6 +307,25 @@ function attribution(session: unknown): { userId?: string; sessionId?: string } 
  * strongly typed as before.
  * Fail-soft: telemetry never alters the tool's result or its thrown error.
  */
+/**
+ * Publish every tool's input schema with all `$ref`s inlined.
+ *
+ * fastmcp converts `parameters` through xsschema, which runs zod-to-json-schema
+ * with its default `$refStrategy: 'root'`: every zod instance used twice in one
+ * schema (the shared `digest`, `provenanceSchema` strings, …) becomes a bare
+ * `{"$ref": "#/properties/…"}` with no `type`. The Claude connector directory
+ * rejects those ("Add a type to this parameter: inputDigest"), and weaker MCP
+ * clients cannot resolve them either. xsschema prefers a Standard JSON Schema
+ * `jsonSchema` hook when one is present, so we supply an inlined conversion
+ * there; validation still goes through the original zod `~standard.validate`.
+ */
+function withInlinedJsonSchema<Params extends ToolParameters>(parameters: Params): Params {
+	const input = () => zodToJsonSchema(parameters as unknown as z.ZodTypeAny, { $refStrategy: 'none' })
+	return Object.create(parameters, {
+		'~standard': { value: { ...parameters['~standard'], jsonSchema: { input, output: input } } },
+	}) as Params
+}
+
 function instrument<Params extends ToolParameters>(
 	tool: Tool<FastMCPSessionAuth, Params>,
 ): Tool<FastMCPSessionAuth, Params> {
@@ -548,6 +572,12 @@ const TOOL_ANNOTATIONS: Record<
 		destructiveHint: false,
 		openWorldHint: true,
 	},
+	localize_workflow: {
+		title: 'Local extension localization workflow',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
 	generate_icon_workflow: {
 		title: 'Icon design workflow guide',
 		readOnlyHint: true,
@@ -572,6 +602,37 @@ const TOOL_ANNOTATIONS: Record<
 		destructiveHint: true,
 		openWorldHint: true,
 	},
+	create_ci_ingest_secret: {
+		title: 'Create or rotate the CI evidence ingest secret',
+		readOnlyHint: false,
+		destructiveHint: true,
+		openWorldHint: true,
+	},
+	upsert_hosted_page: {
+		title: 'Register a hosted page URL',
+		readOnlyHint: false,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	verify_hosted_artifact: {
+		title: 'Verify a hosted page matches its record',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	list_hosted_pages: {
+		title: 'List hosted page registrations',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	remove_hosted_page: {
+		title: 'Remove a hosted page registration',
+		readOnlyHint: false,
+		destructiveHint: true,
+		openWorldHint: true,
+	},
 }
 
 /**
@@ -587,8 +648,13 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 	function add<P extends ToolParameters>(tool: Tool<FastMCPSessionAuth, P>): void {
 		// Attach the directory-required annotations (title + read/write hint) from
 		// the central map; an explicit `tool.annotations` (none today) still wins.
-		const annotations = { ...TOOL_ANNOTATIONS[tool.name], ...tool.annotations }
-		server.addTool(instrument({ ...tool, annotations }))
+		const annotations = {
+			...TOOL_ANNOTATIONS[tool.name],
+			...tool.annotations,
+			title: tool.annotations?.title ?? TOOL_ANNOTATIONS[tool.name]?.title ?? tool.name.replaceAll('_', ' '),
+		}
+		const parameters = tool.parameters && withInlinedJsonSchema(tool.parameters)
+		server.addTool(instrument({ ...tool, annotations, ...(parameters ? { parameters } : {}) }))
 		registeredTools.push({ name: tool.name, description: tool.description ?? '', annotations })
 	}
 	// Per-call helpers bound to the injected deps.
@@ -600,6 +666,225 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 
 	// ── Read tools (free; key/identity required) ───────────────────────────────
 	if (caps.has('read')) {
+		for (const [method, name, , , mutation, description] of PAY_OPERATIONS) {
+			add({
+				name,
+				description: `${description} Requires ${mutation ? 'pay.write' : 'pay.read'} permission. Never put developer API keys or Stripe secrets in extension code.`,
+				parameters: paySchemas[method],
+				annotations: {
+					readOnlyHint: !mutation,
+					destructiveHint: mutation,
+					idempotentHint: !['createPayApp', 'connectPaySeller', 'rotatePayKey'].includes(method),
+					openWorldHint: true,
+				},
+				execute: async (args, context) => {
+					try {
+						const invoke = bff(context)[method] as (input: typeof args) => Promise<unknown>
+						return JSON.stringify(await invoke(args))
+					} catch (err) {
+						if (err instanceof UserError && /^MCP_SCOPE_REQUIRED:pay\.(read|write)\./.test(err.message))
+							throw err
+						const status = (err as { data?: { httpStatus?: number } } | null)?.data?.httpStatus
+						const message =
+							status === 403
+								? 'Pay access denied. Grant pay.read/pay.write explicitly and verify application ownership.'
+								: status === 412
+									? 'Pay prerequisites are incomplete. Read get_pay_readiness; the author completes legal acceptance and Stripe KYC in the browser.'
+									: status === 401
+										? 'Pay authentication failed. Reconnect or configure a developer API key with explicit Pay permissions.'
+										: 'Pay request failed. Check authentication, application readiness and backend support before retrying a mutation.'
+						// Provider failures may contain customer data or credentials; never echo them.
+						throw userErrorFrom(message, err)
+					}
+				},
+			})
+		}
+
+		add({
+			name: 'import_manifest',
+			description:
+				'Import an existing manifest.json into the Dojo manifest editor and project labels. Pass parsed JSON and optional default-locale messages. Source import fills supported fields and preserves all other JSON; built imports remain separate observations. Default dryRun=true returns changes and expectedStateHash; apply with dryRun=false and that hash. Never infers data collection, prices, or publication. Requires project.write.',
+			parameters: importManifestSchema,
+			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true, openWorldHint: true },
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).importManifest(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		const reads = [
+			[
+				'get_project_workspace',
+				'Read revisioned source/built manifests, repository metadata, scope and release snapshot. These are observations, separate from scaffold drafts.',
+				'getProjectWorkspace',
+			],
+			[
+				'get_release_readiness',
+				'Explain readiness for the recorded browser and artifact by locale. Local or agent reports never become CI attestations. Stale evidence does not pass. Requires a Pro project.',
+				'getReleaseReadiness',
+			],
+		] as const
+		for (const [name, description, method] of reads)
+			add({
+				name,
+				description,
+				annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+				parameters: z.object({
+					projectId: z.string().uuid(),
+					browser: z
+						.enum(['chrome', 'firefox', 'edge'])
+						.optional()
+						.describe('Release status: select a browser from release history.'),
+					artifactDigest: z
+						.string()
+						.regex(/^[a-f0-9]{64}$/)
+						.optional()
+						.describe('Release status: select the exact artifact from history.'),
+				}),
+				execute: async (args, context) => {
+					try {
+						return JSON.stringify(await bff(context)[method](args))
+					} catch (err) {
+						return readError(err, missingKeyMessage)
+					}
+				},
+			})
+		add({
+			name: 'connection_diagnostics',
+			description:
+				'Verify authentication, granted scopes, supported workspace contracts and actual write permissions (incl. hosted.write, evidence uploads and, for a projectId, CI ingest configuration). Includes credit balances; never returns credentials or secrets. On auth failures run `extenshi login --recover` (CLI) or reissue the API key from dojo.extenshi.io/api-keys.',
+			annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+			parameters: z.object({}),
+			execute: async (_args, context) => {
+				try {
+					const client = bff(context)
+					const [connection, balance] = await Promise.all([
+						client.connectionDiagnostics(),
+						client.getApiCallerBalance(),
+					])
+					return JSON.stringify({ connection, balance, registeredTools: registeredTools.map((t) => t.name) })
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		for (const [name, method, dryRun] of [
+			['diff_project_state', 'diffProjectWorkspace', true],
+			['apply_project_patch', 'patchProjectWorkspace', false],
+		] as const)
+			add({
+				name,
+				description: dryRun
+					? 'Preview a three-way metadata diff against a server-held base revision. No writes.'
+					: 'Apply a typed project metadata patch with expectedRevision and idempotencyKey. Preserve source and built manifests separately, including unknown keys. Missing fields never delete; tombstones explicitly delete. No source upload or scaffold overwrite. Requires project.write OAuth scope.',
+				annotations: {
+					readOnlyHint: dryRun,
+					idempotentHint: true,
+					destructiveHint: !dryRun,
+					openWorldHint: true,
+				},
+				parameters: workspacePatchSchema,
+				execute: async (args, context) => {
+					try {
+						return JSON.stringify(await bff(context)[method](args))
+					} catch (err) {
+						return readError(err, missingKeyMessage)
+					}
+				},
+			})
+		add({
+			name: 'create_ci_ingest_secret',
+			description:
+				'Create or rotate the per-project secret the extenshi-evidence-action uses to POST CI evidence (POST /projects/:id/evidence/ingest). The secret is displayed ONCE — put it into the repository GitHub Actions secret EXTENSHI_EVIDENCE_SECRET. Creating again invalidates the previous secret. Requires project.write.',
+			annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: true, openWorldHint: true },
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).createCiIngestSecret(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'upsert_hosted_page',
+			description: `Register the project's homepage or support page URL (HTTPS only, must be publicly reachable; the server hashes the body). The registered homepage URL feeds HOMEPAGE_URL when the integration config file is regenerated. Requires hosted.write. API reference: ${HOSTED_PAGES_DOCS}`,
+			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				kind: z.enum(['homepage', 'support']),
+				url: z.string().url().max(2000),
+			}),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).upsertHostedPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'verify_hosted_artifact',
+			description: `Verify a hosted page actually serves what its record says: re-fetches and compares content. kind=homepage|support compares against the registered body hash (verified | changed | unreachable); kind=privacy checks the published policy version's HTML is what the public page really serves. Requires hosted.write. API reference: ${HOSTED_PAGES_DOCS}`,
+			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				kind: z.enum(['homepage', 'support', 'privacy']),
+			}),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).verifyHostedArtifact(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'remove_hosted_page',
+			description: `Remove the project's registered homepage or support page — for a project moving off a URL or a mis-registered address. The public page itself keeps working; only the project record is forgotten. Requires hosted.write. API reference: ${HOSTED_PAGES_DOCS}`,
+			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true, openWorldHint: true },
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				kind: z.enum(['homepage', 'support']),
+			}),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).removeHostedPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'list_hosted_pages',
+			description:
+				'List the project registered hosted pages (homepage/support) with their verification status, content hash and last check time.',
+			annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).listHostedPages(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'record_project_evidence',
+			description:
+				'Record test/scan/listing/privacy/payment evidence metadata bound to a browser, artifact hash and input hash. Source is local or agent, never CI — CI evidence is written by the verified ingest endpoint only. Attachment files upload via the CLI (extenshi evidence push --attach); this tool records metadata only. Requires evidence.write OAuth scope.',
+			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
+			parameters: agentEvidenceSchema,
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).recordProjectEvidence(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
 		add({
 			name: 'search_extensions',
 			description:
@@ -988,7 +1273,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'browser, the files that type needs, live hosted URLs (uninstall survey), and an index of ' +
 				'every saved tool state with its size. Use it before writing code so the manifest you ship ' +
 				'matches what the developer configured on the site — and re-read it after they change ' +
-				'something rather than assuming. It also returns the integration contract: write ' +
+				'something rather than assuming. The additive workspace envelope holds revisioned local observations separately from these scaffold drafts. It also returns the integration contract: review local changes before writing ' +
 				'`integration.file` to `integration.path` VERBATIM to wire the extension to this project — ' +
 				"those bytes carry a fingerprint extenshi.io uses to tell the developer's edits from its " +
 				'own, so an equivalent file you assemble yourself makes the site stop managing every value ' +
@@ -1026,7 +1311,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				"content-script files that project's types need, placeholder icons, and " +
 				'src/extenshi.config.js. Write the files VERBATIM — the config carries a fingerprint ' +
 				"that lets extenshi.io keep recognising the repository as this project's, and rebuilding " +
-				'it by hand makes the site stop managing those values. Prefer this over writing a manifest ' +
+				'it by hand makes the site stop managing those values. Use this for a NEW extension; never overwrite an existing repository. Prefer this over writing a manifest ' +
 				'yourself: it is the same set the site commits, so what you write and what the site ' +
 				"expects cannot disagree. One browser per call (default: the project's first target). " +
 				'FREE — never spends a credit.',
@@ -1189,6 +1474,18 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					throw userErrorFrom(err instanceof Error ? err.message : String(err), err)
 				}
 			},
+		})
+
+		add({
+			name: 'localize_workflow',
+			description:
+				'Get the FREE local browser-extension localization workflow: prepare missing or stale ' +
+				'_locales messages, translate with your own coding agent, apply validated translations ' +
+				'and check placeholders, protected terms and listing risks. Returns commands and the ' +
+				'JSON handoff contract. Static guidance only: no API key, network or Extenshi credits; ' +
+				'translation uses your agent provider. Includes release availability and human review gates.',
+			parameters: z.object({}),
+			execute: async () => renderLocalizeWorkflow(),
 		})
 
 		add({

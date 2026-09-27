@@ -14,6 +14,7 @@
  */
 
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
+import { PAY_OPERATIONS, type PayBff, payWireInput } from './pay.js'
 
 type AnyTRPCClient = any
 
@@ -42,7 +43,20 @@ export interface ExtensionRef {
 	store: 'CHROME' | 'FIREFOX' | 'EDGE'
 }
 
-export interface Bff {
+export interface Bff extends PayBff {
+	importManifest(input: import('@extenshi/contracts').ManifestImport): Promise<unknown>
+	getProjectWorkspace(input: { projectId: string }): Promise<unknown>
+	diffProjectWorkspace(input: import('@extenshi/contracts').WorkspacePatch): Promise<unknown>
+	patchProjectWorkspace(input: import('@extenshi/contracts').WorkspacePatch): Promise<unknown>
+	recordProjectEvidence(
+		input: Omit<import('@extenshi/contracts').Evidence, 'id' | 'recordedAt'>,
+	): Promise<unknown>
+	getReleaseReadiness(input: {
+		projectId: string
+		browser?: 'chrome' | 'firefox' | 'edge'
+		artifactDigest?: string
+	}): Promise<unknown>
+	connectionDiagnostics(): Promise<unknown>
 	searchExtensions(input: Record<string, unknown>): Promise<unknown>
 	getExtensionById(id: number): Promise<unknown>
 	/** Paginated store user reviews for an extension (PII-free projection). */
@@ -97,6 +111,19 @@ export interface Bff {
 	getPrivacyPolicyVersion(input: { projectId: string; versionNumber: number }): Promise<unknown>
 	publishPrivacyPolicy(input: { projectId: string; bodyMarkdown?: string; kind?: string }): Promise<unknown>
 	updatePrivacyPolicyWithAi(input: { projectId: string }): Promise<unknown>
+	/**
+	 * Create (or ROTATE) the per-project CI evidence ingest secret. The
+	 * plaintext is shown once and belongs in the repository's Actions secrets.
+	 */
+	createCiIngestSecret(input: { projectId: string }): Promise<unknown>
+	revokeCiIngestSecret(input: { projectId: string }): Promise<unknown>
+	/** Register a project's homepage/support URL (HTTPS, reachable, hashed). */
+	upsertHostedPage(input: { projectId: string; kind: string; url: string }): Promise<unknown>
+	/** Re-fetch and compare: verified | changed | unreachable per kind. */
+	verifyHostedArtifact(input: { projectId: string; kind: string }): Promise<unknown>
+	/** Forget a registration (a project moving off a URL needs a real delete). */
+	removeHostedPage(input: { projectId: string; kind: string }): Promise<unknown>
+	listHostedPages(input: { projectId: string }): Promise<unknown>
 }
 
 /** Build a BFF client from a static `ek_…` key (stdio path). */
@@ -122,7 +149,24 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 
 	// NB: the store router is mounted under `catalog` in the BFF appRouter
 	// (routers/index.ts: `catalog: storeRouter`), NOT `store`. Security is `security`.
+	const pay = Object.fromEntries(
+		PAY_OPERATIONS.map(([method, , , procedure, mutation]) => [
+			method,
+			(input: Record<string, unknown>) => {
+				const [router, action] = procedure.split('.')
+				return client[router][action][mutation ? 'mutate' : 'query'](payWireInput(method, input))
+			},
+		]),
+	) as unknown as PayBff
 	return {
+		...pay,
+		importManifest: (input) => client.devProject.agentImportManifest.mutate(input),
+		getProjectWorkspace: (input) => client.devProject.agentGetWorkspace.query(input),
+		diffProjectWorkspace: (input) => client.devProject.agentDiffWorkspace.mutate(input),
+		patchProjectWorkspace: (input) => client.devProject.agentPatchWorkspace.mutate(input),
+		recordProjectEvidence: (input) => client.devProject.agentRecordEvidence.mutate(input),
+		getReleaseReadiness: (input) => client.devProject.agentReleaseReadiness.query(input),
+		connectionDiagnostics: () => client.devProject.agentConnectionDiagnostics.query(),
 		searchExtensions: (input) => client.catalog.searchExtensions.query(input),
 		getExtensionById: (id) => client.catalog.getExtensionById.query({ id }),
 		getReviews: (input) => client.catalog.getReviewsForExtension.query(input),
@@ -142,5 +186,11 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		getPrivacyPolicyVersion: (input) => client.privacyPolicy.agentGetVersion.query(input),
 		publishPrivacyPolicy: (input) => client.privacyPolicy.agentPublish.mutate(input),
 		updatePrivacyPolicyWithAi: (input) => client.privacyPolicy.agentUpdateWithAi.mutate(input),
+		createCiIngestSecret: (input) => client.devProject.agentCreateCiIngestSecret.mutate(input),
+		revokeCiIngestSecret: (input) => client.devProject.agentRevokeCiIngestSecret.mutate(input),
+		upsertHostedPage: (input) => client.devProject.agentUpsertHostedPage.mutate(input),
+		verifyHostedArtifact: (input) => client.devProject.agentVerifyHostedArtifact.mutate(input),
+		removeHostedPage: (input) => client.devProject.agentRemoveHostedPage.mutate(input),
+		listHostedPages: (input) => client.devProject.agentListHostedPages.query(input),
 	}
 }

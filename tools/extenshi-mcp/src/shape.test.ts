@@ -83,6 +83,27 @@ describe('shapeSecurity with install-dialog preview', () => {
 		expect(out.scanned).toBeUndefined()
 	})
 
+	it('replaces raw scanner names with public capability phrases', () => {
+		const security = {
+			findings: {
+				total: 3,
+				groupTotal: 3,
+				bySeverity: {
+					HIGH: [
+						{ scanner: 'semgrep', severity: 'HIGH', count: 1 },
+						{ scanner: 'YARA', severity: 'HIGH', count: 1 },
+						{ scanner: 'some_new_tool', severity: 'HIGH', count: 1 },
+					],
+				},
+			},
+		}
+		const json = JSON.stringify(shapeSecurity(security, null))
+		expect(json).toContain('Code vulnerability analysis')
+		expect(json).toContain('Malware signature matching')
+		expect(json).toContain('Security analysis')
+		for (const raw of ['semgrep', 'YARA', 'some_new_tool']) expect(json).not.toContain(raw)
+	})
+
 	it('omits the preview key when none is provided', () => {
 		const out = shapeSecurity(null, { overallScore: 10 }, undefined)
 		expect(out.installDialogPreview).toBeUndefined()

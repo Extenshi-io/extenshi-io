@@ -27,7 +27,7 @@ export const DEVELOPMENT_SERVICES = [
 	{
 		id: 'account',
 		purpose: 'Sign in, provision an API key for local tools and check credit pools before paid work.',
-		tools: ['get_credit_balance'],
+		tools: ['get_credit_balance', 'connection_diagnostics'],
 		access: 'Balance lookup is free and requires identity; catalog reads and scans use credit pools.',
 		urls: [docs('scan-credits'), 'https://dojo.extenshi.io/api-keys', 'https://dojo.extenshi.io/billing'],
 	},
@@ -50,9 +50,24 @@ export const DEVELOPMENT_SERVICES = [
 		id: 'projects',
 		purpose:
 			'Read an existing project, selected browser types, manifests, repository binding, saved tool state, hosted URLs and starter files.',
-		tools: ['list_my_projects', 'get_project_state', 'get_project_scaffold'],
+		tools: [
+			'list_my_projects',
+			'get_project_state',
+			'get_project_scaffold',
+			'get_project_workspace',
+			'import_manifest',
+			'diff_project_state',
+			'apply_project_patch',
+			'record_project_evidence',
+			'create_ci_ingest_secret',
+			'upsert_hosted_page',
+			'verify_hosted_artifact',
+			'remove_hosted_page',
+			'list_hosted_pages',
+			'get_release_readiness',
+		],
 		access:
-			'Own-project MCP reads are free and require identity. Create/configure projects in the cabinet where enabled; MCP has no project-creation or repository-write tool.',
+			'Own-project MCP reads are free and require identity. Create projects in the cabinet. Synchronize repository metadata, source/built manifests and scope with typed revisioned patches. project.write, evidence.write and hosted.write require explicit OAuth consent. Repository metadata does not grant GitHub access. CI evidence (source=ci) is written only by the verified ingest endpoint — create its secret with create_ci_ingest_secret. Automated release-readiness access requires a Pro project.',
 		urls: [
 			DEVELOPMENT_GUIDE_URL,
 			'https://dojo.extenshi.io/projects',
@@ -66,6 +81,15 @@ export const DEVELOPMENT_SERVICES = [
 		tools: ['list_extension_templates', 'get_project_state', 'get_project_scaffold'],
 		access: 'Free template guidance; project reads require identity. The cabinet also has a manifest editor.',
 		urls: [docs('manifest-generator'), toolPage('manifest-generator')],
+	},
+	{
+		id: 'localization',
+		purpose:
+			'Translate extension messages locally with your coding agent and validate the resulting locales.',
+		tools: ['localize_workflow'],
+		access:
+			'Free static workflow; local CLI validation requires no key or Extenshi credits. Translation uses your agent provider. Check CLI release availability before invoking commands.',
+		urls: [docs('localization')],
 	},
 	{
 		id: 'icons',
@@ -158,10 +182,27 @@ export const DEVELOPMENT_SERVICES = [
 		id: 'monetization',
 		purpose:
 			'Optional paid-feature integration: seller setup, offers, checkout, signed entitlements and purchase verification.',
-		tools: [],
+		tools: [
+			'list_pay_apps',
+			'create_pay_app',
+			'get_pay_app',
+			'get_pay_readiness',
+			'link_pay_app',
+			'unlink_pay_app',
+			'archive_pay_app',
+			'export_pay_data',
+			'get_pay_seller',
+			'connect_pay_seller',
+			'refresh_pay_seller',
+			'set_pay_seller_profile',
+			'upsert_pay_offer',
+			'archive_pay_offer',
+			'set_pay_enabled',
+			'rotate_pay_key',
+		],
 		access:
-			'Conditional integration, not a callable MCP service. Verify current SDK distribution, project access, seller agreement and payment readiness in the documentation and cabinet before planning installation or promising working payments.',
-		urls: [docs('pay-sdk'), 'https://dojo.extenshi.io/projects'],
+			'Pay applications work independently of development projects. Explicit pay.read/pay.write permission is required; older connections and API keys have no Pay grant. Check get_pay_readiness and actual SDK distribution before integrating. Author completes seller agreement and Stripe KYC in the browser. Configure offers and profile, then enable checkout only with explicit authorization. Registration does not prove production deployment or npm publication.',
+		urls: [docs('pay-sdk'), 'https://dojo.extenshi.io/payments'],
 	},
 ] as const
 
@@ -197,7 +238,7 @@ const WORKFLOW = [
 	{
 		id: 'implementation',
 		actions:
-			'Implement the MVP, accessible popup/options, storage and error handling. Test actual target sites and extension lifecycle, including service-worker restart and permission denial. Plan localization. If payments or user accounts are needed, verify the supported integration and complete its prerequisites before depending on it.',
+			'Implement the MVP, accessible popup/options, storage and error handling. Test actual target sites and extension lifecycle, including service-worker restart and permission denial. Use localize_workflow for local message translation, structural validation and manual language/RTL review. If payments or user accounts are needed, verify the supported integration and complete its prerequisites before depending on it.',
 		doneWhen:
 			'Acceptance criteria pass on real target surfaces; optional integrations have end-to-end evidence or remain explicit blockers.',
 	},
