@@ -65,6 +65,11 @@ export const SIGNUP_PAGE = 'https://auth.extenshi.io/signup'
 export const BILLING_PAGE = 'https://dojo.extenshi.io/billing'
 export const HOSTED_PAGES_DOCS = 'https://docs.extenshi.io/developers/project-sync#hosted-pages-from-the-api'
 
+// Every workspace write carries provenance; saying so up front saves the agent a
+// failed first call on `provenance.toolVersion: Required`.
+const PROVENANCE_HINT =
+	' `provenance` is required: {source: "agent", observedAt: ISO-8601 timestamp, toolVersion: your client name and version}.'
+
 export const MISSING_KEY_MESSAGE =
 	"This tool needs an Extenshi API key, and you don't have one set up yet — " +
 	"here's how to get going.\n\n" +
@@ -685,14 +690,23 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 						if (err instanceof UserError && /^MCP_SCOPE_REQUIRED:pay\.(read|write)\./.test(err.message))
 							throw err
 						const status = (err as { data?: { httpStatus?: number } } | null)?.data?.httpStatus
+						// Only OUR authored backend messages are matched, never echoed, so a
+						// provider string can't leak through; they pick the precise guidance.
+						const backendMessage = err instanceof Error ? err.message : ''
 						const message =
 							status === 403
 								? 'Pay access denied. Grant pay.read/pay.write explicitly and verify application ownership.'
-								: status === 412
-									? 'Pay prerequisites are incomplete. Read get_pay_readiness; the author completes legal acceptance and Stripe KYC in the browser.'
-									: status === 401
-										? 'Pay authentication failed. Reconnect or configure a developer API key with explicit Pay permissions.'
-										: 'Pay request failed. Check authentication, application readiness and backend support before retrying a mutation.'
+								: status === 412 && backendMessage.includes('Pay application is archived')
+									? 'This Pay application is archived. Use an active application from list_pay_apps, or create a new one.'
+									: status === 412
+										? 'Pay prerequisites are incomplete. Read get_pay_readiness; the author completes legal acceptance and Stripe KYC in the browser.'
+										: status === 404 && backendMessage.includes('No payment gateway connected')
+											? 'No payment provider is connected to this Pay application yet. Call connect_pay_seller and have the author finish onboarding in the browser, then retry.'
+											: status === 404
+												? 'Pay application or resource not found. Check the appId with list_pay_apps.'
+												: status === 401
+													? 'Pay authentication failed. Reconnect or configure a developer API key with explicit Pay permissions.'
+													: 'Pay request failed. Check authentication, application readiness and backend support before retrying a mutation.'
 						// Provider failures may contain customer data or credentials; never echo them.
 						throw userErrorFrom(message, err)
 					}
@@ -703,7 +717,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'import_manifest',
 			description:
-				'Import an existing manifest.json into the Dojo manifest editor and project labels. Pass parsed JSON and optional default-locale messages. Source import fills supported fields and preserves all other JSON; built imports remain separate observations. Default dryRun=true returns changes and expectedStateHash; apply with dryRun=false and that hash. Never infers data collection, prices, or publication. Requires project.write.',
+				'Import an existing manifest.json into the Dojo manifest editor and project labels. Pass parsed JSON and optional default-locale messages. Source import fills supported fields and preserves all other JSON; built imports remain separate observations. Default dryRun=true returns changes and expectedStateHash; apply with dryRun=false and that hash. Never infers data collection, prices, or publication. Requires project.write.' +
+				PROVENANCE_HINT,
 			parameters: importManifestSchema,
 			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true, openWorldHint: true },
 			execute: async (args, context) => {
@@ -722,7 +737,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			],
 			[
 				'get_release_readiness',
-				'Explain readiness for the recorded browser and artifact by locale. Local or agent reports never become CI attestations. Stale evidence does not pass. Requires a Pro project.',
+				'Explain readiness for the recorded browser and artifact by locale. Local or agent reports never become CI attestations. Stale evidence does not pass. Requires a Pro project. ' +
+					'Readiness is measured against the release recorded in the workspace: until apply_project_patch sets patch.release ' +
+					'(browser, version, artifactDigest, manifestDigest, locales, paymentRequired, and commit or dirtyTreeDigest) it reports ' +
+					'RELEASE_NOT_RECORDED; evidence must then match that release artifactDigest.',
 				'getReleaseReadiness',
 			],
 		] as const
@@ -777,8 +795,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			add({
 				name,
 				description: dryRun
-					? 'Preview a three-way metadata diff against a server-held base revision. No writes.'
-					: 'Apply a typed project metadata patch with expectedRevision and idempotencyKey. Preserve source and built manifests separately, including unknown keys. Missing fields never delete; tombstones explicitly delete. No source upload or scaffold overwrite. Requires project.write OAuth scope.',
+					? `Preview a three-way metadata diff against a server-held base revision. No writes.${PROVENANCE_HINT}`
+					: `Apply a typed project metadata patch with expectedRevision and idempotencyKey. Preserve source and built manifests separately, including unknown keys. Missing fields never delete; tombstones explicitly delete. No source upload or scaffold overwrite. Record a release (patch.release) here before asking get_release_readiness. Requires project.write OAuth scope.${PROVENANCE_HINT}`,
 				annotations: {
 					readOnlyHint: dryRun,
 					idempotentHint: true,
@@ -874,7 +892,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'record_project_evidence',
 			description:
-				'Record test/scan/listing/privacy/payment evidence metadata bound to a browser, artifact hash and input hash. Source is local or agent, never CI — CI evidence is written by the verified ingest endpoint only. Attachment files upload via the CLI (extenshi evidence push --attach); this tool records metadata only. Requires evidence.write OAuth scope.',
+				'Record test/scan/listing/privacy/payment evidence metadata bound to a browser, artifact hash and input hash. Source is local or agent, never CI — CI evidence is written by the verified ingest endpoint only. Attachment files upload via the CLI (extenshi evidence push --attach); this tool records metadata only. Requires evidence.write OAuth scope.' +
+				PROVENANCE_HINT,
 			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
 			parameters: agentEvidenceSchema,
 			execute: async (args, context) => {

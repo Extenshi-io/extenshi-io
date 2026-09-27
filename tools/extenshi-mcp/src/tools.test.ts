@@ -1028,3 +1028,26 @@ describe('published input schemas', () => {
 		expect(record.safeParse({}).success).toBe(false)
 	})
 })
+
+describe('Pay error guidance', () => {
+	const trpcError = (message: string, httpStatus: number) =>
+		Object.assign(new Error(message), { data: { httpStatus } })
+	const appId = '11111111-1111-4111-8111-111111111111'
+
+	it.each([
+		[trpcError('No payment gateway connected', 404), /connect_pay_seller/],
+		[trpcError('Pay application is archived', 412), /archived/],
+		[trpcError('Seller agreement not accepted', 412), /KYC in the browser/],
+		[trpcError('Application not found', 404), /list_pay_apps/],
+	])('maps %s to actionable guidance', async (err, expected) => {
+		const tools = readToolsWith({ rotatePayKey: () => Promise.reject(err) })
+		await expect(tools.rotate_pay_key.execute({ appId }, {})).rejects.toThrow(expected)
+	})
+
+	it('never echoes the backend or provider message', async () => {
+		const tools = readToolsWith({
+			rotatePayKey: () => Promise.reject(trpcError('sk_live_secret leaked', 404)),
+		})
+		await expect(tools.rotate_pay_key.execute({ appId }, {})).rejects.not.toThrow(/sk_live/)
+	})
+})
