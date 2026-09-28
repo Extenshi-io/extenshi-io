@@ -44,10 +44,10 @@ export function renderExtensionTemplates(ids?: readonly string[]): string {
 	const lines: string[] = [
 		'# Extension types',
 		'',
-		'Each type is a shape an extension can take. They COMBINE — a side panel that',
+		'Each type is a shape an extension can take. Types COMBINE — a side panel that',
 		'also runs on the page is one extension with both capabilities, and the required',
-		'permissions are the union. Pick the smallest set that does the job: reviewers',
-		'read every permission as a claim you have to justify.',
+		'permissions are the union. The smallest set that does the job is the easiest to',
+		'approve: store reviewers treat every permission as a claim that needs a justification.',
 		'',
 	]
 
@@ -64,7 +64,7 @@ export function renderExtensionTemplates(ids?: readonly string[]): string {
 		)
 		if (template.defaultMatches && template.defaultMatches.length > 0) {
 			lines.push(
-				`- Default \`content_scripts.matches\`: ${template.defaultMatches.join(', ')} — replace with the exact sites you need; \`<all_urls>\` triggers in-depth store review.`,
+				`- Default \`content_scripts.matches\`: ${template.defaultMatches.join(', ')} — normally narrowed to the exact sites the extension works on; \`<all_urls>\` triggers in-depth store review.`,
 			)
 		}
 		lines.push('')
@@ -73,12 +73,12 @@ export function renderExtensionTemplates(ids?: readonly string[]): string {
 	lines.push(
 		'## Rules that hold for every type',
 		'',
-		`- Every extension gets a background service worker at \`${EXTENSION_BACKGROUND_PATH}\`; it is where startup-time registrations belong (for example the uninstall survey, which the browser reads at removal time when no other code of yours can run).`,
-		'- Chromium reads `side_panel.default_path` and needs the `sidePanel` permission; Firefox reads `sidebar_action` and has no such permission. Emit the one that matches the browser you are building for.',
-		'- MV3 forbids inline script: a panel or popup with its logic in a `<script>` block renders blank. Ship the logic as a file.',
-		'- Never declare a path the package does not contain — a missing content script or icon makes the browser refuse the whole extension, not just that feature.',
+		`- Every extension gets a background service worker at \`${EXTENSION_BACKGROUND_PATH}\`; startup-time registrations belong there (for example the uninstall survey URL, which the browser reads at removal time when no other extension code can run).`,
+		'- Chromium reads `side_panel.default_path` and needs the `sidePanel` permission; Firefox reads `sidebar_action` and has no such permission. Each browser build carries only the key its browser reads.',
+		'- MV3 forbids inline script: a panel or popup with its logic in a `<script>` block renders blank. Logic ships as a separate script file.',
+		'- Every path declared in the manifest has to exist in the package — a missing content script or icon makes the browser refuse the whole extension, not just that feature.',
 		'',
-		`A developer can pick the same types in the UI at ${MANIFEST_GENERATOR_URL}, and a project's chosen types come back from \`get_project_state\`.`,
+		`The same types are selectable in the UI at ${MANIFEST_GENERATOR_URL}; a project's chosen types are part of its state (related tool: \`get_project_state\`).`,
 	)
 
 	const only = shown.length === 1 ? shown[0] : undefined

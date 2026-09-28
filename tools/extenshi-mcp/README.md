@@ -51,9 +51,9 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_reviews` | Paginated Firefox/Edge user reviews (rating, short excerpt, date, language) + a store-level aggregate (rating, count, reviews link) — Chrome Web Store review rows excluded (aggregate is the only public content for Chrome); reviewer identity omitted; sort by recent or rating | 1 read |
 | `get_security` | Risk score + finding counts + top grouped findings (reads existing scans) | 3 reads |
 | `get_risk_by_store_ids` | Safety scores for **up to 40** extensions in one call, by store id — for auditing a list of installed extensions instead of calling `get_security` per extension | 1 read per call |
-| `market_overview` | Catalog-wide market intelligence with no args (totals, store split, category tree, and the extended breakdown — MV2/MV3, sensitive permissions, risk tiers, trader status, recency, reviews); pass a `query` to scope facets to a search | 1 read |
+| `market_overview` | Catalog-wide market intelligence with no args (totals, store split, category tree, and the extended breakdown — MV2/MV3, sensitive permissions, risk tiers, trader status, recency, reviews); pass a `query` to scope facets to a search; `facets` selects groups and `top_n` (default 10) trims long lists | 1 read |
 | `get_credit_balance` | Remaining credits across every pool (read / scan / icon / inventory), so an agent can size a batch before running it instead of hitting a mid-batch limit | Free |
-| `get_development_guide` | Complete tool inventory for this connection, service directory, GitHub guidance and the ordered development-to-maintenance plan | Free (no key) |
+| `get_development_guide` | Complete tool inventory for this connection, service directory, GitHub guidance and the ordered development-to-maintenance plan; compact overview by default, full parts via `sections` | Free (no key) |
 | `list_extension_templates` | Extension shapes, minimum permissions and browser-specific manifest requirements | Free (no key) |
 | `connection_diagnostics` | Authentication, scopes, backend workspace contracts and capabilities | Free; identity required |
 | `import_manifest` | Import manifest JSON into the Dojo editor and project labels; preview changes and apply with a state hash. | Requires project.write for OAuth |
@@ -74,7 +74,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_privacy_policy_version` | One hosted policy's markdown and HTML | Pro project; no read credit |
 | `update_privacy_policy_with_ai` | Propose a policy update for the author to review | Pro project; daily update limit applies |
 | `publish_privacy_policy` | Publish a policy at the project's hosted URL | Pro project; changes the live page |
-| `search_docs` | Search the Extenshi docs + `@extenshi/cli` reference so the assistant can quote exact commands | Free (no key) |
+| `search_docs` | Search the Extenshi docs + `@extenshi/cli` reference so the assistant can quote exact commands; returns top `limit` passages capped at `max_chars` each | Free (no key) |
 | `localize_workflow` | Local message translation contract, CLI validation and manual review gates | Free (no key) |
 | `generate_icon_workflow` | Icon design requirements + the local agent-draws-SVG → `npx @extenshi/cli@latest icon preview` → export workflow | Free (no key) |
 | `generate_welcome_page_workflow` | Design brief for the post-install welcome page: the one action it must drive, which illustrations to produce, where to place click markers, and the block JSON to return | Free (no key) |

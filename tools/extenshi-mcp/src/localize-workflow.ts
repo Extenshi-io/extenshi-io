@@ -1,35 +1,45 @@
-/** Static, keyless guidance; translation and filesystem changes belong to the caller's local agent. */
+/**
+ * Static reference for the free `localize_workflow` MCP tool: the local
+ * localization process, the translation-bundle file format and the release
+ * checks. Written as documentation a developer can read on its own — it
+ * describes the process and its constraints, it does not address the reader.
+ */
 export function renderLocalizeWorkflow(): string {
-	return `# Local extension localization
+	return `# Local extension localization — reference
 
-This workflow is free of Extenshi credits and requires no API key. The MCP tool returns
-static instructions. Your coding agent translates using its own provider and tokens;
-the CLI prepares and validates local files offline after installation.
+Cost and access: free. No Extenshi credits and no API key. Translation happens with
+whichever translation provider the developer already uses; the Extenshi CLI prepares
+and validates the local files offline.
 
 ## Availability
 
-First run \`extenshi localize --help\` with the CLI installed in your environment.
-Use a release that includes localize. A merged change is not proof that npm latest
-contains it. When working from the Extenshi repository, build the CLI with
-\`yarn workspace @extenshi/cli build\` and replace \`extenshi\` below with
-\`node tools/extenshi-cli/dist/cli.js\` (from the repository root).
+The \`localize\` command ships in recent \`@extenshi/cli\` releases; \`extenshi localize --help\`
+shows whether the installed version includes it. A merged change is not the same as an
+npm release — the npm \`latest\` tag is the reference for what is installable. Inside the
+Extenshi repository the CLI is built with \`yarn workspace @extenshi/cli build\` and run as
+\`node tools/extenshi-cli/dist/cli.js\` from the repository root in place of \`extenshi\`.
 
-## Prepare
+## Scope
 
-Start from manifest.json with default_locale and
-_locales/<default_locale>/messages.json. This workflow handles these messages,
-including manifest name/description references. Full store descriptions and arbitrary
-hardcoded UI strings need their own extraction and review.
+Input: \`manifest.json\` with \`default_locale\`, plus \`_locales/<default_locale>/messages.json\`.
+Covered: those messages, including the manifest name/description references.
+Not covered: full store descriptions and hardcoded UI strings — they need separate
+extraction and review.
+
+## Step 1 — Prepare
 
 \`\`\`bash
 extenshi localize prepare ./extension --lang fr,de,es --output ./localization --protect MyBrand
 \`\`\`
 
-The output localization-request.json contains missing, stale or untracked messages, grouped by
-locale. Use a fresh output directory on each run; prepare refuses to overwrite its request.
-When localization.json supplies targetLocales, --lang is optional. Its protectedTerms
-are combined with --protect. Keep the version, sourceLocale, locale keys and sourceHashes unchanged. Each
-locale has this structure (the hash shown is illustrative; retain the actual prepared hash):
+Output: \`localization-request.json\`, listing missing, stale or untracked messages grouped
+by locale. Each run needs a fresh output directory; prepare does not overwrite an existing
+request. When \`localization.json\` supplies \`targetLocales\`, \`--lang\` is optional, and its
+\`protectedTerms\` are combined with \`--protect\`.
+
+The fields \`version\`, \`sourceLocale\`, the locale keys and \`sourceHashes\` are part of the
+contract and stay unchanged. Per-locale structure (the hash is illustrative; the real
+prepared hash is kept):
 
 \`\`\`json
 {
@@ -44,42 +54,50 @@ locale has this structure (the hash shown is illustrative; retain the actual pre
 }
 \`\`\`
 
-## Translate and review
+## Step 2 — Translate and review
 
-Translate only message text into each target language. Preserve keys, placeholder
-names and definitions, positional substitutions, escaped dollar signs and protected
-terms exactly. Keep descriptions as translation context. Use the actual product for
-context; never invent features, guarantees or marketing claims. Save the edited bundle
-as ./localization/translations.json. Preserve any removeKeys array: it lists translations whose source keys were
-deleted. Review these removals together with the translated messages. A removal-only
-locale has empty messages and sourceHashes objects and still requires reviewed: true.
+Translation rules:
 
-Review the translations for meaning, tone, brand spelling and truthful claims before
-applying, then add "reviewed": true inside each reviewed locale object alongside
-sourceHashes and messages. Apply requires this explicit review marker. Source hashes detect edits to the source while translation was in progress;
-if the source changed, prepare a fresh request and translate the changed entries again.
+- Only message text is translated into each target language.
+- Keys, placeholder names and definitions, positional substitutions, escaped dollar signs
+  and protected terms are preserved exactly.
+- Descriptions stay as translator context.
+- Copy reflects the actual product: no new features, guarantees or marketing claims.
 
-## Apply and validate
+The edited bundle is saved as \`./localization/translations.json\`. A \`removeKeys\` array, when
+present, lists translations whose source keys were deleted; it is preserved and reviewed
+together with the translated messages. A removal-only locale has empty \`messages\` and
+\`sourceHashes\` objects and still carries the review marker.
+
+Review covers meaning, tone, brand spelling and truthful claims. Each reviewed locale object
+gets \`"reviewed": true\` next to \`sourceHashes\` and \`messages\`; apply rejects a locale without
+this marker. Source hashes detect source edits made while translation was in progress — when
+the source changed, a fresh prepare and re-translation of the changed entries is required.
+
+## Step 3 — Apply and validate
 
 \`\`\`bash
 extenshi localize apply ./extension --translations ./localization/translations.json --protect MyBrand
 extenshi localize check ./extension --protect MyBrand
 \`\`\`
 
-Apply validates the bundle before updating _locales. Keep .extenshi-localization.json
-with the project: it records source and reviewed target hashes for incremental updates. Direct target edits require re-review. Re-run
-prepare after changing source messages. Review the diff and resolve validation errors;
-do not bypass placeholder, protected-term or listing-risk failures to get a green result.
+Apply validates the bundle before it updates \`_locales\`. \`.extenshi-localization.json\` belongs
+in the project: it records source and reviewed target hashes for incremental updates. Direct
+edits to target files require re-review, and changed source messages require a new prepare.
+Validation errors (placeholders, protected terms, listing risks) are resolved in the copy;
+they are not bypassed to reach a passing result.
 
-## Release review gates
+## Release checks
 
-- Run review-risk for every target locale using the exact command documented by your
-  installed CLI's help. Resolve listing risks against the real build and retain reports.
-- Have a fluent reviewer inspect the copy and any full store descriptions/screenshots.
-- Load the packaged extension under each target language. Check popup/options, long
-  strings, truncation and keyboard accessibility. For Arabic/Hebrew, inspect RTL direction,
-  layout and mixed text/numbers. A locale file or passing CLI check does not prove RTL UI support.
-- Rebuild and check every browser artifact. Publish only within the developer's authorization.
+- \`review-risk\` runs for every target locale (exact syntax: the installed CLI's help); listing
+  risks are resolved against the real build and the reports are kept.
+- A fluent reviewer inspects the copy, full store descriptions and screenshots.
+- The packaged extension is loaded under each target language: popup/options, long strings,
+  truncation and keyboard accessibility. Arabic/Hebrew additionally need RTL direction,
+  layout and mixed text/number checks — a locale file or a passing CLI check does not prove
+  RTL UI support.
+- Every browser artifact is rebuilt and checked. Publication stays within the developer's
+  authorization.
 
 Documentation: https://docs.extenshi.io/developers/localization
 `

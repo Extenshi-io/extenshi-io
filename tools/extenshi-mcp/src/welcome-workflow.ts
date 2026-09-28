@@ -4,17 +4,17 @@
  * Like `generate_icon_workflow`, this path deliberately spends ZERO Extenshi
  * credits and touches no Extenshi infrastructure: the brief is a pure function
  * of its arguments, so the tool works offline and can never fail on a docs or
- * BFF outage. An agent connected through the MCP connector gets the exact
- * requirements — what to illustrate, how to annotate, what JSON to emit —
- * instead of guessing them.
+ * BFF outage. The output is a neutral content specification — what to
+ * illustrate, how annotations are positioned, the block JSON format — that a
+ * developer could read on its own.
  *
  * The brief itself lives in ./welcome-agent-brief.ts, a byte-identical copy of
  * shared-types/welcome-agent-brief.ts. That sync is what guarantees the spec an
  * agent is handed here is the same spec catalog-bff enforces on save.
  *
  * Store screenshots are NOT fetched here: that would need a catalog read (an
- * API key and a credit) and would turn a free tool into a paid one. An agent
- * that wants them calls `get_extension` and passes the URLs back in via
+ * API key and a credit) and would turn a free tool into a paid one. Callers that
+ * already hold them (e.g. from `get_extension`) pass the URLs in via
  * `store_screenshots`.
  */
 
@@ -54,17 +54,16 @@ export function renderWelcomeWorkflow(args: WelcomeWorkflowArgs): string {
 		'',
 		'---',
 		'',
-		'## How this page gets published',
+		'## Publishing',
 		'',
-		'The author does not have to host anything. Saving in the constructor publishes the page at',
+		'No self-hosting is required. Saving in the constructor publishes the page at',
 		'`welcome.extenshi.io/{code}` — a short permanent link tied to the page, not to a catalog id —',
-		'and produces a `chrome.runtime.onInstalled`',
-		'snippet that opens it once on first install (never on update) and counts confirmed installs',
-		'by version and browser.',
+		'and produces a `chrome.runtime.onInstalled` snippet that opens it once on first install',
+		'(not on update) and counts confirmed installs by version and browser.',
 		'',
-		'If the author would rather host the page themselves, they can set their own URL in the',
-		'constructor instead — the generated snippet then opens their page and fires a separate',
-		'permission-free beacon, so the install counter keeps working either way. In that case the',
-		'block JSON above is still worth producing: it is the content spec for their own page.',
+		'Authors who host the page themselves set their own URL in the constructor instead; the',
+		'generated snippet then opens that page and fires a separate permission-free beacon, so the',
+		'install counter keeps working either way. The block JSON above then serves as the content',
+		'spec for the self-hosted page.',
 	].join('\n')
 }

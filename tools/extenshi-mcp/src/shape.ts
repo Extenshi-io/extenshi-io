@@ -440,3 +440,134 @@ export function shapeStoreRiskBatch(
 				: undefined,
 	})
 }
+
+// ── market_overview ─────────────────────────────────────────────────────────
+
+/** Facet groups `market_overview` can return, selectable via its `facets` argument. */
+export const MARKET_FACETS = [
+	'stats',
+	'stores',
+	'categories',
+	'extended',
+	'questionnaire',
+	'downloads',
+] as const
+export type MarketFacet = (typeof MARKET_FACETS)[number]
+
+/** Default number of entries kept per open-ended facet list (categories, permissions, sites). */
+export const DEFAULT_MARKET_TOP_N = 10
+export const MAX_MARKET_TOP_N = 100
+
+export interface MarketOverviewInput {
+	scope: 'search' | 'catalog-wide'
+	stats?: unknown
+	/** Raw facets as the BFF returns them (search facets, or the catalog-wide assembly). */
+	facets?: unknown
+	note?: string
+}
+
+export interface MarketShapeOpts {
+	facets?: readonly string[]
+	topN?: number
+}
+
+/** Extended-facet keys whose value is an open-ended `{ key: count }` map worth trimming. */
+const OPEN_ENDED_EXTENDED = ['permissions', 'targetSites'] as const
+
+function num(v: unknown): number {
+	const n = Number(v)
+	return Number.isFinite(n) ? n : 0
+}
+
+/** Keep the `topN` largest entries of a `{ key: count }` map; report how many were dropped. */
+function topEntries(map: unknown, topN: number): { top: Record<string, number>; omitted: number } {
+	if (!isObj(map)) return { top: {}, omitted: 0 }
+	const entries = Object.entries(map).sort((a, b) => num(b[1]) - num(a[1]))
+	return {
+		top: Object.fromEntries(entries.slice(0, topN).map(([k, v]) => [k, num(v)])),
+		omitted: Math.max(0, entries.length - topN),
+	}
+}
+
+/**
+ * One category-tree node reduced to what market analysis uses: display name,
+ * the slug the `categories` filter accepts, count, and a single store when the
+ * category is store-specific. Children are trimmed to `topN` as well.
+ */
+function compactCategory(node: unknown, topN: number, depth: number): Obj {
+	if (!isObj(node)) return { value: compact(node) }
+	const children = Array.isArray(node.children) ? node.children : []
+	const sorted = [...children].sort((a, b) => num((b as Obj)?.count) - num((a as Obj)?.count))
+	return prune({
+		name: node.displayName ?? node.name,
+		slug: node.filterKey ?? node.slug,
+		count: num(node.count ?? (isObj(node._count) ? node._count.snapshots : undefined)),
+		store: node.store ?? undefined,
+		children:
+			depth < 2 && sorted.length > 0
+				? sorted.slice(0, topN).map((child) => compactCategory(child, topN, depth + 1))
+				: undefined,
+		moreChildren: sorted.length > topN && depth < 2 ? sorted.length - topN : undefined,
+	})
+}
+
+/**
+ * Trim a market_overview payload for the model's context: pick the requested
+ * facet groups (default: all), cut open-ended lists to the `topN` largest
+ * entries, and reduce category nodes to name/slug/count. Counts are passed
+ * through unchanged — this shapes the response, it does not recompute data.
+ * A `truncated` map says how many entries each trimmed list dropped, so the
+ * caller knows when a larger `top_n` would reveal more.
+ */
+export function shapeMarketOverview(input: MarketOverviewInput, opts: MarketShapeOpts = {}): Obj {
+	const requested = (opts.facets ?? []).filter((f): f is MarketFacet =>
+		(MARKET_FACETS as readonly string[]).includes(f),
+	)
+	const want = new Set<MarketFacet>(requested.length > 0 ? requested : MARKET_FACETS)
+	const topN = Math.min(MAX_MARKET_TOP_N, Math.max(1, Math.floor(opts.topN ?? DEFAULT_MARKET_TOP_N)))
+	const raw = isObj(input.facets) ? input.facets : {}
+	const truncated: Record<string, number> = {}
+	const facets: Obj = {}
+
+	if (want.has('stores') && raw.stores !== undefined) facets.stores = compact(raw.stores)
+
+	if (want.has('categories')) {
+		const tree = Array.isArray(raw.categoryTree) ? raw.categoryTree : undefined
+		const flat = Array.isArray(raw.categories) ? raw.categories : undefined
+		// The flat list is the same data grouped by slug; the tree is kept when present.
+		const source = tree && tree.length > 0 ? tree : flat
+		if (source) {
+			const sorted = [...source].sort((a, b) => num((b as Obj)?.count) - num((a as Obj)?.count))
+			facets.categoryTree = sorted.slice(0, topN).map((node) => compactCategory(node, topN, 1))
+			if (sorted.length > topN) truncated.categoryTree = sorted.length - topN
+		}
+	}
+
+	if (want.has('extended') && isObj(raw.extended)) {
+		const extended: Obj = {}
+		for (const [key, value] of Object.entries(raw.extended)) {
+			if ((OPEN_ENDED_EXTENDED as readonly string[]).includes(key)) {
+				const { top, omitted } = topEntries(value, topN)
+				extended[key] = top
+				if (omitted > 0) truncated[`extended.${key}`] = omitted
+			} else {
+				extended[key] = compact(value)
+			}
+		}
+		facets.extended = extended
+	}
+
+	if (want.has('questionnaire') && raw.questionnaire !== undefined)
+		facets.questionnaire = compact(raw.questionnaire)
+	if (want.has('downloads') && raw.downloads !== undefined) facets.downloads = compact(raw.downloads)
+	if (raw.total !== undefined) facets.total = raw.total
+
+	return prune({
+		scope: input.scope,
+		stats: want.has('stats') && input.stats ? compact(input.stats) : undefined,
+		facets: Object.keys(facets).length > 0 ? facets : undefined,
+		topN,
+		truncated: Object.keys(truncated).length > 0 ? truncated : undefined,
+		note: input.note,
+	})
+}

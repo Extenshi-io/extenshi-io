@@ -726,6 +726,21 @@ describe('instrument — per-call attribution from the session', () => {
 		}
 	})
 
+	it('sends nothing when the connection declined usage analytics', async () => {
+		await getReviewsToolResolving().execute(
+			{ extension_id: 1, limit: 20 },
+			{ session: { ...remote, telemetry: false } },
+		)
+		await expect(
+			getReviewsToolRejecting(new Error('boom')).execute(
+				{ extension_id: 1, limit: 20 },
+				{ session: { ...remote, telemetry: false } },
+			),
+		).rejects.toThrow()
+		expect(captureEvent).not.toHaveBeenCalled()
+		expect(captureError).not.toHaveBeenCalled()
+	})
+
 	it('never reports the email — it stays in our own database', async () => {
 		const tool = getReviewsToolResolving()
 		await tool.execute({ extension_id: 1, limit: 20 }, { session: remote })
@@ -833,8 +848,8 @@ describe('localize_workflow execute', () => {
 			'extenshi localize apply ./extension --translations ./localization/translations.json --protect MyBrand',
 			'extenshi localize check ./extension --protect MyBrand',
 			'sourceHashes',
-			'own provider and tokens',
-			'npm latest',
+			'translation provider',
+			'npm `latest` tag',
 			'fluent reviewer',
 			'review-risk',
 			'RTL',

@@ -119,7 +119,7 @@ export const WELCOME_GOAL_PRESETS: Record<WelcomeGoal, WelcomeGoalPreset> = {
 	CUSTOM: {
 		goal: 'CUSTOM',
 		label: 'Something else',
-		summary: 'Describe your own primary action; nothing is pre-filled.',
+		summary: 'A primary action the author defines; nothing is pre-filled.',
 		defaultHeadline: '',
 		defaultMessage: '',
 		defaultSteps: [],
@@ -142,7 +142,7 @@ export interface WelcomeAgentBriefInput {
 	whatItDoes?: string | null
 	/** Site the extension acts on — required to make VISIT_SITE illustrations concrete. */
 	targetSite?: string | null
-	/** Store screenshot URLs we already host, offered to the agent as raw material. */
+	/** Store screenshot URLs we already host, offered as ready-made illustration material. */
 	storeScreenshots?: string[]
 	/** Steps the author has already written, if any. */
 	existingSteps?: string[]
@@ -152,15 +152,15 @@ export interface WelcomeAgentBriefInput {
 }
 
 /**
- * Render the brief that tells a coding/design agent what to produce for this
- * welcome page.
+ * Render the welcome-page content specification for this config.
  *
- * This is the tool's real job. An author who opens the constructor knows what
- * their extension does but not what a good welcome page contains; an agent can
- * draw and annotate but does not know the goal, the store assets we already
- * hold, or the block JSON it must emit. The brief is the contract between them,
- * so it states all three — and it is a pure function of the config (no network,
- * no key, no credits) so both dojo and the MCP server can render it.
+ * An author who opens the constructor knows what their extension does but not
+ * what a good welcome page contains; whoever produces the illustrations (the
+ * author, a designer, or a coding tool the author uses) needs the goal, the
+ * store assets we already hold, and the block JSON format the constructor
+ * accepts. The spec states all three as neutral reference material — goal,
+ * requirements, limits, file format — and is a pure function of the config (no
+ * network, no key, no credits) so both dojo and the MCP server can render it.
  */
 export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 	const preset = WELCOME_GOAL_PRESETS[input.goal] ?? WELCOME_GOAL_PRESETS.PIN_EXTENSION
@@ -171,23 +171,22 @@ export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 
 	const out: string[] = []
 
-	out.push(`# Welcome-page illustrations for "${name}"`)
+	out.push(`# Welcome-page content specification for "${name}"`)
 	out.push('')
 	out.push(
-		'You are producing the visual, step-by-step content for the page a user lands on the',
-		'moment they install this browser extension. Everything you make here gets pasted back',
-		'into the Extenshi welcome-page constructor as blocks — so produce the assets AND the',
-		'block JSON at the end.',
+		'Scope: the visual, step-by-step content of the page a user lands on the moment they',
+		'install this browser extension. The deliverables are the image assets plus the block',
+		'JSON described at the end, which the Extenshi welcome-page constructor imports as blocks.',
 		'',
 	)
 
-	out.push('## The one action this page must drive')
+	out.push('## Goal: the one action the page drives')
 	out.push('')
 	out.push(`**${preset.label}** — ${preset.summary}`)
 	out.push('')
 	out.push(
-		'A welcome page that explains everything drives nothing. Every block you write must',
-		'serve that single action; cut anything that does not.',
+		'A welcome page that explains everything drives nothing. Each block serves that single',
+		'action; content that does not serve it is left out.',
 		'',
 	)
 
@@ -203,13 +202,13 @@ export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 		out.push('')
 		out.push(
 			input.targetSite?.trim()
-				? `The extension acts on: ${input.targetSite.trim()}. Illustrations must show that real site, not a generic page.`
-				: 'No target site was supplied. Ask the developer which site the extension injects into before drawing anything — a generic page teaches the user nothing.',
+				? `The extension acts on: ${input.targetSite.trim()}. Illustrations show that real site, not a generic page.`
+				: 'Target site: not supplied yet. The illustrations depend on it — a generic page teaches the user nothing — so the site the extension injects into is an open question for the developer.',
 		)
 		out.push('')
 	}
 
-	out.push('## Illustrations to produce')
+	out.push('## Illustrations')
 	out.push('')
 	if (preset.illustrationTargets.length) {
 		out.push('One image per step, in this order:')
@@ -219,37 +218,36 @@ export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 		})
 	} else {
 		out.push(
-			'No preset applies to this goal. Decide the shortest sequence of images that takes a',
-			'brand-new user from "just installed" to having completed the action above, and produce',
-			'one image per step.',
+			'No preset applies to this goal. The sequence is the shortest set of images that takes a',
+			'brand-new user from "just installed" to having completed the action above, one image',
+			'per step.',
 		)
 	}
 	out.push('')
 
-	out.push('### How to get each image')
+	out.push('### Image sources, in order of preference')
 	out.push('')
 	out.push(
-		'1. **Screenshot the real thing wherever you can.** Load the extension in a clean browser',
-		'   profile, drive it to the exact moment the step describes, and capture the browser',
-		'   window. A real screenshot of the actual UI beats a drawing, because the user is',
-		'   matching what they see on their own screen against your image.',
-		'2. **Crop to the region that matters.** A full 1920px desktop capture renders unreadably',
-		'   small in a page column. Crop to the toolbar, the dropdown, or the widget — enough',
-		'   surrounding context to locate it, nothing more.',
-		'3. **Draw an SVG instead when a screenshot is impossible or ugly** — an OS dialog you',
-		'   cannot reliably reproduce, a state that needs three preconditions, or anything with',
-		'   personal data in it. A clean vector mock of the browser chrome is better than a',
+		'1. **A screenshot of the real UI.** The extension loaded in a clean browser profile, at',
+		'   the exact moment the step describes, captured as a browser-window screenshot. A real',
+		'   screenshot beats a drawing because the user matches it against their own screen.',
+		'2. **Cropped to the region that matters.** A full 1920px desktop capture renders',
+		'   unreadably small in a page column. The crop covers the toolbar, the dropdown, or the',
+		'   widget, with just enough surrounding context to locate it.',
+		'3. **An SVG drawing when a screenshot is impossible or unsuitable** — an OS dialog that',
+		'   cannot be reproduced reliably, a state that needs three preconditions, or anything',
+		'   containing personal data. A clean vector mock of the browser chrome is better than a',
 		'   cluttered real capture.',
 		'',
 	)
 
 	if (shots.length) {
-		out.push('### Screenshots we already host')
+		out.push('### Hosted store screenshots')
 		out.push('')
 		out.push(
 			`This extension has ${shots.length} store screenshot${shots.length === 1 ? '' : 's'} already`,
-			'mirrored on our storage. They are approved store assets and can be dropped straight into',
-			'a block with `"source": "store"` and the URL as-is — no upload step:',
+			'mirrored on Extenshi storage. They are approved store assets and go straight into a',
+			'block with `"source": "store"` and the URL as-is — no upload step:',
 			'',
 		)
 		for (const u of shots.slice(0, 10)) {
@@ -257,55 +255,54 @@ export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 		}
 		out.push('')
 		out.push(
-			'Use these for "what the extension looks like / what it does" blocks. They are marketing',
-			'captures, so they usually will NOT show the install steps — draw or capture those yourself.',
+			'They suit "what the extension looks like / what it does" blocks. As marketing captures',
+			'they usually do NOT show the install steps, which need their own captures or drawings.',
 			'',
 		)
 	}
 
-	out.push('## Annotating: show exactly where to click')
+	out.push('## Annotations: where to click')
 	out.push('')
 	out.push(
-		'An un-annotated screenshot makes the user hunt. Every image that has a click target must',
-		'carry a marker on it. Do NOT burn arrows into the image pixels — the constructor draws',
-		'markers as an overlay, so they stay crisp, stay translatable, and can be moved later.',
+		'An un-annotated screenshot makes the user hunt, so every image with a click target',
+		'carries a marker. Markers are an overlay drawn by the constructor, not pixels burned into',
+		'the image — that keeps them crisp, translatable and movable later.',
 		'',
-		'Give each marker as a percentage of the image box:',
+		'Markers are positioned as percentages of the image box:',
 		'',
-		'- `kind: "number"` — a numbered badge on the thing to click. Use when the step is one of',
-		'  an ordered sequence, which is the common case.',
+		'- `kind: "number"` — a numbered badge on the thing to click. For a step in an ordered',
+		'  sequence, which is the common case.',
 		'- `kind: "arrow"` — a pointer with an `angle` in degrees clockwise from pointing right',
-		'  (0 = →, 90 = ↓, 180 = ←, 270 = ↑). Use when the target is small or near an edge and a',
+		'  (0 = →, 90 = ↓, 180 = ←, 270 = ↑). For a small target or one near an edge, where a',
 		'  badge would cover it.',
 		"- `x` / `y` are 0–100 percentages of the image's own width/height, measured to the CENTRE",
 		'  of the target. Percentages, not pixels: the page is responsive and the author may swap',
 		'  in a re-captured screenshot at a different resolution.',
-		`- At most ${WELCOME_MAX_ANNOTATIONS} markers per image. If you need more, the image is doing`,
-		'  too much — split it into two steps.',
+		`- At most ${WELCOME_MAX_ANNOTATIONS} markers per image. An image that needs more is doing`,
+		'  too much and splits into two steps.',
 		'',
 	)
 
-	out.push('## Constraints that will be enforced on save')
+	out.push('## Limits enforced on save')
 	out.push('')
 	out.push(
 		`- At most ${WELCOME_MAX_BLOCKS} blocks total.`,
 		`- Step titles ≤ ${WELCOME_TITLE_MAX_LEN} chars; body text ≤ ${WELCOME_TEXT_MAX_LEN} chars.`,
-		`- Every image needs \`alt\` text (≤ ${WELCOME_ALT_MAX_LEN} chars) describing what is shown —`,
-		'  it is what a screen-reader user gets instead of your illustration.',
+		`- Every image has \`alt\` text (≤ ${WELCOME_ALT_MAX_LEN} chars) describing what is shown —`,
+		'  it is what a screen-reader user gets instead of the illustration.',
 		`- SVG: a single \`<svg>\` element, ≤ ${WELCOME_SVG_MAX_LEN} chars, flat shapes only. Scripts,`,
 		'  event handlers, `<foreignObject>`, external references and embedded rasters are stripped',
-		'  by the server sanitizer — if you rely on them the image will render broken, so do not',
-		'  use them.',
+		'  by the server sanitizer, so an image that relies on them renders broken.',
 		`- Uploads: PNG / JPEG / WebP only, ≤ ${Math.round(WELCOME_UPLOAD_MAX_BYTES / 1024 / 1024)} MB each.`,
-		`- Accent colour for this page is \`${accent}\` — match it in drawn illustrations so the page`,
-		'  reads as one design.',
+		`- Accent colour for this page: \`${accent}\`. Drawn illustrations use it so the page reads`,
+		'  as one design.',
 		'',
 	)
 
 	if (steps.length) {
 		out.push('## Steps the author already wrote')
 		out.push('')
-		out.push('Keep their wording and intent; you are adding the visuals, not rewriting the page:')
+		out.push('Their wording and intent stay; the illustrations are added to them, not a rewrite:')
 		out.push('')
 		steps.forEach((s, i) => {
 			out.push(`${i + 1}. ${s}`)
@@ -313,9 +310,9 @@ export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 		out.push('')
 	}
 
-	out.push('## What to hand back')
+	out.push('## Block JSON format')
 	out.push('')
-	out.push('A JSON array of blocks in this exact shape:')
+	out.push('A JSON array of blocks in this shape:')
 	out.push('')
 	out.push('```json')
 	out.push(
@@ -353,22 +350,22 @@ export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 	out.push('```')
 	out.push('')
 	out.push(
-		'- `source: "svg"` → put the markup in `svg`, leave `url` unset.',
-		'- `source: "store"` → put one of the hosted URLs above in `url`, leave `svg` unset.',
-		'- `source: "upload"` → the author uploads the file in the constructor and the URL is filled',
-		'  in there; emit the block with an empty `url` and say which local file belongs in it.',
-		'- `id` just has to be unique within the page.',
+		'- `source: "svg"` → the markup goes in `svg`; `url` stays unset.',
+		'- `source: "store"` → one of the hosted URLs above goes in `url`; `svg` stays unset.',
+		'- `source: "upload"` → the author uploads the file in the constructor, which fills in the',
+		'  URL; the block carries an empty `url` plus a note naming the local file that belongs in it.',
+		'- `id` is unique within the page.',
 		'',
 	)
 
-	out.push('## Then')
+	out.push('## Import and review')
 	out.push('')
 	out.push(
-		'1. Save any images you drew or captured as files next to the project so the author can upload them.',
-		`2. Open the constructor${input.constructorUrl ? ` — ${input.constructorUrl}` : ''}, paste the block JSON,`,
-		'   upload any local images, and check the live preview.',
-		'3. Look at the preview at a narrow width too — annotations that read fine on desktop can',
-		'   collide on a phone.',
+		'1. Drawn or captured images are saved as files next to the project, ready for upload.',
+		`2. In the constructor${input.constructorUrl ? ` (${input.constructorUrl})` : ''} the block JSON is pasted,`,
+		'   local images are uploaded, and the live preview shows the result.',
+		'3. The preview is also checked at a narrow width — annotations that read fine on desktop',
+		'   can collide on a phone.',
 	)
 
 	return out.join('\n')

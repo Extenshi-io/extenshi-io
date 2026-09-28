@@ -1,11 +1,12 @@
 /**
  * Static content for the free `generate_icon_workflow` MCP tool.
  *
- * The free icon path deliberately spends ZERO Extenshi tokens and touches no
- * Extenshi infrastructure: the coding agent draws the SVG itself, and
+ * The free icon path spends ZERO Extenshi tokens and touches no Extenshi
+ * infrastructure: the SVG master is authored locally, and
  * `@extenshi/cli icon preview` renders the verification page fully offline.
- * This tool exists so an agent connected through the MCP connector gets the
- * exact requirements and commands instead of guessing them.
+ * The tool returns the icon specification and the exact commands as reference
+ * material — requirements, file formats and a process description — written so
+ * a developer could read it on its own.
  *
  * Kept as a template function (not a docs fetch) so the tool works without
  * network access and never fails on a docs outage.
@@ -18,44 +19,44 @@ export interface IconWorkflowArgs {
 export function renderIconWorkflow(args: IconWorkflowArgs): string {
 	const name = args.extensionName?.trim() || 'My Extension'
 	const iconFile = 'icon.svg'
-	return `# Browser-extension icon — design requirements and local workflow
+	return `# Browser-extension icon — specification and local workflow
 
-This workflow is FREE and fully local: you (the agent) draw the SVG yourself, and the
+Cost and access: free and fully local. The SVG master is authored in the project, and the
 Extenshi CLI renders an offline verification page. No API key, no credits, no uploads.
 
-## Icon requirements (all stores: Chrome, Firefox, Edge)
+## Icon requirements (Chrome, Firefox, Edge)
 
 - Deliverables: PNG at 16, 32, 48 and 128 px (128 px is the store-listing size), plus the
   SVG master. Chrome Web Store also uses a 440×280 promo tile.
-- The 16 px toolbar render is what users see most. Design for it:
+- The 16 px toolbar render is the most-seen size, so the design targets it:
   - one bold silhouette, minimal interior detail, generous negative space;
-  - no text, no thin outlines (<1.5 px at 16 px they dissolve);
-  - keep ~1 px of breathing room to the edges (toolbar buttons crop nothing, but
+  - no text and no thin outlines (below 1.5 px at 16 px they dissolve);
+  - about 1 px of breathing room to the edges (toolbar buttons crop nothing, but
     adjacent icons sit 8–12 px away).
-- Must survive light AND dark toolbars: avoid mid-gray (#7a7a7a-ish) fills that melt
-  into both themes; prefer a saturated brand color or add a contrasting outline/backdrop shape.
-- Single \`<svg>\` element, square viewBox (e.g. \`viewBox="0 0 24 24"\` or \`0 0 128 128\`),
-  flat shapes, no embedded rasters, no scripts, no external references.
+- Legible on light AND dark toolbars: mid-gray fills (around #7a7a7a) melt into both
+  themes; a saturated brand color or a contrasting outline/backdrop shape holds up.
+- File format: a single \`<svg>\` element, square viewBox (e.g. \`viewBox="0 0 24 24"\` or
+  \`0 0 128 128\`), flat shapes, no embedded rasters, no scripts, no external references.
 
-## Workflow
+## Process
 
-1. **Draw the SVG yourself** — write it to \`${iconFile}\` in the project. Iterate on the
-   silhouette at conceptual 16 px scale before adding any detail.
+1. **Author the SVG master** — saved as \`${iconFile}\` in the project. The silhouette is
+   settled at conceptual 16 px scale before any detail is added.
 2. **Render the verification page** (free, offline):
 
    \`\`\`bash
    npx @extenshi/cli@latest icon preview ${iconFile} --name "${name}"
    \`\`\`
 
-   This writes a self-contained HTML file and opens it: Chrome / Firefox / Edge toolbar
-   mockups with the icon pinned in place, switchable palettes (light, tinted, dark, black,
-   saturated + a custom color picker) with an automatic contrast warning per palette, a
-   store-size matrix, and an 8× pixel magnifier of the 16 px render.
-3. **Ask the human to review the page.** Iterate: edit \`${iconFile}\`, re-run the command
-   (add \`--no-open\` on re-runs; the browser tab just needs a refresh).
-4. **Export** straight from the page buttons: per-size PNGs, or the ZIP containing
-   \`icons/{16,32,48,128}.png\`, the SVG master and \`manifest-icons.json\`; there is also a
-   copy-paste manifest snippet:
+   The command writes a self-contained HTML file and opens it: Chrome / Firefox / Edge
+   toolbar mockups with the icon pinned in place, switchable palettes (light, tinted, dark,
+   black, saturated, plus a custom color picker) with an automatic contrast warning per
+   palette, a store-size matrix, and an 8× pixel magnifier of the 16 px render.
+3. **Review and iterate.** The developer reviews the page; after each edit to \`${iconFile}\`
+   the same command re-renders it (\`--no-open\` on re-runs; refreshing the open tab is enough).
+4. **Export** from the page buttons: per-size PNGs, or a ZIP containing
+   \`icons/{16,32,48,128}.png\`, the SVG master and \`manifest-icons.json\`. The page also shows
+   this manifest snippet:
 
    \`\`\`json
    {
@@ -63,14 +64,14 @@ Extenshi CLI renders an offline verification page. No API key, no credits, no up
    	"action": { "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } }
    }
    \`\`\`
-5. Unpack the exported \`icons/\` folder into the extension and reference it from
-   \`manifest.json\` as above.
+5. **Install** — the exported \`icons/\` folder is unpacked into the extension and referenced
+   from \`manifest.json\` as above.
 
 ## Related
 
-- Hosted AI icon generation (no local agent needed) lives at
-  https://dojo.extenshi.io/tools/icon-generator.
-- Uploading the finished icon into a dojo project is planned but not available yet —
-  do not look for an upload API.
+- Hosted AI icon generation (no local tooling needed): https://dojo.extenshi.io/tools/icon-generator
+- Uploading a finished icon into a dojo project is planned and not available yet; there is
+  no upload API.
+- Documentation: https://docs.extenshi.io/developers/icon-generator
 `
 }

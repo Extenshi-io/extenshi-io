@@ -38,8 +38,15 @@ import { type FastMCP, type FastMCPSessionAuth, type Tool, type ToolParameters, 
 import { z } from 'zod'
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import type { Bff } from './bff.js'
-import { buildDevelopmentGuide, type GuideTool } from './development-guide.js'
-import { DocsError, getDocsIndex, searchDocs } from './docs.js'
+import { buildDevelopmentGuide, GUIDE_SECTIONS, type GuideTool } from './development-guide.js'
+import {
+	DEFAULT_EXCERPT_CHARS,
+	DocsError,
+	getDocsIndex,
+	MAX_EXCERPT_CHARS,
+	MIN_EXCERPT_CHARS,
+	searchDocs,
+} from './docs.js'
 import { renderIconWorkflow } from './icon-workflow.js'
 import { renderLocalizeWorkflow } from './localize-workflow.js'
 import { PAY_OPERATIONS, paySchemas } from './pay.js'
@@ -52,7 +59,17 @@ import {
 import { checkPublishAccess } from './publish-access.js'
 import { ScanError, scanArtifact } from './scan.js'
 import { describeStoreConstraints, validateSearchFilters } from './search-filters.js'
-import { shapeExtension, shapeReviews, shapeSearch, shapeSecurity, shapeStoreRiskBatch } from './shape.js'
+import {
+	DEFAULT_MARKET_TOP_N,
+	MARKET_FACETS,
+	MAX_MARKET_TOP_N,
+	shapeExtension,
+	shapeMarketOverview,
+	shapeReviews,
+	shapeSearch,
+	shapeSecurity,
+	shapeStoreRiskBatch,
+} from './shape.js'
 import { captureError, captureEvent, classifyError } from './telemetry.js'
 import { renderExtensionTemplates } from './templates.js'
 import { renderCatalogPayload } from './untrusted.js'
@@ -339,6 +356,10 @@ function instrument<Params extends ToolParameters>(
 	return {
 		...tool,
 		execute: async (args, context) => {
+			// The hosted connector lets a user decline analytics on the consent
+			// screen; honour it for every event, including error reports.
+			if ((context.session as { telemetry?: unknown } | undefined)?.telemetry === false)
+				return original(args, context)
 			const startedAt = Date.now()
 			const { userId, sessionId } = attribution(context.session)
 			const props = { tool: name, ...(sessionId ? { mcp_session_id: sessionId } : {}) }
@@ -1177,10 +1198,26 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				query: z.string().optional().describe('Optional query to scope facets to a search.'),
 				stores: z.array(z.enum(['CHROME', 'FIREFOX', 'EDGE'])).optional(),
 				categories: z.array(z.string()).optional(),
+				facets: z
+					.array(z.enum(MARKET_FACETS))
+					.optional()
+					.describe(
+						'Facet groups to include: stats, stores, categories, extended, questionnaire, downloads; all groups when omitted.',
+					),
+				top_n: z
+					.number()
+					.int()
+					.min(1)
+					.max(MAX_MARKET_TOP_N)
+					.optional()
+					.describe(
+						`Entries kept per open-ended list (category tree levels, permissions, target sites), largest first. Default ${DEFAULT_MARKET_TOP_N}; \`truncated\` reports what was cut.`,
+					),
 			}),
 			execute: async (args, context) => {
 				try {
 					const client = bff(context)
+					const shapeOpts = { facets: args.facets, topN: args.top_n }
 					const scoped = Boolean(args.query?.trim() || args.stores?.length || args.categories?.length)
 
 					// Search-scoped: progressive-narrowing facets over the match set.
@@ -1191,11 +1228,12 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 								.getSearchFacets({ query: args.query, stores: args.stores, categories: args.categories })
 								.catch(() => null),
 						])
-						return renderCatalogPayload({
-							scope: 'search',
-							stats: stats ?? undefined,
-							facets: facets ?? undefined,
-						})
+						return renderCatalogPayload(
+							shapeMarketOverview(
+								{ scope: 'search', stats: stats ?? undefined, facets: facets ?? undefined },
+								shapeOpts,
+							),
+						)
 					}
 
 					// Catalog-wide: the unscoped search facets are all-zero by design, so build the
@@ -1218,16 +1256,21 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 						count: r.count,
 						label: STORE_LABELS[r.store] ?? r.store,
 					}))
-					return renderCatalogPayload({
-						scope: 'catalog-wide',
-						stats: stats ?? undefined,
-						facets: {
-							stores,
-							categoryTree: categoryTree ?? undefined,
-							extended: extended ?? undefined,
-						},
-						note: 'Monetization and download-volume facets are only computed when scoped to a query — pass `query` to get those.',
-					})
+					return renderCatalogPayload(
+						shapeMarketOverview(
+							{
+								scope: 'catalog-wide',
+								stats: stats ?? undefined,
+								facets: {
+									stores,
+									categoryTree: categoryTree ?? undefined,
+									extended: extended ?? undefined,
+								},
+								note: 'Monetization and download-volume facets are computed only for a query-scoped overview.',
+							},
+							shapeOpts,
+						),
+					)
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1455,8 +1498,17 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'guidance, and the ordered workflow from idea and repository through implementation, assets, ' +
 				'privacy, tests/CI, store submission and maintenance. Distinguishes MCP tools from cabinet, ' +
 				'CLI and external steps. Free; no key, account lookup or network request.',
-			parameters: z.object({}),
-			execute: async () => JSON.stringify(buildDevelopmentGuide(registeredTools), null, 2),
+			parameters: z.object({
+				sections: z
+					.array(z.enum(['all', ...GUIDE_SECTIONS]))
+					.optional()
+					.describe(
+						'Full guide sections to include: tools, localActions, services, repository, workflow, handoff, or all. ' +
+							'Omitted: a compact overview with tool names, workflow stages and a table of contents.',
+					),
+			}),
+			execute: async (args) =>
+				JSON.stringify(buildDevelopmentGuide(registeredTools, args?.sections), null, 2),
 		})
 
 		add({
@@ -1479,13 +1531,25 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					.min(1)
 					.max(10)
 					.default(4)
-					.describe('Max documentation sections to return (1–10).'),
+					.describe('Max documentation passages (page subsections) to return (1–10).'),
+				max_chars: z
+					.number()
+					.int()
+					.min(MIN_EXCERPT_CHARS)
+					.max(MAX_EXCERPT_CHARS)
+					.optional()
+					.describe(
+						`Max characters per passage excerpt (${MIN_EXCERPT_CHARS}–${MAX_EXCERPT_CHARS}, default ${DEFAULT_EXCERPT_CHARS}). Longer passages are cut with a link to the full page.`,
+					),
 			}),
 			execute: async (args) => {
 				try {
 					const query = args.query?.trim()
 					if (!query) return await getDocsIndex(deps.cfg.docsUrl)
-					return await searchDocs(deps.cfg.docsUrl, query, args.limit ?? 4)
+					return await searchDocs(deps.cfg.docsUrl, query, {
+						limit: args.limit ?? 4,
+						maxChars: args.max_chars,
+					})
 				} catch (err) {
 					// Both branches keep the origin as `cause` — a docs outage is a
 					// fault worth capturing, not an expected condition.

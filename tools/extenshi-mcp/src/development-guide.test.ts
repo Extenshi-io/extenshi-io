@@ -1,7 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { type buildDevelopmentGuide, DEVELOPMENT_SERVICES, type GuideTool } from './development-guide.js'
+import {
+	DEVELOPMENT_SERVICES,
+	GUIDE_SECTIONS,
+	type GuideSections,
+	type GuideTool,
+} from './development-guide.js'
 import { type Capability, getServerInstructions, registerTools } from './tools.js'
 
 vi.mock('./telemetry.js', async (original) => ({
@@ -37,10 +42,14 @@ function register(capabilities: Capability[]) {
 const repoRoot = resolve(__dirname, '../../..')
 const inMonorepo = existsSync(resolve(repoRoot, 'shared-types/dev-projects.ts'))
 
-async function readGuide(tools: RegisteredTool[]): Promise<ReturnType<typeof buildDevelopmentGuide>> {
+async function callGuide(tools: RegisteredTool[], args: Record<string, unknown>): Promise<string> {
 	const tool = tools.find((tool) => tool.name === 'get_development_guide')
 	if (!tool) throw new Error('Development guide was not registered')
-	return JSON.parse(await tool.execute({}, {}))
+	return tool.execute(args, {})
+}
+
+async function readGuide(tools: RegisteredTool[]): Promise<GuideSections> {
+	return JSON.parse(await callGuide(tools, { sections: ['all'] }))
 }
 
 afterEach(() => vi.unstubAllGlobals())
@@ -119,6 +128,38 @@ describe('development guide discovery contract', () => {
 		for (const tool of result.tools) expect(tool.docs.length, tool.name).toBeGreaterThan(0)
 		expect(result.workflow.at(-1)?.id).toBe('operate')
 		expect(result.repository.recommendation).toContain('GitHub')
+	})
+
+	it('defaults to a compact overview with the tool inventory and a table of contents', async () => {
+		const { tools } = register(['read', 'docs', 'scan', 'publish'])
+		const text = await callGuide(tools, {})
+		// Policy 5B: the no-argument response stays small; full sections are opt-in.
+		expect(text.length).toBeLessThanOrEqual(12_000)
+		const result = JSON.parse(text)
+		expect(result.toolNames).toEqual(tools.map((tool) => tool.name))
+		expect(result.contents.map((entry: { section: string }) => entry.section)).toEqual([...GUIDE_SECTIONS])
+		expect(result.workflowStages.at(-1)?.id).toBe('operate')
+		expect(result.tools).toBeUndefined()
+	})
+
+	it('returns only the requested sections', async () => {
+		const { tools } = register(['read', 'docs'])
+		const result = JSON.parse(await callGuide(tools, { sections: ['workflow', 'bogus'] }))
+		expect(result.workflow.map((stage: { id: string }) => stage.id)).toContain('release')
+		expect(result.tools).toBeUndefined()
+		expect(result.services).toBeUndefined()
+		expect(result.documentation).toContain('docs.extenshi.io')
+	})
+
+	it('describes the workflow as reference material, with related tools as data', async () => {
+		const { tools } = register(['read', 'docs', 'scan', 'publish'])
+		const result = await readGuide(tools)
+		const registered = new Set(tools.map((tool) => tool.name))
+		for (const stage of result.workflow) {
+			for (const name of stage.relatedTools) expect(registered.has(name), name).toBe(true)
+			expect(stage.actions).not.toMatch(/\b(call|use|you|your)\b/i)
+		}
+		for (const service of result.services) expect(service.access).not.toMatch(/\b(you|your)\b/i)
 	})
 
 	it('initialize guidance distinguishes hosted operations from local artifact actions', () => {

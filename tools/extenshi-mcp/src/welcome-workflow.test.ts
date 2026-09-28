@@ -36,9 +36,9 @@ describe('renderWelcomeWorkflow', () => {
 		expect(out).not.toContain(WELCOME_GOAL_PRESETS.PIN_EXTENSION.label)
 	})
 
-	it('tells the agent to ask for the target site when VISIT_SITE has none', () => {
+	it('flags the missing target site as an open question when VISIT_SITE has none', () => {
 		const out = renderWelcomeWorkflow({ extensionName: 'YT Transcriber', goal: 'VISIT_SITE' })
-		expect(out).toMatch(/Ask the developer which site/i)
+		expect(out).toMatch(/open question for the developer/i)
 	})
 
 	it('uses the supplied target site when given one', () => {
@@ -48,7 +48,7 @@ describe('renderWelcomeWorkflow', () => {
 			targetSite: 'youtube.com',
 		})
 		expect(out).toContain('youtube.com')
-		expect(out).not.toMatch(/Ask the developer which site/i)
+		expect(out).not.toMatch(/open question for the developer/i)
 	})
 
 	it('offers hosted store screenshots as no-upload material', () => {
@@ -83,7 +83,7 @@ describe('renderWelcomeWorkflow', () => {
 })
 
 describe('buildWelcomeAgentBrief', () => {
-	it('falls back to a generic instruction for the CUSTOM goal', () => {
+	it('falls back to a generic sequence description for the CUSTOM goal', () => {
 		const out = buildWelcomeAgentBrief({ extensionName: 'Thing', goal: 'CUSTOM' })
 		expect(out).toMatch(/No preset applies/i)
 	})
@@ -112,6 +112,6 @@ describe('buildWelcomeAgentBrief', () => {
 		})
 		expect(out).toContain('Open the options page')
 		expect(out).toContain('Set your timezone')
-		expect(out).toMatch(/Keep their wording/i)
+		expect(out).toMatch(/wording and intent stay/i)
 	})
 })
