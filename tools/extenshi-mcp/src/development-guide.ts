@@ -161,10 +161,10 @@ export const DEVELOPMENT_SERVICES = [
 	{
 		id: 'verification-and-ci',
 		purpose:
-			'Testing the built extension in each target browser, store-risk review, final package scan and CI report retention.',
-		tools: ['scan_extension'],
+			'Reproducible per-browser packages, installed smoke tests of the exact package in Chromium, Edge and Firefox, store-risk review, final package scan, and release evidence recorded from those results.',
+		tools: ['scan_extension', 'record_project_evidence', 'get_release_readiness'],
 		access:
-			'Scan requires a local artifact and API key, and spends 1 scan credit. CLI review-risk is local. GitHub Actions is configured in the repository; browser tests run in the local environment.',
+			'Local CLI, free: `extenshi package <dir> --browser chrome,edge,firefox` writes byte-reproducible zips plus extenshi-packages.json (sha256 per browser; refuses a placeholder Firefox add-on ID; --fix-war expands wildcard web_accessible_resources). `extenshi test smoke <zip|extenshi-packages.json> --browser chromium|edge|firefox --json` installs that exact zip and checks service worker/background start, manifest errors and console errors on popup/options pages (Playwright for Chromium/Edge, any Firefox binary). `--evidence` on scan, review-risk, generate-listing and test smoke records scan / permissions / listing (per locale) / installed evidence for the project bound with `extenshi project bind` (advisory listing findings stay passed and are listed in the evidence summary); release prepare accepts extenshi-packages.json. Scan requires an API key and spends 1 scan credit. CI: the scaffold writes .github/workflows/extenshi-verify.yml and extenshi-evidence.yml; CI-sourced evidence arrives through `extenshi evidence ingest` with the create_ci_ingest_secret secret.',
 		urls: [docs('cli'), docs('cli-github-actions'), docs('store-policies')],
 	},
 	{
@@ -307,8 +307,8 @@ const WORKFLOW = [
 	{
 		id: 'quality-and-listing',
 		actions:
-			'Stage 7 — Quality and listing: each browser package is built; unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing --store chrome|edge|firefox, which draft CHROMEWEBSTORE.md / EDGE.md / AMO.md — the same listing draft review-risk --listing reads back regardless of which one; exact commands in the CLI docs). A Firefox build with minified/bundled code additionally needs extenshi amo-source (source archive + BUILD.md) and a clean `web-ext lint`. The final package is scanned, and CI follows the cli-github-actions docs.',
-		relatedTools: ['search_docs', 'scan_extension'],
+			'Stage 7 — Quality and listing: each browser package is built reproducibly (CLI package), and that exact zip is installed and smoke-tested per browser (CLI test smoke); unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing --store chrome|edge|firefox, which draft CHROMEWEBSTORE.md / EDGE.md / AMO.md — the same listing draft review-risk --listing reads back regardless of which one). A Firefox build with minified/bundled code additionally needs extenshi amo-source (source archive + BUILD.md) and a clean `web-ext lint`. With --evidence, scan, review-risk, generate-listing and test smoke record their release evidence for the bound project; the final package is scanned. Exact commands: the CLI docs. CI runs the scaffolded extenshi-verify workflow.',
+		relatedTools: ['search_docs', 'scan_extension', 'get_release_readiness'],
 		doneWhen:
 			'The exact versioned artifact has passing checks, retained scan/review reports and truthful store materials; unresolved findings have a disposition.',
 	},
