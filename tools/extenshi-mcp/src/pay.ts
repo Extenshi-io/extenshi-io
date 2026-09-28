@@ -25,6 +25,7 @@ export const paySchemas = {
 		.strict(),
 	getPayApp: app,
 	getPayReadiness: app,
+	getPayPaymentEvidence: app,
 	linkPayApp: app.extend({ projectId: z.string().uuid() }),
 	unlinkPayApp: app,
 	archivePayApp: app,
@@ -97,6 +98,14 @@ export const PAY_OPERATIONS = [
 		'payApp.readiness',
 		false,
 		'Check current checkout and launch prerequisites. A passing checkout check does not prove a live external purchase or SDK publication.',
+	],
+	[
+		'getPayPaymentEvidence',
+		'get_pay_payment_evidence',
+		'payment-evidence',
+		'payApp.paymentEvidence',
+		false,
+		"Read what Extenshi's own payment ledger proves about this application's payment path, per mode: checkout completed, license issued, an installation received the signed license, restored on a second installation, refund revoked. Derived from provider-signed webhooks, not from any report; opaque IDs and timestamps only, no buyer data. Only a live-mode purchase can satisfy a release's payment requirement; test-mode purchases are listed without satisfying it.",
 	],
 	[
 		'linkPayApp',

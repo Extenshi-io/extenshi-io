@@ -883,7 +883,11 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Explain readiness for the recorded browser and artifact by locale. Local or agent reports are not treated as CI attestations. Stale evidence does not pass. Requires a Pro project. ' +
 					'Readiness is measured against the release recorded in the workspace: until apply_project_patch sets patch.release ' +
 					'(browser, version, artifactDigest, manifestDigest, locales, paymentRequired, and commit or dirtyTreeDigest) it reports ' +
-					'RELEASE_NOT_RECORDED; after that, evidence counts only when it matches that release artifactDigest.',
+					'RELEASE_NOT_RECORDED; after that, evidence counts only when it matches that release artifactDigest. ' +
+					"When the project has a linked Pay application, the payment check also carries `platform`: what Extenshi's own " +
+					'payment ledger proves (checkout, license, installation activation, recovery, refund). A live-mode purchase through ' +
+					"those stages passes the check with source 'platform'; test-mode purchases are listed without passing it. Clients cannot " +
+					"record source 'platform'.",
 				'getReleaseReadiness',
 			],
 		] as const

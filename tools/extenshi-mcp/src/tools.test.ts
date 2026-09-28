@@ -90,6 +90,7 @@ const READ_TOOLS = [
 	'create_pay_app',
 	'get_pay_app',
 	'get_pay_readiness',
+	'get_pay_payment_evidence',
 	'link_pay_app',
 	'unlink_pay_app',
 	'archive_pay_app',

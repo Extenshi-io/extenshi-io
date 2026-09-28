@@ -69,7 +69,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_landing_page` | Hosted landing page code, live version, URL and form | Free; identity required |
 | `unpublish_landing_page` | Take the hosted landing page offline (same URL on the next publish) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
-| `get_release_readiness` | Explain current, stale and missing release checks by browser and locale | Pro project; project read access |
+| `get_release_readiness` | Explain current, stale and missing release checks by browser and locale. With a linked Pay application, the payment check is derived from Extenshi's payment ledger (source `platform`); a live-mode purchase that reached an installation passes it | Pro project; project read access |
 | `list_my_projects` | Your projects, repository bindings and claimed listings | Free; identity required |
 | `get_project_state` | Manifest, selected types, saved-state index, hosted URLs and exact integration file | Free; identity required |
 | `get_project_scaffold` | Starter files for one project and target browser | Free; identity required |
@@ -140,6 +140,7 @@ These tools require a backend with standalone Pay support. A development project
 | `create_pay_app` | `pay.write` | Create an independent Pay application; linking a development project is optional. Creates a new application on every call: do not retry blindly after a timeout. |
 | `get_pay_app` | `pay.read` | Read your Pay application and optional project link. |
 | `get_pay_readiness` | `pay.read` | Check current checkout and launch prerequisites. A passing checkout check does not prove a live external purchase or SDK publication. |
+| `get_pay_payment_evidence` | `pay.read` | Read what Extenshi's payment ledger proves about the application's payment path, per mode: checkout completed, license issued, an installation received the signed license, restored on a second installation, refund revoked. Opaque IDs and timestamps only. Only live-mode purchases satisfy a release's payment requirement. |
 | `link_pay_app` | `pay.write` | Link your Pay application to your development project. Existing purchases remain attached to the Pay application. |
 | `unlink_pay_app` | `pay.write` | Remove the optional development-project link without deleting Pay data. |
 | `archive_pay_app` | `pay.write` | Archive your application and stop new checkout. Preserve payment records and existing entitlements. |
