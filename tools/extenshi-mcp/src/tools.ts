@@ -54,6 +54,14 @@ import { renderLocalizeWorkflow } from './localize-workflow.js'
 import { PAY_OPERATIONS, paySchemas } from './pay.js'
 import { describePrivacyAiUpdate } from './privacy-ai-outcome.js'
 import {
+	checkInlineImage,
+	PROJECT_MEDIA_MAX_BYTES,
+	PROJECT_MEDIA_MIME_TYPES,
+	ProjectMediaInputError,
+	type ProjectMediaMime,
+	readWorkspaceImage,
+} from './project-media.js'
+import {
 	PublishSetupError,
 	publishArtifact,
 	readStoreCredentials,
@@ -682,6 +690,14 @@ const TOOL_ANNOTATIONS: Record<
 		destructiveHint: true,
 		openWorldHint: true,
 	},
+	upload_project_media: {
+		title: 'Upload a public image for hosted pages',
+		readOnlyHint: false,
+		// Content-addressed: the same bytes always return the same URL.
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
 	remove_hosted_page: {
 		title: 'Remove a hosted page registration',
 		readOnlyHint: false,
@@ -1031,7 +1047,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'active custom domain. The code is permanent: republishing creates a new version at the same URL. ' +
 				'By default the URL is also registered as the project homepage, which feeds HOMEPAGE_URL. Hosted ' +
 				'images are limited to store screenshot URLs (from get_extension) and images uploaded in the Dojo ' +
-				'Page generator; the logo may be an inline SVG or a raster data: URL. Returns JSON {url, publicCode, ' +
+				'Page generator or with upload_project_media (use its url for local screenshots or a logo); the logo ' +
+				'may also be an inline SVG or a raster data: URL. Returns JSON {url, publicCode, ' +
 				'versionNumber, contentHash, bytes, warnings, homepage, nextSteps}. Requires hosted.write. ' +
 				`API reference: ${HOSTED_PAGES_DOCS}`,
 			parameters: z.object({
@@ -1082,6 +1099,70 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			execute: async (args, context) => {
 				try {
 					return JSON.stringify(await bff(context).unpublishLandingPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		// A local filesystem exists only where local artifacts do (stdio).
+		const localFiles = caps.has('scan')
+		add({
+			name: 'upload_project_media',
+			description:
+				"Upload a logo or screenshot (PNG, JPEG or WebP, up to 2 MB) to the project's PUBLIC media store — " +
+				'the same store the Dojo Page generator uploads into — and get a stable https URL that ' +
+				'publish_landing_page accepts as screenshots[].url or logoUrl. The server checks the file by content ' +
+				'(magic bytes), strips EXIF/XMP/text metadata and anything after the image end marker, bounds the ' +
+				'dimensions (16–4096 px) and enforces a per-project quota (100 files / 50 MB, Dojo uploads included); ' +
+				'identical bytes return the same URL without using quota. SVG is refused: rasterize it first ' +
+				'(CLI: extenshi icon store-assets) or pass an inline logo as logoSvg. ' +
+				(localFiles
+					? 'Pass filePath (a file inside the workspace) or dataBase64 + mime. '
+					: 'Pass dataBase64 + mime (this connection has no access to local files). ') +
+				'Store screenshots come from the CLI: extenshi screenshots. Returns JSON {url, sha256, mime, bytes, ' +
+				'width, height, strippedBytes, deduplicated, quota}. Requires hosted.write. ' +
+				`CLI: extenshi media upload <file> --project <id>. API reference: ${HOSTED_PAGES_DOCS}`,
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				filePath: z
+					.string()
+					.min(1)
+					.max(4096)
+					.optional()
+					.describe('Image file inside the workspace (local stdio server only).'),
+				dataBase64: z
+					.string()
+					.min(1)
+					.max(Math.ceil(PROJECT_MEDIA_MAX_BYTES / 3) * 4 + 16)
+					.optional()
+					.describe('The raw image, base64-encoded (no data: prefix). Use with mime.'),
+				mime: z.enum(PROJECT_MEDIA_MIME_TYPES).optional().describe('Required with dataBase64.'),
+			}),
+			execute: async (args, context) => {
+				let payload: { mime: ProjectMediaMime; dataBase64: string }
+				try {
+					if (args.filePath && args.dataBase64)
+						throw new ProjectMediaInputError('Pass filePath OR dataBase64, not both.')
+					if (args.filePath) {
+						if (!localFiles)
+							throw new ProjectMediaInputError(
+								'filePath works only with the local stdio server; send dataBase64 + mime instead.',
+							)
+						const read = await readWorkspaceImage(args.filePath)
+						payload = { mime: read.mime, dataBase64: read.dataBase64 }
+					} else if (args.dataBase64) {
+						if (!args.mime) throw new ProjectMediaInputError('mime is required with dataBase64.')
+						checkInlineImage(args.dataBase64, args.mime)
+						payload = { mime: args.mime, dataBase64: args.dataBase64 }
+					} else throw new ProjectMediaInputError('Pass filePath or dataBase64 + mime.')
+				} catch (err) {
+					if (err instanceof ProjectMediaInputError) throw new UserError(err.message)
+					throw err
+				}
+				try {
+					return JSON.stringify(
+						await bff(context).uploadProjectMedia({ projectId: args.projectId, ...payload }),
+					)
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1694,14 +1775,15 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'For extension-development tasks: returns the complete tool inventory for THIS connection, ' +
 				'the Extenshi service directory with access requirements and docs links, GitHub/code placement ' +
 				'guidance, and the ordered workflow from idea and repository through implementation, assets, ' +
-				'privacy, tests/CI, store submission and maintenance. Distinguishes MCP tools from cabinet, ' +
-				'CLI and external steps. Free; no key, account lookup or network request.',
+				'privacy, tests/CI, store submission and maintenance, plus store media: the scenes.json format for ' +
+				'CLI screenshots (per-locale store screenshots) and listing artwork sizes per store. Distinguishes ' +
+				'MCP tools from cabinet, CLI and external steps. Free; no key, account lookup or network request.',
 			parameters: z.object({
 				sections: z
 					.array(z.enum(['all', ...GUIDE_SECTIONS]))
 					.optional()
 					.describe(
-						'Full guide sections to include: tools, localActions, services, repository, workflow, handoff, or all. ' +
+						'Full guide sections to include: tools, localActions, services, repository, workflow, handoff, storeMedia, or all. ' +
 							'Omitted: a compact overview with tool names, workflow stages and a table of contents.',
 					),
 			}),

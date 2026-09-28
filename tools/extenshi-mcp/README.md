@@ -68,6 +68,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `publish_landing_page` | Host the landing page at page.extenshi.io/{code} from the Page generator form (versioned; registered as the homepage by default) | Requires hosted.write for OAuth |
 | `get_landing_page` | Hosted landing page code, live version, URL and form | Free; identity required |
 | `unpublish_landing_page` | Take the hosted landing page offline (same URL on the next publish) | Requires hosted.write for OAuth |
+| `upload_project_media` | Upload a PNG/JPEG/WebP logo or screenshot to the project's public media store and get a stable URL for `publish_landing_page` (metadata stripped, per-project quota; `filePath` inside the workspace on stdio, `dataBase64` everywhere) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
 | `get_release_readiness` | Explain current, stale and missing release checks by browser and locale. With a linked Pay application, the payment check is derived from Extenshi's payment ledger (source `platform`); a live-mode purchase that reached an installation passes it | Pro project; project read access |
 | `list_my_projects` | Your projects, repository bindings and claimed listings | Free; identity required |

@@ -9,10 +9,11 @@
  * See internal-docs/plans/2026-06-25-claude-connector-directory.md §13 #1.
  */
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { UserError } from 'fastmcp'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bff } from './bff.js'
 import { scanArtifact } from './scan.js'
 import { captureError, captureEvent } from './telemetry.js'
@@ -119,6 +120,7 @@ const READ_TOOLS = [
 	'publish_landing_page',
 	'get_landing_page',
 	'unpublish_landing_page',
+	'upload_project_media',
 	'search_extensions',
 	'get_extension',
 	'get_reviews',
@@ -608,6 +610,7 @@ describe('directory tool annotations', () => {
 			'remove_hosted_page',
 			'publish_landing_page',
 			'unpublish_landing_page',
+			'upload_project_media',
 		])
 		for (const t of tools) {
 			if (hostedWrites.has(t.name)) {
@@ -1099,6 +1102,103 @@ describe('hosted landing page tools', () => {
 		expect(schema.safeParse({ projectId, extensionName: 'x' }).success).toBe(true)
 		expect(schema.safeParse({ projectId, extensionName: 'x'.repeat(121) }).success).toBe(false)
 		expect(schema.safeParse({ extensionName: 'x' }).success).toBe(false)
+	})
+})
+
+describe('upload_project_media', () => {
+	const projectId = '11111111-1111-4111-8111-111111111111'
+	const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])
+	function toolsWith(stub: Partial<Bff>, capabilities: Capability[]) {
+		const tools: Record<string, any> = {}
+		registerTools(
+			{
+				addTool: (t: { name: string }) => {
+					tools[t.name] = t
+				},
+			} as unknown as Parameters<typeof registerTools>[0],
+			{
+				cfg: { bffUrl: 'https://bff.test', scanUrl: 'https://scan.test', docsUrl: 'https://docs.test' },
+				capabilities: new Set<Capability>(capabilities),
+				getBff: () => stub as Bff,
+				requireApiKey: () => 'ek_test',
+			},
+		)
+		return tools
+	}
+	let workspace: string
+	let cwd: string
+	beforeEach(() => {
+		workspace = mkdtempSync(join(tmpdir(), 'mcp-media-'))
+		mkdirSync(join(workspace, 'store'))
+		writeFileSync(join(workspace, 'store', 'shot.png'), PNG)
+		writeFileSync(join(workspace, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>')
+		cwd = process.cwd()
+		process.chdir(workspace)
+	})
+	afterEach(() => {
+		process.chdir(cwd)
+		rmSync(workspace, { recursive: true, force: true })
+	})
+
+	it('reads a workspace file locally, sniffs its type and sends base64 to the BFF', async () => {
+		const uploadProjectMedia = vi.fn(async () => ({ url: 'https://s3.test/welcome-pages/p/abc.png' }))
+		const tools = toolsWith({ uploadProjectMedia }, ['read', 'scan'])
+		const out = JSON.parse(
+			await tools.upload_project_media.execute({ projectId, filePath: 'store/shot.png' }, {}),
+		)
+		expect(out.url).toBe('https://s3.test/welcome-pages/p/abc.png')
+		expect(uploadProjectMedia).toHaveBeenCalledWith({
+			projectId,
+			mime: 'image/png',
+			dataBase64: PNG.toString('base64'),
+		})
+	})
+
+	it('refuses files outside the workspace, SVG, and filePath on a connection without local files', async () => {
+		const uploadProjectMedia = vi.fn()
+		const local = toolsWith({ uploadProjectMedia }, ['read', 'scan'])
+		const outside = join(tmpdir(), `outside-${Date.now()}.png`)
+		writeFileSync(outside, PNG)
+		try {
+			await expect(local.upload_project_media.execute({ projectId, filePath: outside }, {})).rejects.toThrow(
+				/outside the workspace/,
+			)
+			await expect(
+				local.upload_project_media.execute({ projectId, filePath: '../../etc/passwd' }, {}),
+			).rejects.toThrow(UserError)
+		} finally {
+			rmSync(outside, { force: true })
+		}
+		await expect(local.upload_project_media.execute({ projectId, filePath: 'logo.svg' }, {})).rejects.toThrow(
+			/SVG is not accepted/,
+		)
+		const remote = toolsWith({ uploadProjectMedia }, ['read'])
+		await expect(
+			remote.upload_project_media.execute({ projectId, filePath: 'store/shot.png' }, {}),
+		).rejects.toThrow(/local stdio server/)
+		expect(uploadProjectMedia).not.toHaveBeenCalled()
+	})
+
+	it('accepts inline base64 only when its content matches the declared type', async () => {
+		const uploadProjectMedia = vi.fn(async () => ({ url: 'https://s3.test/x.png' }))
+		const remote = toolsWith({ uploadProjectMedia }, ['read'])
+		await expect(
+			remote.upload_project_media.execute(
+				{ projectId, dataBase64: PNG.toString('base64'), mime: 'image/jpeg' },
+				{},
+			),
+		).rejects.toThrow(/contains image\/png/)
+		await expect(
+			remote.upload_project_media.execute(
+				{ projectId, dataBase64: Buffer.from('<svg/>').toString('base64'), mime: 'image/png' },
+				{},
+			),
+		).rejects.toThrow(/not a PNG/)
+		await remote.upload_project_media.execute(
+			{ projectId, dataBase64: PNG.toString('base64'), mime: 'image/png' },
+			{},
+		)
+		expect(uploadProjectMedia).toHaveBeenCalledTimes(1)
 	})
 })
 

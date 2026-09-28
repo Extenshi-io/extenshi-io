@@ -66,12 +66,25 @@ Extenshi CLI renders an offline verification page. No API key, no credits, no up
    \`\`\`
 5. **Install** — the exported \`icons/\` folder is unpacked into the extension and referenced
    from \`manifest.json\` as above.
+6. **Store listing artwork** from the same master (free, offline, WebAssembly renderer):
+
+   \`\`\`bash
+   npx @extenshi/cli@latest icon store-assets ${iconFile} --out store-assets
+   \`\`\`
+
+   Output per store: Chrome Web Store \`icon-128.png\` (96 px artwork, 16 px transparent
+   padding), \`promo-small-440x280.png\` (required) and \`marquee-1400x560.png\`; Edge Add-ons
+   \`logo-300x300.png\`, \`promo-small-440x280.png\` and \`promo-large-1400x560.png\`; AMO
+   \`icon-128.png\`, \`icon-64.png\` and \`icon-32.png\`. Tiles are composed from the icon on a tint
+   of its colour; \`--promo\` / \`--marquee\` take full-bleed artwork instead, with a warning when
+   content is clipped or the aspect ratio is off.
 
 ## Related
 
 - Hosted AI icon generation (no local tooling needed): https://dojo.extenshi.io/tools/icon-generator
-- Uploading a finished icon into a dojo project is planned and not available yet; there is
-  no upload API.
+- A logo or screenshot for a hosted landing page goes into the project's public media store
+  with upload_project_media (CLI: \`npx @extenshi/cli@latest media upload <file> --project <id>\`),
+  which returns a stable URL accepted as \`logoUrl\` / \`screenshots[].url\`.
 - Documentation: https://docs.extenshi.io/developers/icon-generator
 `
 }

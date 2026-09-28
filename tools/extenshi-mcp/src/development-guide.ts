@@ -144,10 +144,11 @@ export const DEVELOPMENT_SERVICES = [
 			'publish_landing_page',
 			'get_landing_page',
 			'unpublish_landing_page',
+			'upload_project_media',
 			'upsert_hosted_page',
 		],
 		access:
-			'The landing-page generator is free and offline: it returns static HTML (CLI: extenshi page generate). The same page can be hosted by Extenshi at page.extenshi.io/{code} with publish_landing_page (identity and hosted.write; CLI: extenshi page publish), which also registers it as the project homepage; images there are store screenshots or Dojo uploads. A page hosted elsewhere on HTTPS is registered with upsert_hosted_page (CLI: extenshi page register). The registered homepage feeds HOMEPAGE_URL. Listing copy and store-risk review are covered by CLI generate-listing / review-risk and cabinet tools where enabled. MCP has no listing or SEO execution tool.',
+			"The landing-page generator is free and offline: it returns static HTML (CLI: extenshi page generate). The same page can be hosted by Extenshi at page.extenshi.io/{code} with publish_landing_page (identity and hosted.write; CLI: extenshi page publish), which also registers it as the project homepage; images there are store screenshots, Dojo uploads or files uploaded with upload_project_media (hosted.write; CLI: extenshi media upload, or page publish --upload-local) to the project's public media store. Store screenshots per locale come from CLI extenshi screenshots and listing artwork from CLI extenshi icon store-assets (formats and sizes: guide section storeMedia). A page hosted elsewhere on HTTPS is registered with upsert_hosted_page (CLI: extenshi page register). The registered homepage feeds HOMEPAGE_URL. Listing copy and store-risk review are covered by CLI generate-listing / review-risk and cabinet tools where enabled. MCP has no listing or SEO execution tool.",
 		urls: [
 			docs('cli'),
 			docs('ai-visibility'),
@@ -292,6 +293,7 @@ const WORKFLOW = [
 			'generate_welcome_page_workflow',
 			'generate_landing_page',
 			'publish_landing_page',
+			'upload_project_media',
 			'upsert_hosted_page',
 			'list_privacy_policy_versions',
 			'get_privacy_policy_version',
@@ -336,6 +338,7 @@ export const GUIDE_SECTIONS = [
 	'repository',
 	'workflow',
 	'handoff',
+	'storeMedia',
 ] as const
 export type GuideSection = (typeof GUIDE_SECTIONS)[number]
 
@@ -346,7 +349,82 @@ const SECTION_SUMMARIES: Record<GuideSection, string> = {
 	repository: 'Git repository recommendation, setup, layout and secret-handling practice.',
 	workflow: 'The nine lifecycle stages with descriptions, related tools and exit criteria.',
 	handoff: 'Items a completed handoff records.',
+	storeMedia:
+		'Store screenshots per locale (CLI screenshots + scenes.json format), listing artwork sizes per store (CLI icon store-assets) and the public project media store.',
 }
+
+/**
+ * Store image requirements and the scenes format. Static reference: the CLI
+ * (tools/extenshi-cli/src/store-assets.ts, screenshots-scenes.ts) is the
+ * implementation; sizes cite the stores' own pages.
+ */
+const STORE_MEDIA = {
+	screenshots: {
+		command:
+			'npx @extenshi/cli@latest screenshots <unpacked-dir|zip> --scenes scenes.json [--locales en,de] [--store chrome,edge,firefox] [--small] [--out store-screenshots] [--json]',
+		requires:
+			'Playwright with the full Chromium build in the project (npm i -D playwright && npx playwright install chromium); the headless shell cannot load extensions. The source build is never modified: it is staged into a temporary copy.',
+		output:
+			'<out>/<store>/<locale>/NN-<scene>-WxH.png, plus <out>/screenshots.json (files with sha256, verified locales, warnings).',
+		localeSwitching:
+			'Each locale runs in a fresh Chromium with its UI language set (--lang; LANGUAGE on Linux; -AppleLanguages on macOS, where --lang has no effect). chrome.i18n inside the extension has to report the locale and render a message from _locales/<locale>; a mismatch fails the run. A locale missing from _locales is refused.',
+		determinism:
+			'Fixed viewport and device scale factor, reduced motion, animations/transitions/caret disabled, UTC timezone, optional fixed clock (time), fonts and images awaited before capture, store canvas composed by a WebAssembly renderer. Identical inputs produce byte-identical PNGs on the same machine.',
+		sizes: {
+			chrome:
+				'1280×800 (default) or 640×400 with --small; full bleed; 1–5 per locale — https://developer.chrome.com/docs/webstore/images',
+			edge: '1280×800 or 640×480 with --small; up to 6 — https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension',
+			firefox:
+				'1280×800 recommended (1.6:1), uploaded as AMO previews — https://extensionworkshop.com/documentation/develop/create-an-appealing-listing/',
+		},
+		scenesFormat: {
+			example: {
+				version: 1,
+				viewport: { width: 1280, height: 800 },
+				deviceScaleFactor: 2,
+				fixtures: 'fixtures',
+				frame: { background: '#eef2ff', backgroundTo: '#e0e7ff', margin: 48, shadow: true, radius: 12 },
+				setup: [{ storage: { area: 'local', set: { onboarded: true } } }],
+				scenes: [
+					{ name: 'popup', open: 'popup', steps: [{ click: '#enable' }, { wait: 300 }] },
+					{
+						name: 'on-a-page',
+						open: 'fixture:article.{locale}.html',
+						steps: [{ mouse: { x: 640, y: 330 } }],
+					},
+					{ name: 'options', open: 'options', crop: { selector: 'main', padding: 24 } },
+				],
+			},
+			open: 'popup | options (from the manifest) | page:<path inside the extension> | fixture:<file under fixtures, served from 127.0.0.1> | url:https://…. {locale} and {lang} expand to the _locales code (pt_BR) and BCP 47 tag (pt-BR).',
+			steps:
+				'click <selector>, hover <selector>, type <selector> + text, press <key>, mouse {x,y}, scroll {x?,y}, wait <ms up to 30000>, waitFor <selector> (+state), storage {area: local|sync|session, set?, remove?, clear?} in the extension context, eval <JS expression> in the scene page.',
+			sceneOptions:
+				'viewport, colorScheme (light|dark), init (JS before the page scripts, e.g. stubbing chrome.tabs.query for a popup opened as a tab), crop (viewport | content — default for popup | fullPage | {selector, padding}), fit (contain — centered on the frame, not magnified past its captured pixels | cover), frame, stores (subset).',
+			fileOptions:
+				'viewport (default 1280×800), deviceScaleFactor (1–3), colorScheme, time (ISO date for Date.now), fixtures (dir, default the scenes file dir), animations (disabled|allow), frame {background, backgroundTo, margin, shadow, radius}, setup (steps run once per locale before the scenes), scenes (1–12).',
+		},
+	},
+	storeAssets: {
+		command:
+			'npx @extenshi/cli@latest icon store-assets <icon.svg|png> [--store chrome,edge,firefox] [--out store-assets] [--background <color>] [--promo <file>] [--marquee <file>] [--font <file.ttf>]',
+		outputs: {
+			chrome:
+				'icon-128.png (96×96 artwork + 16 px transparent padding), promo-small-440x280.png (required), marquee-1400x560.png — https://developer.chrome.com/docs/webstore/images',
+			edge: 'logo-300x300.png (1:1, min 128), promo-small-440x280.png, promo-large-1400x560.png — https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension',
+			firefox:
+				'icon-128.png (AMO listing icon; AMO derives 32/64), icon-64.png and icon-32.png (manifest icons) — https://mozilla.github.io/addons-server/topics/api/addons.html#addon-icon',
+		},
+		notes:
+			'Offline WebAssembly renderer, no API key. Built-in padding in the source is trimmed rather than doubled. Tiles are composed from the icon on a tint of its colour unless --promo / --marquee artwork is given; clipped content, wrong aspect ratios and upscaled rasters are reported as warnings. <style> blocks in SVG sources are removed by the scrubber; text uses matching system fonts or --font.',
+	},
+	publicMedia: {
+		tool: 'upload_project_media (hosted.write)',
+		cli: 'npx @extenshi/cli@latest media upload <file…> --project <id>, or page publish --upload-local',
+		accepts:
+			'PNG, JPEG or WebP up to 2 MB, 16–4096 px per side; SVG is rasterized by the CLI (the MCP tool refuses it). Magic bytes are checked, EXIF/XMP/text metadata and trailing bytes are stripped, and the key is the SHA-256 of the stored bytes, so the URL is stable and a re-upload returns the same URL. Quota: 100 files / 50 MB per project, Dojo uploads included.',
+		use: 'The returned url is accepted by publish_landing_page as screenshots[].url or logoUrl.',
+	},
+} as const
 
 const AVAILABILITY =
 	'Tool lists describe the tools registered on THIS connection. Registration does not prove account access, remaining credits or local prerequisites. Service URLs describe where work happens; account/project access is checked live. Exact input schemas come from MCP tools/list. This guide makes no network calls.'
@@ -398,6 +476,7 @@ function buildSections(registeredTools: readonly GuideTool[]) {
 			],
 		},
 		workflow: WORKFLOW,
+		storeMedia: STORE_MEDIA,
 		handoff: [
 			'scope and acceptance criteria',
 			'project ID, repository URL, branch and commit',

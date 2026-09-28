@@ -132,6 +132,16 @@ export interface Bff extends PayBff {
 	}): Promise<unknown>
 	getLandingPage(input: { projectId: string }): Promise<unknown>
 	unpublishLandingPage(input: { projectId: string }): Promise<unknown>
+	/**
+	 * Upload one PNG/JPEG/WebP to the project's PUBLIC media store (the same one
+	 * Dojo uploads use). The BFF re-checks magic bytes, strips metadata, enforces
+	 * size/dimension/quota limits and returns a stable content-addressed URL.
+	 */
+	uploadProjectMedia(input: {
+		projectId: string
+		mime: 'image/png' | 'image/jpeg' | 'image/webp'
+		dataBase64: string
+	}): Promise<unknown>
 }
 
 /** Build a BFF client from a static `ek_…` key (stdio path). */
@@ -203,5 +213,6 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		publishLandingPage: (input) => client.devProject.agentPublishLandingPage.mutate(input as never),
 		getLandingPage: (input) => client.devProject.agentGetLandingPage.query(input),
 		unpublishLandingPage: (input) => client.devProject.agentUnpublishLandingPage.mutate(input),
+		uploadProjectMedia: (input) => client.devProject.agentUploadProjectMedia.mutate(input),
 	}
 }
