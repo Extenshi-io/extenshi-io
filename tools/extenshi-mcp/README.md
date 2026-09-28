@@ -65,6 +65,9 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `verify_hosted_artifact` | Re-fetch and compare a hosted page against its record (verified/changed/unreachable) | Requires hosted.write for OAuth |
 | `remove_hosted_page` | Forget a registered homepage/support URL (public page keeps working) | Requires hosted.write for OAuth |
 | `list_hosted_pages` | Registered hosted pages with verification status | Free; identity required |
+| `publish_landing_page` | Host the landing page at page.extenshi.io/{code} from the Page generator form (versioned; registered as the homepage by default) | Requires hosted.write for OAuth |
+| `get_landing_page` | Hosted landing page code, live version, URL and form | Free; identity required |
+| `unpublish_landing_page` | Take the hosted landing page offline (same URL on the next publish) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
 | `get_release_readiness` | Explain current, stale and missing release checks by browser and locale | Pro project; project read access |
 | `list_my_projects` | Your projects, repository bindings and claimed listings | Free; identity required |
@@ -78,6 +81,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `localize_workflow` | Local message translation contract, CLI validation and manual review gates | Free (no key) |
 | `generate_icon_workflow` | Icon design requirements + the local agent-draws-SVG → `npx @extenshi/cli@latest icon preview` → export workflow | Free (no key) |
 | `generate_welcome_page_workflow` | Design brief for the post-install welcome page: the one action it must drive, which illustrations to produce, where to place click markers, and the block JSON to return | Free (no key) |
+| `generate_landing_page` | Static landing-page (homepage) HTML with no JavaScript — same generator as the cabinet Page generator; returns `{html, bytes, warnings, nextSteps}`. Host it on any HTTPS origin and register the URL with `upsert_hosted_page` (feeds `HOMEPAGE_URL`) | Free (no key) |
 | `scan_extension` | Pre-publish security scan of a local artifact (.zip/.crx/.xpi), with live progress | 1 scan |
 | `publish_extension` | Publish to Chrome/Firefox/Edge with your own store credentials (fully local) | Free |
 

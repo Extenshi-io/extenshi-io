@@ -194,6 +194,8 @@ function classifyOne(err: unknown): string {
 	const status = statusOf(err)
 	const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
 
+	// InvalidInputError (expected-error.ts): the user's own file or flag.
+	if (err instanceof Error && err.name === 'InvalidInputError') return 'invalid_input'
 	if (status === 401 || status === 403) return 'auth'
 	if (status === 402) return 'quota'
 	if (status === 429) return 'rate_limit'

@@ -26,7 +26,7 @@
  *               list_my_projects, get_project_state, get_project_scaffold,
  *               list/get/publish/update privacy policy (hosted; Pro)
  *   'docs'    → get_development_guide, search_docs, list_extension_templates, generate_icon_workflow,
- *               generate_welcome_page_workflow, localize_workflow (free; no key)
+ *               generate_welcome_page_workflow, generate_landing_page, localize_workflow (free; no key)
  *   'scan'    → scan_extension             (local artifact; stdio only)
  *   'publish' → publish_extension          (local creds; stdio only)
  *
@@ -48,6 +48,8 @@ import {
 	searchDocs,
 } from './docs.js'
 import { renderIconWorkflow } from './icon-workflow.js'
+import { LANDING_LIMITS } from './landing-page.js'
+import { hostedLandingNextSteps, landingFormFromArgs, renderGenerateLandingPage } from './landing-workflow.js'
 import { renderLocalizeWorkflow } from './localize-workflow.js'
 import { PAY_OPERATIONS, paySchemas } from './pay.js'
 import {
@@ -616,6 +618,12 @@ const TOOL_ANNOTATIONS: Record<
 		idempotentHint: true,
 		openWorldHint: false,
 	},
+	generate_landing_page: {
+		title: 'Generate a static landing page',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
 	scan_extension: {
 		title: 'Scan an extension package',
 		readOnlyHint: false,
@@ -653,12 +661,125 @@ const TOOL_ANNOTATIONS: Record<
 		idempotentHint: true,
 		openWorldHint: true,
 	},
+	publish_landing_page: {
+		title: 'Publish a landing page on extenshi.io',
+		readOnlyHint: false,
+		idempotentHint: false,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	get_landing_page: {
+		title: 'Read the hosted landing page',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	unpublish_landing_page: {
+		title: 'Unpublish the hosted landing page',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: true,
+		openWorldHint: true,
+	},
 	remove_hosted_page: {
 		title: 'Remove a hosted page registration',
 		readOnlyHint: false,
 		destructiveHint: true,
 		openWorldHint: true,
 	},
+}
+
+/**
+ * LandingForm fields shared by generate_landing_page (offline HTML) and
+ * publish_landing_page (hosted on page.extenshi.io). Limits match the builder
+ * and the BFF, so a form valid for one is valid for the other.
+ */
+const LANDING_FORM_SHAPE = {
+	extensionName: z.string().min(1).max(LANDING_LIMITS.extensionName).describe('Extension display name.'),
+	tagline: z.string().max(LANDING_LIMITS.tagline).optional().describe('One-line promise under the name.'),
+	description: z
+		.string()
+		.max(LANDING_LIMITS.description)
+		.optional()
+		.describe('Short paragraph on what the extension does; also the meta description.'),
+	accentColor: z
+		.string()
+		.max(9)
+		.optional()
+		.describe('Hex accent colour for the primary button and monogram (default #5e5ce6).'),
+	theme: z.enum(['light', 'dark']).optional().describe('Page colour scheme (default dark).'),
+	chromeUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe('Chrome Web Store listing URL. Empty or omitted hides the Chrome button.'),
+	firefoxUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe('Firefox Add-ons listing URL. Empty or omitted hides the Firefox button.'),
+	edgeUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe('Edge Add-ons listing URL. Empty or omitted hides the Edge button.'),
+	privacyPolicyUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe('Privacy policy URL for the footer (for example the hosted privacy.extenshi.io page).'),
+	supportUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe(
+			'Support link for the footer: an http(s) URL, or a single mailto: address (optionally ' +
+				'?subject= with a percent-encoded value).',
+		),
+	homepageUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe(
+			'Public https URL the page will be served from: canonical link, og:url, JSON-LD url, and the ' +
+				'base for relative screenshot paths in og:image.',
+		),
+	features: z
+		.array(
+			z.object({
+				title: z.string().max(LANDING_LIMITS.featureTitle),
+				description: z.string().max(LANDING_LIMITS.featureDescription).optional(),
+			}),
+		)
+		.max(LANDING_LIMITS.features)
+		.optional()
+		.describe('Feature cards; entries with an empty title are skipped.'),
+	screenshots: z
+		.array(
+			z.object({
+				url: z.string().max(LANDING_LIMITS.url),
+				alt: z.string().max(LANDING_LIMITS.screenshotAlt).optional(),
+			}),
+		)
+		.max(LANDING_LIMITS.screenshots)
+		.optional()
+		.describe(
+			'Screenshots as https URLs (for example store screenshots from get_extension) or paths ' +
+				'relative to index.html, each with alt text.',
+		),
+	logoSvg: z
+		.string()
+		.max(LANDING_LIMITS.logoSvgBytes)
+		.optional()
+		.describe(
+			'Inline SVG logo source. Refused (monogram shown, reason in warnings) if it contains ' +
+				'scripts, event handlers, foreignObject, animation, entity references or non-fragment hrefs.',
+		),
+	logoUrl: z
+		.string()
+		.max(LANDING_LIMITS.logoUrl)
+		.optional()
+		.describe('Logo image as an https URL, a relative path, or a data:image/(png|jpeg|gif|webp);base64 URL.'),
 }
 
 /**
@@ -891,6 +1012,71 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			execute: async (args, context) => {
 				try {
 					return JSON.stringify(await bff(context).removeHostedPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'publish_landing_page',
+			description:
+				"Publish the project's landing page (homepage) on Extenshi hosting — the same page " +
+				'generate_landing_page returns, rendered server-side from the form (no caller HTML is stored) and ' +
+				'served at page.extenshi.io/{code}, or https://{custom-domain}/landing when the project has an ' +
+				'active custom domain. The code is permanent: republishing creates a new version at the same URL. ' +
+				'By default the URL is also registered as the project homepage, which feeds HOMEPAGE_URL. Hosted ' +
+				'images are limited to store screenshot URLs (from get_extension) and images uploaded in the Dojo ' +
+				'Page generator; the logo may be an inline SVG or a raster data: URL. Returns JSON {url, publicCode, ' +
+				'versionNumber, contentHash, bytes, warnings, homepage, nextSteps}. Requires hosted.write. ' +
+				`API reference: ${HOSTED_PAGES_DOCS}`,
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				registerAsHomepage: z
+					.boolean()
+					.optional()
+					.describe(
+						'Register the URL as the project homepage (default true). False keeps an existing homepage.',
+					),
+				...LANDING_FORM_SHAPE,
+			}),
+			execute: async (args, context) => {
+				const { projectId, registerAsHomepage, ...fields } = args
+				try {
+					const result = (await bff(context).publishLandingPage({
+						projectId,
+						registerAsHomepage,
+						form: landingFormFromArgs(fields) as unknown as Record<string, unknown>,
+					})) as Record<string, unknown>
+					return JSON.stringify({ ...result, nextSteps: hostedLandingNextSteps(result) })
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'get_landing_page',
+			description:
+				"The project's hosted landing page: public code, live version, publish state, URL (null when " +
+				'unpublished) and the form the live version was rendered from.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).getLandingPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'unpublish_landing_page',
+			description:
+				'Take the hosted landing page offline (it answers 404). The public code and version history are ' +
+				'kept, so publishing again restores the same URL. A homepage registration that points at this ' +
+				`page is removed with it. Requires hosted.write. API reference: ${HOSTED_PAGES_DOCS}`,
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).unpublishLandingPage(args))
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1652,6 +1838,23 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		})
 
 		add({
+			name: 'generate_landing_page',
+			description:
+				'Generate a static landing page (homepage) for a browser extension as one self-contained HTML ' +
+				'file: no JavaScript, escaped text, http(s)-only links (the support link may also be a mailto: ' +
+				'address), and store buttons only for the store ' +
+				'URLs given. Same generator as the cabinet Page generator, so a saved `page-generator` form ' +
+				'from get_project_state maps field for field. Optional logo (inline SVG, validated and embedded ' +
+				'as an image, or an image URL), screenshots and the canonical homepage URL for Open Graph and ' +
+				'JSON-LD. Returns JSON {html, bytes, warnings, nextSteps}: warnings list input that was dropped ' +
+				'or clamped; nextSteps cover hosting the file on HTTPS and registering the URL with ' +
+				'upsert_hosted_page, which feeds HOMEPAGE_URL. Extenshi does not host the page. Static content: ' +
+				'no API key, no network, no credits.',
+			parameters: z.object(LANDING_FORM_SHAPE),
+			execute: async (args) => JSON.stringify(renderGenerateLandingPage(args)),
+		})
+
+		add({
 			name: 'list_extension_templates',
 			description:
 				'The kinds of browser extension you can build, with the permissions each one REQUIRES: ' +
@@ -1719,7 +1922,12 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 							}
 						},
 					})
-					return renderCatalogPayload(shapeExtension(report))
+					// The scan report goes out as-is (defanged + labelled as data: finding
+					// text quotes the artifact's own code). It used to be passed through
+					// shapeExtension — the catalog-DETAIL shaper — whose field list has
+					// none of the report's keys, so every scan came back as
+					// {"snapshots": []} after the credit was spent.
+					return renderCatalogPayload(report)
 				} catch (err) {
 					// Keep the ScanError as `cause`: scanErrorMessage() renders 402/429
 					// and a 500 alike, so only the origin's status still says which of

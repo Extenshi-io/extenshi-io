@@ -124,6 +124,14 @@ export interface Bff extends PayBff {
 	/** Forget a registration (a project moving off a URL needs a real delete). */
 	removeHostedPage(input: { projectId: string; kind: string }): Promise<unknown>
 	listHostedPages(input: { projectId: string }): Promise<unknown>
+	/** Publish (create or update) the project's landing page on page.extenshi.io. */
+	publishLandingPage(input: {
+		projectId: string
+		form: Record<string, unknown>
+		registerAsHomepage?: boolean
+	}): Promise<unknown>
+	getLandingPage(input: { projectId: string }): Promise<unknown>
+	unpublishLandingPage(input: { projectId: string }): Promise<unknown>
 }
 
 /** Build a BFF client from a static `ek_…` key (stdio path). */
@@ -192,5 +200,8 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		verifyHostedArtifact: (input) => client.devProject.agentVerifyHostedArtifact.mutate(input),
 		removeHostedPage: (input) => client.devProject.agentRemoveHostedPage.mutate(input),
 		listHostedPages: (input) => client.devProject.agentListHostedPages.query(input),
+		publishLandingPage: (input) => client.devProject.agentPublishLandingPage.mutate(input as never),
+		getLandingPage: (input) => client.devProject.agentGetLandingPage.query(input),
+		unpublishLandingPage: (input) => client.devProject.agentUnpublishLandingPage.mutate(input),
 	}
 }

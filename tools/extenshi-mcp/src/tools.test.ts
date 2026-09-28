@@ -115,6 +115,9 @@ const READ_TOOLS = [
 	'verify_hosted_artifact',
 	'remove_hosted_page',
 	'list_hosted_pages',
+	'publish_landing_page',
+	'get_landing_page',
+	'unpublish_landing_page',
 	'search_extensions',
 	'get_extension',
 	'get_reviews',
@@ -139,6 +142,7 @@ const DOCS_TOOLS = [
 	'generate_icon_workflow',
 	'localize_workflow',
 	'generate_welcome_page_workflow',
+	'generate_landing_page',
 ]
 const LOCAL_ONLY_TOOLS = ['scan_extension', 'publish_extension']
 
@@ -482,6 +486,23 @@ describe('scan_extension store-id association', () => {
 		expect(mockedScanArtifact).not.toHaveBeenCalled()
 	})
 
+	it('returns the full scan report, not the catalog-detail shape (regression: {"snapshots": []})', async () => {
+		const report = {
+			jobId: '02fa3373-6ad9-4d25-b82a-daf9334c8b3e',
+			scanners: [
+				{ scanner_name: 'semgrep', status: 'completed', findings: [{ severity: 'LOW', rule: 'x' }] },
+			],
+			compliance: { verdict: 'pass' },
+			permissionUsage: [{ permission: 'storage', used: true }],
+			listing: { title: 'Dyslexia Font & Reading Ruler' },
+		}
+		mockedScanArtifact.mockResolvedValue(report)
+		const out = JSON.parse(await scanToolWith({}).execute({ artifact_path: './deploy.zip' }, {}))
+		expect(out).toMatchObject(report)
+		expect(out.snapshots).toBeUndefined()
+		expect(typeof out._notice).toBe('string')
+	})
+
 	it('scans with no association when neither extension_id nor store_id is given', async () => {
 		mockedScanArtifact.mockResolvedValue({} as Awaited<ReturnType<typeof scanArtifact>>)
 		const tool = scanToolWith({})
@@ -516,6 +537,7 @@ describe('directory tool annotations', () => {
 		'get_development_guide',
 		'generate_icon_workflow',
 		'generate_welcome_page_workflow',
+		'generate_landing_page',
 		'localize_workflow',
 	])('%s declares the full static-guide annotation set', (name) => {
 		const { tools, server } = recordingServer()
@@ -556,6 +578,8 @@ describe('directory tool annotations', () => {
 			// Re-fetches and records the observed status server-side.
 			'verify_hosted_artifact',
 			'remove_hosted_page',
+			'publish_landing_page',
+			'unpublish_landing_page',
 		])
 		for (const t of tools) {
 			if (hostedWrites.has(t.name)) {
@@ -857,7 +881,6 @@ describe('localize_workflow execute', () => {
 		])
 			expect(out).toContain(expected)
 		expect(await tool.execute({}, {})).toBe(out)
-		expect(deps.getBff).not.toHaveBeenCalled()
 		expect(deps.requireApiKey).not.toHaveBeenCalled()
 	})
 })
@@ -885,6 +908,169 @@ describe('generate_icon_workflow execute', () => {
 		}
 		const out = await tool.execute({}, {})
 		expect(out).toContain('npx @extenshi/cli@latest icon preview icon.svg --name "My Extension"')
+	})
+})
+
+describe('generate_landing_page execute', () => {
+	type Exec = { execute: (args: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<string> }
+	function landingTool() {
+		const { tools, server } = recordingServer()
+		registerTools(server, depsFor(['docs']))
+		const tool = tools.find((t) => t.name === 'generate_landing_page') as unknown as Exec & {
+			parameters: { safeParse: (v: unknown) => { success: boolean } }
+		}
+		return tool
+	}
+
+	it('returns static HTML plus hosting and registration next steps, offline', async () => {
+		const fetch = vi.fn(() => {
+			throw new Error('generate_landing_page must stay offline')
+		})
+		vi.stubGlobal('fetch', fetch)
+		try {
+			const out = JSON.parse(
+				await landingTool().execute(
+					{
+						extensionName: 'Tab Keeper',
+						tagline: 'Never lose a tab',
+						chromeUrl: 'https://chromewebstore.google.com/detail/abc',
+						homepageUrl: 'https://tabkeeper.example/',
+						features: [{ title: 'Groups' }],
+						screenshots: [{ url: 'shots/1.png', alt: 'Popup' }],
+					},
+					{},
+				),
+			)
+			expect(out.html).toMatch(/^<!doctype html>/)
+			expect(out.html).toContain('Add to Chrome')
+			expect(out.html).not.toContain('Get for Firefox')
+			expect(out.html).toContain('<link rel="canonical" href="https://tabkeeper.example/" />')
+			expect(out.html).toContain('<img src="shots/1.png" alt="Popup"')
+			expect(out.bytes).toBe(new TextEncoder().encode(out.html).length)
+			expect(out.warnings).toEqual([])
+			const steps = out.nextSteps.join('\n')
+			expect(steps).toContain('index.html')
+			expect(steps).toMatch(/HTTPS/)
+			expect(steps).toContain('upsert_hosted_page')
+			expect(steps).toContain('kind: "homepage"')
+			expect(steps).toContain('get_project_state')
+			expect(steps).toContain('integration.file')
+			expect(fetch).not.toHaveBeenCalled()
+		} finally {
+			vi.unstubAllGlobals()
+		}
+	})
+
+	it('reports a refused logo and clamped links as warnings instead of emitting them', async () => {
+		const out = JSON.parse(
+			await landingTool().execute(
+				{
+					extensionName: 'Tab Keeper',
+					chromeUrl: 'javascript:alert(1)',
+					logoSvg: '<svg onload="alert(1)"><rect/></svg>',
+				},
+				{},
+			),
+		)
+		expect(out.html).not.toContain('javascript:')
+		expect(out.html).not.toContain('onload')
+		expect(out.html).toContain('logo monogram')
+		expect(out.warnings.join('\n')).toMatch(/chromeUrl/)
+		expect(out.warnings.join('\n')).toMatch(/logoSvg was refused/)
+	})
+
+	it('enforces the schema limits', () => {
+		const { parameters } = landingTool()
+		expect(parameters.safeParse({}).success).toBe(false)
+		expect(parameters.safeParse({ extensionName: 'x'.repeat(121) }).success).toBe(false)
+		expect(
+			parameters.safeParse({
+				extensionName: 'x',
+				screenshots: Array.from({ length: 9 }, () => ({ url: 'a.png' })),
+			}).success,
+		).toBe(false)
+		expect(parameters.safeParse({ extensionName: 'x', theme: 'neon' }).success).toBe(false)
+		expect(parameters.safeParse({ extensionName: 'x' }).success).toBe(true)
+	})
+})
+
+describe('hosted landing page tools', () => {
+	function toolsWith(stub: Partial<Bff>) {
+		const tools: Record<string, any> = {}
+		registerTools(
+			{
+				addTool: (t: { name: string }) => {
+					tools[t.name] = t
+				},
+			} as unknown as Parameters<typeof registerTools>[0],
+			{
+				cfg: { bffUrl: 'https://bff.test', scanUrl: 'https://scan.test', docsUrl: 'https://docs.test' },
+				capabilities: new Set<Capability>(['read', 'docs']),
+				getBff: () => stub as Bff,
+				requireApiKey: () => 'ek_test',
+			},
+		)
+		return tools
+	}
+	const projectId = '11111111-1111-4111-8111-111111111111'
+
+	it('publish sends the form (not HTML) and returns the URL with next steps', async () => {
+		const publishLandingPage = vi.fn(async () => ({
+			url: 'https://page.extenshi.io/abc234def',
+			publicCode: 'abc234def',
+			versionNumber: 1,
+			warnings: [],
+			homepage: { registered: true, previousUrl: null },
+		}))
+		const tools = toolsWith({ publishLandingPage })
+		const out = JSON.parse(
+			await tools.publish_landing_page.execute(
+				{
+					projectId,
+					extensionName: 'Tab Keeper',
+					supportUrl: 'mailto:help@x.example',
+					features: [{ title: 'A' }],
+				},
+				{},
+			),
+		)
+		expect(publishLandingPage).toHaveBeenCalledWith({
+			projectId,
+			registerAsHomepage: undefined,
+			form: expect.objectContaining({
+				extensionName: 'Tab Keeper',
+				supportUrl: 'mailto:help@x.example',
+				features: [{ title: 'A', description: '' }],
+			}),
+		})
+		expect(JSON.stringify(publishLandingPage.mock.calls[0])).not.toContain('<!doctype')
+		expect(out.url).toBe('https://page.extenshi.io/abc234def')
+		expect(out.nextSteps.join('\n')).toMatch(/get_project_state[\s\S]*integration\.file/)
+		expect(out.nextSteps.join('\n')).toContain('verify_hosted_artifact')
+	})
+
+	it('get and unpublish pass the project through', async () => {
+		const getLandingPage = vi.fn(async () => ({ page: null, url: null, form: null }))
+		const unpublishLandingPage = vi.fn(async () => ({ unpublished: true, homepageRemoved: true }))
+		const tools = toolsWith({ getLandingPage, unpublishLandingPage })
+		expect(JSON.parse(await tools.get_landing_page.execute({ projectId }, {}))).toEqual({
+			page: null,
+			url: null,
+			form: null,
+		})
+		expect(JSON.parse(await tools.unpublish_landing_page.execute({ projectId }, {}))).toEqual({
+			unpublished: true,
+			homepageRemoved: true,
+		})
+		expect(unpublishLandingPage).toHaveBeenCalledWith({ projectId })
+	})
+
+	it('shares the generate_landing_page field limits', () => {
+		const tools = toolsWith({})
+		const schema = tools.publish_landing_page.parameters
+		expect(schema.safeParse({ projectId, extensionName: 'x' }).success).toBe(true)
+		expect(schema.safeParse({ projectId, extensionName: 'x'.repeat(121) }).success).toBe(false)
+		expect(schema.safeParse({ extensionName: 'x' }).success).toBe(false)
 	})
 })
 

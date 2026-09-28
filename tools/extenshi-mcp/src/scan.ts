@@ -58,6 +58,34 @@ export class ScanError extends Error {
 
 export type ScanReport = Record<string, unknown>
 
+/**
+ * Why a parsed scan response is not a usable report, or null when it is. The
+ * backend has already committed the credit by the time a result arrives, so an
+ * unusable body must surface as an error naming the job — never as an empty
+ * success the caller cannot tell apart from a clean scan.
+ */
+export function scanReportProblem(report: unknown): string | null {
+	if (!report || typeof report !== 'object' || Array.isArray(report))
+		return 'the scan returned no report object'
+	const r = report as Record<string, unknown>
+	if (!Array.isArray(r.scanners)) {
+		const job = typeof r.jobId === 'string' ? ` (job ${r.jobId})` : ''
+		return `the scan result${job} has no scanner results`
+	}
+	return null
+}
+
+function assertScanReport(report: unknown): ScanReport {
+	const problem = scanReportProblem(report)
+	if (problem) {
+		throw new ScanError(
+			`Scan finished but ${problem}. If a scan credit was charged, keep the job id and re-run with ` +
+				'`npx @extenshi/cli@latest scan <artifact> --format json`, which reads the same backend.',
+		)
+	}
+	return report as ScanReport
+}
+
 export async function scanArtifact(opts: ScanArtifactOptions): Promise<ScanReport> {
 	const { artifactPath, apiKey, scanUrl, extensionId, onProgress } = opts
 
@@ -109,11 +137,11 @@ export async function scanArtifact(opts: ScanArtifactOptions): Promise<ScanRepor
 
 	const contentType = response.headers.get('content-type') ?? ''
 	if (contentType.includes('text/event-stream')) {
-		return await consumeSseStream(response, onProgress)
+		return assertScanReport(await consumeSseStream(response, onProgress))
 	}
 
 	// Legacy single-JSON mode (server ignored the Accept header).
-	return await parseJsonBody(response)
+	return assertScanReport(await parseJsonBody(response))
 }
 
 async function consumeSseStream(

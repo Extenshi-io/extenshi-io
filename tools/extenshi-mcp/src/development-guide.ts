@@ -139,9 +139,15 @@ export const DEVELOPMENT_SERVICES = [
 	{
 		id: 'listing-and-marketing',
 		purpose: 'Listing copy, screenshots, landing page, support links and AI discovery assets.',
-		tools: [],
+		tools: [
+			'generate_landing_page',
+			'publish_landing_page',
+			'get_landing_page',
+			'unpublish_landing_page',
+			'upsert_hosted_page',
+		],
 		access:
-			'Covered by CLI generate-listing / review-risk and cabinet tools where enabled. MCP has no listing, landing-page or SEO execution tool.',
+			'The landing-page generator is free and offline: it returns static HTML (CLI: extenshi page generate). The same page can be hosted by Extenshi at page.extenshi.io/{code} with publish_landing_page (identity and hosted.write; CLI: extenshi page publish), which also registers it as the project homepage; images there are store screenshots or Dojo uploads. A page hosted elsewhere on HTTPS is registered with upsert_hosted_page (CLI: extenshi page register). The registered homepage feeds HOMEPAGE_URL. Listing copy and store-risk review are covered by CLI generate-listing / review-risk and cabinet tools where enabled. MCP has no listing or SEO execution tool.',
 		urls: [
 			docs('cli'),
 			docs('ai-visibility'),
@@ -269,10 +275,13 @@ const WORKFLOW = [
 	{
 		id: 'assets-and-hosted-pages',
 		actions:
-			"Stage 6 — Assets and hosted pages: icon, welcome page, screenshots, pin/install instructions, privacy policy, uninstall feedback, support and landing URLs. An existing Pro policy is updated as a reviewed proposal (proposedMarkdown) and published within the author's authorization. Returned URLs are verified against project state.",
+			"Stage 6 — Assets and hosted pages: icon, welcome page, screenshots, pin/install instructions, privacy policy, uninstall feedback, support and landing URLs. A landing page is generated as static HTML and either hosted by Extenshi (page.extenshi.io) or on any HTTPS origin; it is registered as the project homepage, which sets HOMEPAGE_URL. An existing Pro policy is updated as a reviewed proposal (proposedMarkdown) and published within the author's authorization. Returned URLs are verified against project state.",
 		relatedTools: [
 			'generate_icon_workflow',
 			'generate_welcome_page_workflow',
+			'generate_landing_page',
+			'publish_landing_page',
+			'upsert_hosted_page',
 			'list_privacy_policy_versions',
 			'get_privacy_policy_version',
 			'update_privacy_policy_with_ai',
