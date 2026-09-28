@@ -172,8 +172,18 @@ export const DEVELOPMENT_SERVICES = [
 			'Store credential validation, submission of the exact tested package to Chrome Web Store, Firefox Add-ons and/or Edge Add-ons, and verification of review status and the public listing.',
 		tools: ['publish_extension'],
 		access:
-			'Local stdio or CLI with local store credentials; publishing access is checked. Store registration, disclosures and review are separate steps. Upload success alone does not establish a live release.',
-		urls: [docs('cli'), docs('publish-to-chrome-web-store'), toolPage('publish')],
+			'Local stdio or CLI with local store credentials; publishing access is checked. Store registration, disclosures and review are separate steps. Upload success alone does not establish a live release. ' +
+			'CLI: extenshi publish --stores chrome,edge,firefox (comma-separated; a subset also works, e.g. --stores firefox,edge) submits to every named store from the tested artifact. ' +
+			'Firefox/AMO adds requirements the other stores do not have: browser_specific_settings.gecko.id is required to sign a Manifest V3 add-on and should be treated as permanent once first published; ' +
+			'new add-ons submitted since 2025-11-03 must declare browser_specific_settings.gecko.data_collection_permissions; minified/bundled/transpiled code needs a source-code submission with reproducible build instructions (extenshi amo-source generates the archive and BUILD.md); and `web-ext lint` should report 0 errors before submission. ' +
+			"Microsoft Edge Add-ons: a NEW extension's first submission must be created by hand in Partner Center — the REST API (publisher/src/services/edge.ts) only uploads a package and publishes an EXISTING submission, it cannot create one.",
+		urls: [
+			docs('cli'),
+			docs('publish-to-chrome-web-store'),
+			docs('publish-to-edge-add-ons'),
+			docs('publish-to-firefox-add-ons'),
+			toolPage('publish'),
+		],
 	},
 	{
 		id: 'maintenance',
@@ -295,7 +305,7 @@ const WORKFLOW = [
 	{
 		id: 'quality-and-listing',
 		actions:
-			'Stage 7 — Quality and listing: each browser package is built; unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing; exact commands in the CLI docs). The final package is scanned, and CI follows the cli-github-actions docs.',
+			'Stage 7 — Quality and listing: each browser package is built; unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing --store chrome|edge|firefox, which draft CHROMEWEBSTORE.md / EDGE.md / AMO.md — the same listing draft review-risk --listing reads back regardless of which one; exact commands in the CLI docs). A Firefox build with minified/bundled code additionally needs extenshi amo-source (source archive + BUILD.md) and a clean `web-ext lint`. The final package is scanned, and CI follows the cli-github-actions docs.',
 		relatedTools: ['search_docs', 'scan_extension'],
 		doneWhen:
 			'The exact versioned artifact has passing checks, retained scan/review reports and truthful store materials; unresolved findings have a disposition.',
