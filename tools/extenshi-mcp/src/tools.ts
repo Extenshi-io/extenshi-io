@@ -52,6 +52,7 @@ import { LANDING_LIMITS } from './landing-page.js'
 import { hostedLandingNextSteps, landingFormFromArgs, renderGenerateLandingPage } from './landing-workflow.js'
 import { renderLocalizeWorkflow } from './localize-workflow.js'
 import { PAY_OPERATIONS, paySchemas } from './pay.js'
+import { describePrivacyAiUpdate } from './privacy-ai-outcome.js'
 import {
 	PublishSetupError,
 	publishArtifact,
@@ -1659,14 +1660,21 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			description:
 				"Propose an updated privacy policy that keeps the author's custom wording and adds sections " +
 				'required by new permissions or data practices. Returns proposedMarkdown only; nothing goes ' +
-				'live. Publishing it is a separate step (publish_privacy_policy, kind ai_updated). Requires a ' +
-				'policy that is already published. Pro only.',
+				'live. aiStep states whether the AI step ran (ran | did_not_run | discarded | not_needed) and ' +
+				'notice says why; unless aiStep is ran, proposedMarkdown is a deterministic section merge, not an ' +
+				'AI draft. conflictHeadings and missingCategories list what still needs a manual edit. Publishing ' +
+				'is a separate step (publish_privacy_policy with the returned kind). Requires a policy that is ' +
+				'already published. Pro only.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 			}),
 			execute: async (args, context) => {
 				try {
-					return JSON.stringify(await bff(context).updatePrivacyPolicyWithAi(args), null, 2)
+					return JSON.stringify(
+						describePrivacyAiUpdate(await bff(context).updatePrivacyPolicyWithAi(args)),
+						null,
+						2,
+					)
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}

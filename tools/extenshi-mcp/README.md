@@ -75,7 +75,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_project_scaffold` | Starter files for one project and target browser | Free; identity required |
 | `list_privacy_policy_versions` | Hosted policy version history | Pro project; no read credit |
 | `get_privacy_policy_version` | One hosted policy's markdown and HTML | Pro project; no read credit |
-| `update_privacy_policy_with_ai` | Propose a policy update for the author to review | Pro project; daily update limit applies |
+| `update_privacy_policy_with_ai` | Propose a policy update for the author to review; `aiStep` states whether the AI step ran, otherwise the proposal is a section merge | Pro project; daily update limit applies |
 | `publish_privacy_policy` | Publish a policy at the project's hosted URL | Pro project; changes the live page |
 | `search_docs` | Search the Extenshi docs + `@extenshi/cli` reference so the assistant can quote exact commands; returns top `limit` passages capped at `max_chars` each | Free (no key) |
 | `localize_workflow` | Local message translation contract, CLI validation and manual review gates | Free (no key) |

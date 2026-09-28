@@ -333,6 +333,33 @@ describe('get_credit_balance execute', () => {
 	})
 })
 
+describe('update_privacy_policy_with_ai execute', () => {
+	it('leads with the AI outcome so a merge is never presented as an AI draft', async () => {
+		const tools = readToolsWith({
+			updatePrivacyPolicyWithAi: () =>
+				Promise.resolve({
+					proposedMarkdown: '## Contact\n',
+					usedLlm: false,
+					aiDegraded: true,
+					ai: {
+						status: 'not_configured',
+						attempted: false,
+						applied: false,
+						model: null,
+						reason: 'The AI step did not run: no model key is configured on the Extenshi server.',
+					},
+					keptHeadings: ['Contact'],
+					kind: 'edited',
+				}),
+		})
+		const out = JSON.parse(await tools.update_privacy_policy_with_ai.execute({ projectId: 'p' }, {}))
+		expect(Object.keys(out).slice(0, 2)).toEqual(['aiStep', 'notice'])
+		expect(out.aiStep).toBe('did_not_run')
+		expect(out.notice).toContain('not AI-written')
+		expect(out.kind).toBe('edited')
+	})
+})
+
 describe('extension reference resolution (extension_id | store_id)', () => {
 	it('get_extension resolves a store_id to a catalog id via the FREE resolver', async () => {
 		const resolveCalls: Array<Record<string, unknown>> = []

@@ -169,7 +169,7 @@ export const DEVELOPMENT_SERVICES = [
 	{
 		id: 'publishing',
 		purpose:
-			'Store credential validation, submission of the exact tested package, and verification of review status and the public listing.',
+			'Store credential validation, submission of the exact tested package to Chrome Web Store, Firefox Add-ons and/or Edge Add-ons, and verification of review status and the public listing.',
 		tools: ['publish_extension'],
 		access:
 			'Local stdio or CLI with local store credentials; publishing access is checked. Store registration, disclosures and review are separate steps. Upload success alone does not establish a live release.',

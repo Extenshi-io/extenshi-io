@@ -1,6 +1,6 @@
 {
   "name": "@extenshi/mcp",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Extenshi MCP server — bring the extension catalog (search, security, market research) and pre-publish scanning into your AI tools",
   "type": "module",
   "license": "MIT",
