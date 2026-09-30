@@ -32,16 +32,27 @@ opens a sign-in page for your Extenshi account.
 
 ## What it sends and where
 
-- Catalog questions go to `mcp.extenshi.io` through your signed-in connection. The
-  server returns catalog data only; it does not read your browser, your installed
-  extensions or your files.
-- The installed-extensions audit sends only the store ids you provide.
-- The icon skill runs entirely on your machine. Its one external command,
-  `npx @extenshi/cli icon preview`, works offline, needs no account and sends
-  nothing.
-- The store-readiness skill runs `npx @extenshi/cli review-risk` on your machine.
-  The build is read locally and is not uploaded; only when you pass an extension
-  id to compare against your live listing is that id sent.
+- **The connector (`mcp.extenshi.io`)** receives only the arguments of the tool
+  calls Claude makes (a search phrase, an extension or store id) and, after you
+  sign in, your Extenshi account id and email. It does not receive your wider
+  conversation, memory or files, and it does not read your browser or your
+  installed extensions. Retention and processors are in the
+  [privacy policy](https://mcp.extenshi.io/privacy).
+- **Skills that run `npx @extenshi/cli@latest`** (icon design, store readiness,
+  the optional CLI route of the audit) work on files on your machine:
+  - `icon preview` runs offline and sends nothing.
+  - `review-risk` and `generate-listing` read your package and listing text
+    locally; the build is not uploaded. With `review-risk --extension-id` only
+    that id is sent to the Extenshi catalog API (`bff.extenshi.io`).
+  - `risk` sends the store ids you list to the same catalog API.
+  - `scan`, an optional step in the store-readiness skill, **uploads the built
+    package** to the Extenshi scan service and needs an Extenshi account. Skip it
+    if you do not want the package to leave your machine.
+  - `npx` downloads the CLI from the npm registry. The CLI can also send anonymous
+    usage reports (command and flag names, versions, coarse OS; never paths or
+    contents). It asks on the first interactive run; set `DO_NOT_TRACK=1` or
+    `EXTENSHI_TELEMETRY=0` to turn it off.
+- **The installed-extensions audit** sends only the store ids you provide.
 
 ## Links
 
