@@ -1,0 +1,14 @@
+{
+  "name": "extenshi",
+  "displayName": "Extenshi",
+  "version": "0.1.0",
+  "description": "Research browser extensions across Chrome, Firefox and Edge with the Extenshi catalog, and get help building and shipping your own: icons, manifests, store-readiness checks.",
+  "author": {
+    "name": "extenshi.io",
+    "url": "https://extenshi.io"
+  },
+  "homepage": "https://docs.extenshi.io/developers/agent-skills",
+  "repository": "https://github.com/Extenshi-io/extenshi-io",
+  "license": "MIT",
+  "keywords": ["browser-extension", "chrome-extension", "firefox-addon", "manifest-v3", "security", "catalog"]
+}

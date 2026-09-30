@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"extenshi": {
+			"type": "http",
+			"url": "https://mcp.extenshi.io/mcp"
+		}
+	}
+}
