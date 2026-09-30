@@ -42,22 +42,31 @@ opens a sign-in page for your Extenshi account.
   the optional CLI route of the audit) work on files on your machine:
   - `icon preview` runs offline and sends nothing.
   - `review-risk` and `generate-listing` read your package and listing text
-    locally; the build is not uploaded. With `review-risk --extension-id` only
-    that id is sent to the Extenshi catalog API (`bff.extenshi.io`).
+    locally; the build is not uploaded. With `review-risk --extension-id` the id
+    is sent to the Extenshi catalog API (`bff.extenshi.io`) and, if you are
+    signed in, so are the verdict, the rule-set version and a SHA-256 hash of the
+    package file. The package, its contents and the findings are not sent.
   - `risk` sends the store ids you list to the same catalog API.
   - `scan`, an optional step in the store-readiness skill, **uploads the built
     package** to the Extenshi scan service and needs an Extenshi account. Skip it
     if you do not want the package to leave your machine.
   - `npx` downloads the CLI from the npm registry. The CLI can also send anonymous
-    usage reports (command and flag names, versions, coarse OS; never paths or
-    contents). It asks on the first interactive run; set `DO_NOT_TRACK=1` or
+    usage reports (command and flag names, versions, coarse OS and error kind;
+    never file contents or flag values). It asks on the first interactive run; set `DO_NOT_TRACK=1` or
     `EXTENSHI_TELEMETRY=0` to turn it off.
 - **The installed-extensions audit** sends only the store ids you provide.
+- **Commands run only with your go-ahead.** The skills tell Claude to explain each
+  command and ask before running it.
+
+Applicable privacy policies: the
+[connector policy](https://mcp.extenshi.io/privacy) and the
+[Extenshi privacy policy](https://extenshi.io/privacy) (CLI data in section 3.14,
+CLI and MCP telemetry in section 3.16).
 
 ## Links
 
 - Documentation: <https://docs.extenshi.io>
 - Catalog: <https://catalog.extenshi.io>
 - Issues: <https://github.com/Extenshi-io/extenshi-io/issues>
-- Privacy policy: <https://mcp.extenshi.io/privacy>
+- Privacy policies: <https://mcp.extenshi.io/privacy> and <https://extenshi.io/privacy>
 - License: MIT, see `LICENSE`

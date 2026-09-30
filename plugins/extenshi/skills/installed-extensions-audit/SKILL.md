@@ -36,7 +36,8 @@ Call `get_risk_by_store_ids` with `extensions: [{ store_id, store }, ...]`, at
 most 40 per call. `store` (`CHROME`, `FIREFOX` or `EDGE`) is required for every
 entry because Chrome and Edge ids share one format. For more than 40, make
 several calls. Alternatively the user can run this from a terminal, which reads
-`store:id` lines from a file:
+`store:id` lines from a file. Prefer the connector; offer this route only if the
+user wants it, and explain what it sends (the ids) before running it:
 
 ```bash
 npx @extenshi/cli@latest risk --file ids.txt

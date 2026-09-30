@@ -16,6 +16,13 @@ Run a pre-submission pass on an extension the user is building. It combines the
 Extenshi connector (reference data on permissions, catalog peers, docs) with the
 `@extenshi/cli` checks that run locally, so the build never leaves the machine.
 
+## Running commands
+
+Before running any `npx @extenshi/cli@latest` command, tell the user what it does
+and what leaves their machine, show the exact command, and wait for their go-ahead.
+Run only the commands the task needs. If the user prefers to run them, print the
+commands and work from the output they paste back.
+
 ## Inputs
 
 An unpacked extension folder or a built `.zip`, plus the store listing text if it
@@ -79,8 +86,9 @@ per browser) or ask the user to.
    - Every claim in the listing must match what the extension does.
 8. **Hand off related work.** The `extension-icon-design` skill covers store
    icons. `npx @extenshi/cli@latest scan ./dist/my-extension.zip` adds a security
-   scan of the package; it uses an Extenshi account and one scan from the
-   allowance. `search_docs` answers exact CLI flags and publishing steps.
+   scan of the package. It **uploads the package** to the Extenshi scan service,
+   needs an Extenshi account and uses one scan from the allowance, so only offer
+   it and run it when the user agrees. `search_docs` answers exact CLI flags and publishing steps.
 
 ## How to report
 
