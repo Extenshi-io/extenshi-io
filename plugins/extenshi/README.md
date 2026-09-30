@@ -48,4 +48,5 @@ opens a sign-in page for your Extenshi account.
 - Documentation: <https://docs.extenshi.io>
 - Catalog: <https://catalog.extenshi.io>
 - Issues: <https://github.com/Extenshi-io/extenshi-io/issues>
+- Privacy policy: <https://mcp.extenshi.io/privacy>
 - License: MIT, see `LICENSE`

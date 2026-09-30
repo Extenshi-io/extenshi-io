@@ -10,5 +10,13 @@
   "homepage": "https://docs.extenshi.io/developers/agent-skills",
   "repository": "https://github.com/Extenshi-io/extenshi-io",
   "license": "MIT",
-  "keywords": ["browser-extension", "chrome-extension", "firefox-addon", "manifest-v3", "security", "catalog"]
+  "keywords": [
+    "browser-extension",
+    "chrome-extension",
+    "firefox-addon",
+    "manifest-v3",
+    "security",
+    "catalog"
+  ],
+  "privacyPolicyUrl": "https://mcp.extenshi.io/privacy"
 }
