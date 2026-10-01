@@ -13,13 +13,18 @@
  */
 
 import {
-	buildLandingPage,
 	DEFAULT_LANDING_FORM,
 	type LandingForm,
 	type LandingScreenshot,
 	landingFormToInput,
 	landingPageWarnings,
 } from './landing-page.js'
+import {
+	type LandingProblem,
+	type LandingV2Fields,
+	landingFormProblems,
+	renderLandingLocales,
+} from './landing-sections.js'
 
 export interface LandingPageArgs {
 	extensionName: string
@@ -37,14 +42,39 @@ export interface LandingPageArgs {
 	screenshots?: { url: string; alt?: string }[]
 	logoSvg?: string
 	logoUrl?: string
+	// Schema v2 (sections, theme tokens, SEO, locales) — landing-sections.ts.
+	schemaVersion?: 2
+	sections?: Record<string, unknown>[]
+	tokens?: Record<string, unknown>
+	seo?: Record<string, unknown>
+	defaultLocale?: string
+	locales?: Record<string, Record<string, unknown>>
+	ui?: Record<string, string>
+	uninstallUrl?: string
+	termsUrl?: string
 }
 
 export interface GeneratedLandingPage {
 	html: string
 	bytes: number
 	warnings: string[]
+	/** Schema v2: every problem with its path and fix (errors mean a hosted publish would refuse it). */
+	problems?: LandingProblem[]
+	/** Schema v2 with locales: the other locales' pages and where to save them. */
+	localePages?: { locale: string; path: string; html: string }[]
 	nextSteps: string[]
 }
+
+const V2_KEYS = [
+	'sections',
+	'tokens',
+	'seo',
+	'defaultLocale',
+	'locales',
+	'ui',
+	'uninstallUrl',
+	'termsUrl',
+] as const
 
 export function landingFormFromArgs(args: LandingPageArgs): LandingForm {
 	const form: LandingForm = {
@@ -67,7 +97,13 @@ export function landingFormFromArgs(args: LandingPageArgs): LandingForm {
 	if (args.screenshots?.length) {
 		form.screenshots = args.screenshots.map((s): LandingScreenshot => ({ url: s.url, alt: s.alt ?? '' }))
 	}
-	return form
+	if (args.schemaVersion === 2) form.schemaVersion = 2
+	// Passed through as given — landingFormProblems reports anything malformed,
+	// including v2 keys sent without schemaVersion 2.
+	for (const key of V2_KEYS) {
+		if (args[key] !== undefined) (form as unknown as Record<string, unknown>)[key] = args[key]
+	}
+	return form as LandingForm & LandingV2Fields
 }
 
 export function landingNextSteps(homepageUrl?: string): string[] {
@@ -84,15 +120,45 @@ export function landingNextSteps(homepageUrl?: string): string[] {
 }
 
 export function renderGenerateLandingPage(args: LandingPageArgs): GeneratedLandingPage {
-	const input = landingFormToInput(landingFormFromArgs(args))
-	const html = buildLandingPage(input)
+	const form = landingFormFromArgs(args)
+	const input = landingFormToInput(form)
+	const pages = renderLandingLocales(form)
+	const html = pages[0]?.html ?? ''
+	const homepage = /^https:\/\/\S+$/i.test(input.homepageUrl ?? '') ? input.homepageUrl : undefined
+	const nextSteps = landingNextSteps(homepage)
+	if (form.schemaVersion !== 2) {
+		const problems = landingFormProblems(form).filter((p) => p.severity === 'error')
+		return {
+			html,
+			bytes: new TextEncoder().encode(html).length,
+			warnings: landingPageWarnings(input),
+			...(problems.length ? { problems } : {}),
+			nextSteps,
+		}
+	}
+	const problems = landingFormProblems(form)
+	const localePages = pages
+		.slice(1)
+		.map((p) => ({ locale: p.locale, path: `${p.slug}/index.html`, html: p.html }))
+	if (localePages.length) {
+		nextSteps.splice(
+			1,
+			0,
+			`Save each localePages[].html at its path (${localePages.map((p) => p.path).join(', ')}) next to index.html — hreflang links point at those URLs.`,
+		)
+	}
+	if (problems.some((p) => p.severity === 'error')) {
+		nextSteps.unshift(
+			'Fix the problems with severity "error" first: a hosted publish refuses them, and the page drops those parts.',
+		)
+	}
 	return {
 		html,
 		bytes: new TextEncoder().encode(html).length,
-		warnings: landingPageWarnings(input),
-		nextSteps: landingNextSteps(
-			/^https:\/\/\S+$/i.test(input.homepageUrl ?? '') ? input.homepageUrl : undefined,
-		),
+		warnings: problems.filter((p) => p.severity === 'warning').map((p) => `${p.path}: ${p.message}`),
+		problems,
+		...(localePages.length ? { localePages } : {}),
+		nextSteps,
 	}
 }
 
@@ -111,5 +177,12 @@ export function hostedLandingNextSteps(result: Record<string, unknown>): string[
 	const warnings = Array.isArray(result.warnings) ? result.warnings : []
 	if (warnings.length)
 		steps.push('Review warnings: those values were clamped or dropped in the rendered page.')
+	const locales = Array.isArray(result.locales) ? (result.locales as { locale: string; url: string }[]) : []
+	if (locales.length > 1)
+		steps.push(`Locale pages: ${locales.map((l) => `${l.locale} ${l.url}`).join(', ')}.`)
+	if (typeof result.llmsTxtUrl === 'string') steps.push(`llms.txt is served at ${result.llmsTxtUrl}.`)
+	steps.push(
+		'Every publish is a new version: list_landing_page_versions shows the history and rollback_landing_page restores one. set_custom_domain serves this page at your own domain root (Pro).',
+	)
 	return steps
 }

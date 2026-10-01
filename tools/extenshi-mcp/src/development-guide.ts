@@ -59,8 +59,11 @@ export const DEVELOPMENT_SERVICES = [
 			'Existing projects: selected browser types, manifests, repository binding, saved tool state, hosted URLs and starter files.',
 		tools: [
 			'list_my_projects',
+			'create_project',
 			'get_project_state',
 			'get_project_scaffold',
+			'get_decisions',
+			'propose_decision',
 			'get_project_workspace',
 			'import_manifest',
 			'diff_project_state',
@@ -74,7 +77,7 @@ export const DEVELOPMENT_SERVICES = [
 			'get_release_readiness',
 		],
 		access:
-			'Own-project MCP reads are free and require identity. Projects are created in the cabinet. Repository metadata, source/built manifests and scope synchronize through typed revisioned patches. project.write, evidence.write and hosted.write require explicit OAuth consent. Repository metadata does not grant GitHub access. CI evidence (source=ci) is written only by the verified ingest endpoint, which authenticates with a secret from create_ci_ingest_secret. Automated release-readiness access requires a Pro project.',
+			'Own-project MCP reads are free and require identity. Projects are created in the cabinet or with create_project (idempotent, project.write). Owner decisions (AMO add-on id, license, seller identity, pricing, targets) are proposed by agents and decided only by the owner in the cabinet; release readiness reports undecided ones as blockers. Repository metadata, source/built manifests and scope synchronize through typed revisioned patches. project.write, evidence.write and hosted.write require explicit OAuth consent. Repository metadata does not grant GitHub access. CI evidence (source=ci) is written only by the verified ingest endpoint, which authenticates with a secret from create_ci_ingest_secret. Automated release-readiness access requires a Pro project.',
 		urls: [
 			DEVELOPMENT_GUIDE_URL,
 			'https://dojo.extenshi.io/projects',
@@ -114,21 +117,32 @@ export const DEVELOPMENT_SERVICES = [
 			'get_privacy_policy_version',
 			'update_privacy_policy_with_ai',
 			'publish_privacy_policy',
+			'get_legal_translations',
+			'set_legal_translations',
 		],
 		access:
-			'Hosted policy tools require an owned Pro project. Version reads spend no credit; AI updates have a per-project daily limit. publish_privacy_policy changes the live page. The browser generator supports export.',
+			'Hosted policy tools require an owned Pro project. Version reads spend no credit; AI updates have a per-project daily limit. publish_privacy_policy changes the live page. The browser generator supports export. The English policy (and Pay license terms) is the binding text at the base URL; translated copies for the project’s languages live at <url>/<locale> with a notice linking to the English original — Extenshi translates its template text, the developer translates edited sections and free-text answers with get_legal_translations / set_legal_translations.',
 		urls: [docs('privacy-policy-generator'), docs('data-declaration'), toolPage('privacy-policy-generator')],
 	},
 	{
 		id: 'onboarding',
 		purpose:
 			'Welcome page, pin guide, install instructions and uninstall survey, with verified URLs wired into the extension.',
-		tools: ['generate_welcome_page_workflow', 'get_project_state'],
+		tools: [
+			'generate_welcome_page_workflow',
+			'get_project_state',
+			'get_install_instructions',
+			'publish_install_instructions',
+			'unpublish_install_instructions',
+			'get_page_translations',
+			'set_page_translations',
+		],
 		access:
-			'Free welcome-page specification. Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state; it has no page-publishing tool.',
+			'Free welcome-page specification. Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state, and publishes the install instructions page (free; hosted.write) — the uninstall form and welcome page are published from the cabinet. The hosted uninstall form, welcome page and install instructions open in the user’s browser language (the generated snippets pass chrome.i18n.getUILanguage() as `hl`) when the project offers it, otherwise in the project’s own language: built-in text is translated by Extenshi (en + 10 languages); the developer’s own text is translated per field with get_page_translations / set_page_translations (identity; hosted.write to save).',
 		urls: [
 			DEVELOPMENT_GUIDE_URL,
 			docs('pin-guide'),
+			docs('install-instructions'),
 			docs('uninstall-feedback'),
 			toolPage('onboarding-page'),
 			toolPage('instruction-generator'),
@@ -141,14 +155,22 @@ export const DEVELOPMENT_SERVICES = [
 		purpose: 'Listing copy, screenshots, landing page, support links and AI discovery assets.',
 		tools: [
 			'generate_landing_page',
+			'draft_landing_page',
+			'preview_landing_page',
 			'publish_landing_page',
 			'get_landing_page',
+			'list_landing_page_versions',
+			'rollback_landing_page',
 			'unpublish_landing_page',
+			'get_custom_domain',
+			'set_custom_domain',
+			'verify_custom_domain',
+			'remove_custom_domain',
 			'upload_project_media',
 			'upsert_hosted_page',
 		],
 		access:
-			"The landing-page generator is free and offline: it returns static HTML (CLI: extenshi page generate). The same page can be hosted by Extenshi at page.extenshi.io/{code} with publish_landing_page (identity and hosted.write; CLI: extenshi page publish), which also registers it as the project homepage; images there are store screenshots, Dojo uploads or files uploaded with upload_project_media (hosted.write; CLI: extenshi media upload, or page publish --upload-local) to the project's public media store. Store screenshots per locale come from CLI extenshi screenshots and listing artwork from CLI extenshi icon store-assets (formats and sizes: guide section storeMedia). A page hosted elsewhere on HTTPS is registered with upsert_hosted_page (CLI: extenshi page register). The registered homepage feeds HOMEPAGE_URL. Listing copy and store-risk review are covered by CLI generate-listing / review-risk and cabinet tools where enabled. MCP has no listing or SEO execution tool.",
+			"The landing-page generator is free and offline: it returns static HTML (CLI: extenshi page generate). Schema v2 (schemaVersion 2) makes it a full homepage: ordered sections (hero, about, features, screenshots, how-it-works, pricing bound to Pay offers by SKU, FAQ with FAQPage JSON-LD, attributed testimonials only, store badges, changelog, links), theme tokens from allowlists, SEO/OG fields, per-locale pages with hreflang, and llms.txt — all declarative, no HTML or JS. draft_landing_page (project.read; CLI: extenshi page draft) builds a v2 form from project state and lists what it could not fill; preview_landing_page (CLI: extenshi page preview) validates and renders exactly what publish would serve, with a path and fix per problem. The same page can be hosted by Extenshi at page.extenshi.io/{code} with publish_landing_page (identity and hosted.write; CLI: extenshi page publish), which also registers it as the project homepage; every publish is a version (list_landing_page_versions / rollback_landing_page; CLI: extenshi page versions / rollback). A custom domain (Pro, one per project; set/verify/get/remove_custom_domain, CLI: extenshi domain add|verify|status|remove) serves the homepage at the domain root after a TXT ownership check and an HTTPS certificate, and switches its canonical and HOMEPAGE_URL; ownership is re-checked every 6 hours and a domain that loses its TXT record is suspended; images there are store screenshots, Dojo uploads or files uploaded with upload_project_media (hosted.write; CLI: extenshi media upload, or page publish --upload-local) to the project's public media store. Store screenshots per locale come from CLI extenshi screenshots and listing artwork from CLI extenshi icon store-assets (formats and sizes: guide section storeMedia). A page hosted elsewhere on HTTPS is registered with upsert_hosted_page (CLI: extenshi page register). The registered homepage feeds HOMEPAGE_URL. Listing copy and store-risk review are covered by CLI generate-listing / review-risk and cabinet tools where enabled. MCP has no listing or SEO execution tool.",
 		urls: [
 			docs('cli'),
 			docs('ai-visibility'),
@@ -164,7 +186,7 @@ export const DEVELOPMENT_SERVICES = [
 			'Reproducible per-browser packages, installed smoke tests of the exact package in Chromium, Edge and Firefox, store-risk review, final package scan, and release evidence recorded from those results.',
 		tools: ['scan_extension', 'record_project_evidence', 'get_release_readiness'],
 		access:
-			'Local CLI, free: `extenshi package <dir> --browser chrome,edge,firefox` writes byte-reproducible zips plus extenshi-packages.json (sha256 per browser; refuses a placeholder Firefox add-on ID; --fix-war expands wildcard web_accessible_resources). `extenshi test smoke <zip|extenshi-packages.json> --browser chromium|edge|firefox --json` installs that exact zip and checks service worker/background start, manifest errors and console errors on popup/options pages (Playwright for Chromium/Edge, any Firefox binary). `--evidence` on scan, review-risk, generate-listing and test smoke records scan / permissions / listing (per locale) / installed evidence for the project bound with `extenshi project bind` (advisory listing findings stay passed and are listed in the evidence summary); release prepare accepts extenshi-packages.json. Scan requires an API key and spends 1 scan credit. CI: the scaffold writes .github/workflows/extenshi-verify.yml and extenshi-evidence.yml; CI-sourced evidence arrives through `extenshi evidence ingest` with the create_ci_ingest_secret secret.',
+			'Local CLI, free: `extenshi package <dir> --browser chrome,edge,firefox` writes byte-reproducible zips plus extenshi-packages.json (sha256 per browser; refuses a placeholder Firefox add-on ID; --fix-war expands wildcard web_accessible_resources). `extenshi test smoke <zip|extenshi-packages.json> --browser chromium|edge|firefox --json` installs that exact zip and checks service worker/background start, manifest errors and console errors on popup/options pages (Playwright for Chromium/Edge, any Firefox binary). `--evidence` on scan, review-risk, generate-listing, test smoke and screenshots records scan / permissions / listing (per locale) / installed / screenshots (per locale and store) evidence for the project bound with `extenshi project bind` (advisory listing findings stay passed and are listed in the evidence summary); release prepare accepts extenshi-packages.json. Scan requires an API key and spends 1 scan credit. CI: the scaffold writes .github/workflows/extenshi-verify.yml and extenshi-evidence.yml; CI-sourced evidence arrives through `extenshi evidence ingest` with the create_ci_ingest_secret secret.',
 		urls: [docs('cli'), docs('cli-github-actions'), docs('store-policies')],
 	},
 	{
@@ -221,6 +243,8 @@ export const DEVELOPMENT_SERVICES = [
 			'set_pay_seller_profile',
 			'upsert_pay_offer',
 			'archive_pay_offer',
+			'get_pay_offer_translations',
+			'set_pay_offer_translations',
 			'set_pay_enabled',
 			'rotate_pay_key',
 		],
@@ -287,12 +311,16 @@ const WORKFLOW = [
 	{
 		id: 'assets-and-hosted-pages',
 		actions:
-			"Stage 6 — Assets and hosted pages: icon, welcome page, screenshots, pin/install instructions, privacy policy, uninstall feedback, support and landing URLs. A landing page is generated as static HTML and either hosted by Extenshi (page.extenshi.io) or on any HTTPS origin; it is registered as the project homepage, which sets HOMEPAGE_URL. An existing Pro policy is updated as a reviewed proposal (proposedMarkdown) and published within the author's authorization. Returned URLs are verified against project state.",
+			"Stage 6 — Assets and hosted pages: icon, welcome page, screenshots, pin/install instructions, privacy policy, uninstall feedback, support and landing URLs. A landing page is generated as static HTML and either hosted by Extenshi (page.extenshi.io, or the project's custom domain root) or on any HTTPS origin; it is registered as the project homepage, which sets HOMEPAGE_URL. The homepage is drafted from project state (draft_landing_page), checked with preview_landing_page, published as a version and can be rolled back. An existing Pro policy is updated as a reviewed proposal (proposedMarkdown) and published within the author's authorization. Returned URLs are verified against project state.",
 		relatedTools: [
 			'generate_icon_workflow',
 			'generate_welcome_page_workflow',
 			'generate_landing_page',
+			'draft_landing_page',
+			'preview_landing_page',
 			'publish_landing_page',
+			'set_custom_domain',
+			'verify_custom_domain',
 			'upload_project_media',
 			'upsert_hosted_page',
 			'list_privacy_policy_versions',
@@ -307,7 +335,7 @@ const WORKFLOW = [
 	{
 		id: 'quality-and-listing',
 		actions:
-			'Stage 7 — Quality and listing: each browser package is built reproducibly (CLI package), and that exact zip is installed and smoke-tested per browser (CLI test smoke); unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing --store chrome|edge|firefox, which draft CHROMEWEBSTORE.md / EDGE.md / AMO.md — the same listing draft review-risk --listing reads back regardless of which one). A Firefox build with minified/bundled code additionally needs extenshi amo-source (source archive + BUILD.md) and a clean `web-ext lint`. With --evidence, scan, review-risk, generate-listing and test smoke record their release evidence for the bound project; the final package is scanned. Exact commands: the CLI docs. CI runs the scaffolded extenshi-verify workflow.',
+			'Stage 7 — Quality and listing: each browser package is built reproducibly (CLI package), and that exact zip is installed and smoke-tested per browser (CLI test smoke); unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing --store chrome|edge|firefox, which draft CHROMEWEBSTORE.md / EDGE.md / AMO.md — the same listing draft review-risk --listing reads back regardless of which one). A Firefox build with minified/bundled code additionally needs extenshi amo-source (source archive + BUILD.md) and a clean `web-ext lint`. With --evidence, scan, review-risk, generate-listing, test smoke and screenshots record their release evidence for the bound project; the final package is scanned. Exact commands: the CLI docs. CI runs the scaffolded extenshi-verify workflow.',
 		relatedTools: ['search_docs', 'scan_extension', 'get_release_readiness'],
 		doneWhen:
 			'The exact versioned artifact has passing checks, retained scan/review reports and truthful store materials; unresolved findings have a disposition.',
@@ -361,11 +389,13 @@ const SECTION_SUMMARIES: Record<GuideSection, string> = {
 const STORE_MEDIA = {
 	screenshots: {
 		command:
-			'npx @extenshi/cli@latest screenshots <unpacked-dir|zip> --scenes scenes.json [--locales en,de] [--store chrome,edge,firefox] [--small] [--out store-screenshots] [--json]',
+			'npx @extenshi/cli@latest screenshots <unpacked-dir|zip> --scenes scenes.json [--locales en,de] [--store chrome,edge,firefox] [--small] [--out store-screenshots] [--json] [--evidence --listing <file> [--evidence-browser chrome,edge,firefox]]',
 		requires:
 			'Playwright with the full Chromium build in the project (npm i -D playwright && npx playwright install chromium); the headless shell cannot load extensions. The source build is never modified: it is staged into a temporary copy.',
 		output:
 			'<out>/<store>/<locale>/NN-<scene>-WxH.png, plus <out>/screenshots.json (files with sha256, verified locales, warnings).',
+		evidence:
+			'--evidence records one `screenshots` readiness check per shot locale and store (the store is the browser) for the project bound with `extenshi project bind`, through the same path as `extenshi evidence push`. It binds to the zip that was shot (artifactDigest; an unpacked folder is refused) and to the --listing file (inputDigest — pass the same file to release prepare --listing). The browsers are --store when given, else the extenshi-packages.json next to the zip, and each must be a store the run shoots. A store whose listing file differs (AMO.md for Firefox) needs its own run with --store and that file. Status is failed when a store and locale have no screenshots or more than the store takes (Chrome 5, Edge 6). Binding, zip and listing are checked before Chromium starts. Each record carries the PNGs of that store for the locale as attachments in the private evidence storage of the project (the evidence push --attach upload: 10 MB per file, 20 per record); identical images upload once, and uploading needs a connection.',
 		localeSwitching:
 			'Each locale runs in a fresh Chromium with its UI language set (--lang; LANGUAGE on Linux; -AppleLanguages on macOS, where --lang has no effect). chrome.i18n inside the extension has to report the locale and render a message from _locales/<locale>; a mismatch fails the run. A locale missing from _locales is refused.',
 		determinism:
@@ -422,7 +452,7 @@ const STORE_MEDIA = {
 		cli: 'npx @extenshi/cli@latest media upload <file…> --project <id>, or page publish --upload-local',
 		accepts:
 			'PNG, JPEG or WebP up to 2 MB, 16–4096 px per side; SVG is rasterized by the CLI (the MCP tool refuses it). Magic bytes are checked, EXIF/XMP/text metadata and trailing bytes are stripped, and the key is the SHA-256 of the stored bytes, so the URL is stable and a re-upload returns the same URL. Quota: 100 files / 50 MB per project, Dojo uploads included.',
-		use: 'The returned url is accepted by publish_landing_page as screenshots[].url or logoUrl.',
+		use: 'The returned url is accepted by publish_landing_page as screenshots[].url, a screenshots section item url, seo.ogImageUrl or logoUrl.',
 	},
 } as const
 

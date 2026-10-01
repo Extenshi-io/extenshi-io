@@ -61,6 +61,12 @@ export const paySchemas = {
 		sortOrder: z.number().int().min(0).max(1000).default(0),
 	}),
 	archivePayOffer: app.extend({ sku }),
+	getPayOfferTranslations: app,
+	setPayOfferTranslations: app.extend({
+		locale: z.string().max(35),
+		translations: z.record(z.string().max(120), z.string().max(500)),
+		sources: z.record(z.string().max(120), z.string().max(500)).optional(),
+	}),
 	setPayEnabled: app.extend({ enabled: z.boolean() }),
 	rotatePayKey: app,
 } as const
@@ -186,6 +192,22 @@ export const PAY_OPERATIONS = [
 		'paySeller.archiveOffer',
 		true,
 		'Stop offering a SKU for new checkout; historical purchases are preserved.',
+	],
+	[
+		'getPayOfferTranslations',
+		'get_pay_offer_translations',
+		'offer-translations',
+		'paySeller.getOfferTranslations',
+		false,
+		"Read the translatable text of the application's active offers (title, description, features) keyed `<sku>/<field>`, with the project's languages and each language's translated, missing and outdated fields. The paywall shows an offer in the buyer's browser language when the project ships it; the SDK's own buttons and labels are already translated.",
+	],
+	[
+		'setPayOfferTranslations',
+		'set_pay_offer_translations',
+		'offer-translate',
+		'paySeller.setOfferTranslations',
+		true,
+		"Save one language of the offers' translations: `translations` maps `<sku>/<field>` keys from get_pay_offer_translations to text; `sources` (optional) carries the original each was translated from, and a save whose original has changed since is refused. An empty string removes a translation. Prices, SKUs and plans are not changed.",
 	],
 	[
 		'setPayEnabled',

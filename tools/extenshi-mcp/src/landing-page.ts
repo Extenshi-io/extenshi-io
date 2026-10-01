@@ -19,16 +19,20 @@
  *   tools/extenshi-mcp/src/landing-page.ts  (copy for the published @extenshi/mcp)
  *   tools/extenshi-cli/src/landing-page.ts  (copy for the published @extenshi/cli)
  * The published packages cannot import workspace shared-types at runtime.
- * The copies differ from this file ONLY in the json-ld import specifier
+ * The copies differ from this file ONLY in the import specifiers
  * (`./json-ld.js` there, the package specifier here — see
  * module-specifiers.test.ts for why shared-types may not use relative ones).
+ * Schema v2 (sections, theme tokens, locales, SEO) lives in
+ * landing-sections.ts, copied the same way; `renderLandingForm` there is the
+ * entry point that dispatches v1 forms to buildLandingPage below.
  * `landing-page-sync.test.ts` in both packages fails when a copy drifts.
  * After editing, run:
- *   sed '/^import/s#shared-types/#./#' shared-types/landing-page.ts > tools/extenshi-mcp/src/landing-page.ts
- *   sed '/^import/s#shared-types/#./#' shared-types/landing-page.ts > tools/extenshi-cli/src/landing-page.ts
+ *   sed "s#from 'shared-types\/#from './#" shared-types/landing-page.ts > tools/extenshi-mcp/src/landing-page.ts
+ *   sed "s#from 'shared-types\/#from './#" shared-types/landing-page.ts > tools/extenshi-cli/src/landing-page.ts
  */
 
 import { jsonLdFromLanding, jsonLdScriptTag } from './json-ld.js'
+import type { LandingV2Fields } from './landing-sections.js'
 
 export type LandingBrowser = 'chrome' | 'firefox' | 'edge'
 
@@ -46,8 +50,10 @@ export interface LandingScreenshot {
 /**
  * Serializable form persisted as `page-generator` tool state (`{ form }`).
  * The optional fields were added later; rows saved before them still hydrate.
+ * The v2 fields (sections, tokens, seo, locales — landing-sections.ts) are read
+ * only when `schemaVersion` is 2; buildLandingPage below never looks at them.
  */
-export interface LandingForm {
+export interface LandingForm extends LandingV2Fields {
 	extensionName: string
 	tagline: string
 	description: string
@@ -164,11 +170,11 @@ export function landingFormToInput(form: LandingForm, logoSvg?: string): Landing
 }
 
 /** Tolerates non-strings from hand-edited JSON or an old saved row. */
-function str(v: unknown): string {
+export function str(v: unknown): string {
 	return typeof v === 'string' ? v.trim() : ''
 }
 
-function esc(s: string): string {
+export function esc(s: string): string {
 	return s
 		.replaceAll('&', '&amp;')
 		.replaceAll('<', '&lt;')
@@ -182,7 +188,7 @@ function esc(s: string): string {
 // scheme, so a value like `javascript:alert(1)` would survive into the
 // downloaded page the developer publishes for their own users. Only http(s)
 // URLs are emitted verbatim; anything else collapses to "#".
-function safeHref(raw: string): string {
+export function safeHref(raw: string): string {
 	const u = raw.trim()
 	return /^https?:\/\//i.test(u) ? esc(u) : '#'
 }
@@ -195,7 +201,7 @@ const MAILTO =
 	/^mailto:[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?:\?subject=(?:[A-Za-z0-9._~-]|%(?![01][0-9a-f]|7f)[0-9a-f]{2})+)?$/i
 
 /** safeHref() for the support link only: http(s), or a validated mailto: address. */
-function safeSupportHref(raw: string): string {
+export function safeSupportHref(raw: string): string {
 	const u = raw.trim()
 	return MAILTO.test(u) ? esc(u) : safeHref(u)
 }
@@ -208,7 +214,7 @@ const DATA_IMAGE_URL = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={
 const RELATIVE_PATH = /^(?![a-z][a-z0-9+.-]*:)(?![/\\]{2})[^\s"'<>\\]+$/i
 
 /** Image src clamp: https, relative path, or raster data URI; '' when unsafe. */
-function safeImageSrc(raw: unknown): string {
+export function safeImageSrc(raw: unknown): string {
 	const u = str(raw)
 	if (!u) return ''
 	if (HTTPS_URL.test(u) || RELATIVE_PATH.test(u)) return esc(u)
@@ -216,13 +222,13 @@ function safeImageSrc(raw: unknown): string {
 	return ''
 }
 
-function canonicalUrl(raw: unknown): string {
+export function canonicalUrl(raw: unknown): string {
 	const u = str(raw)
 	return HTTPS_URL.test(u) ? u : ''
 }
 
 /** Absolute https form of an image URL (for og:image / JSON-LD), or ''. */
-function absoluteImageUrl(raw: unknown, base: string): string {
+export function absoluteImageUrl(raw: unknown, base: string): string {
 	const u = str(raw)
 	if (HTTPS_URL.test(u)) return u
 	if (!base || !RELATIVE_PATH.test(u)) return ''
@@ -283,7 +289,7 @@ const STORE_CTA_LABELS: Record<LandingBrowser, string> = {
 }
 
 const DEFAULT_ACCENT = '#5e5ce6'
-const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/
+export const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/
 
 /**
  * Human-readable notes about input the page silently corrected (a link clamped

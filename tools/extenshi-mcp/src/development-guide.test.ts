@@ -151,6 +151,14 @@ describe('development guide discovery contract', () => {
 		expect(result.documentation).toContain('docs.extenshi.io')
 	})
 
+	it('storeMedia documents screenshots --evidence and what it binds to', async () => {
+		const { tools } = register(['read', 'docs'])
+		const { storeMedia } = JSON.parse(await callGuide(tools, { sections: ['storeMedia'] }))
+		expect(storeMedia.screenshots.command).toContain('--evidence --listing <file>')
+		expect(storeMedia.screenshots.evidence).toContain('extenshi project bind')
+		expect(storeMedia.screenshots.evidence).toContain('release prepare --listing')
+	})
+
 	it('describes the workflow as reference material, with related tools as data', async () => {
 		const { tools } = register(['read', 'docs', 'scan', 'publish'])
 		const result = await readGuide(tools)

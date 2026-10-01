@@ -33,7 +33,13 @@
  * stdout is the MCP protocol channel for stdio — nothing here may write to it.
  */
 
-import { agentEvidenceSchema, importManifestSchema, workspacePatchSchema } from '@extenshi/contracts'
+import {
+	agentCreateProjectSchema,
+	agentEvidenceSchema,
+	importManifestSchema,
+	proposeDecisionSchema,
+	workspacePatchSchema,
+} from '@extenshi/contracts'
 import { type FastMCP, type FastMCPSessionAuth, type Tool, type ToolParameters, UserError } from 'fastmcp'
 import { z } from 'zod'
 import { zodToJsonSchema } from 'zod-to-json-schema'
@@ -49,6 +55,12 @@ import {
 } from './docs.js'
 import { renderIconWorkflow } from './icon-workflow.js'
 import { LANDING_LIMITS } from './landing-page.js'
+import {
+	LANDING_FONTS,
+	LANDING_SECTION_TYPES,
+	LANDING_UI_DEFAULTS,
+	LANDING_V2_LIMITS,
+} from './landing-sections.js'
 import { hostedLandingNextSteps, landingFormFromArgs, renderGenerateLandingPage } from './landing-workflow.js'
 import { renderLocalizeWorkflow } from './localize-workflow.js'
 import { PAY_OPERATIONS, paySchemas } from './pay.js'
@@ -62,9 +74,11 @@ import {
 	readWorkspaceImage,
 } from './project-media.js'
 import {
+	amoCreateAllowed,
+	type PublishArgs,
 	PublishSetupError,
 	publishArtifact,
-	readStoreCredentials,
+	storeCredentialsFor,
 	validateStoreCredentials,
 } from './publish.js'
 import { checkPublishAccess } from './publish-access.js'
@@ -132,7 +146,10 @@ export const SERVER_INSTRUCTIONS =
 	'plan from scope and research through code, assets, privacy, CI, store release and maintenance. ' +
 	'Keep a checklist covering the whole requested lifecycle. For standalone Pay, start with list_pay_apps; create_pay_app needs no development project or repository. Request explicit pay.read/pay.write scopes, use get_pay_readiness, and leave agreement acceptance and KYC to the author in the browser. Only the publishable SDK key and public verification key belong in extension code. Use search_docs (free) for current ' +
 	'product details and exact CLI flags. With identity, call list_my_projects then get_project_state ' +
-	'to reuse the existing project and repository. Use list_extension_templates before the manifest, ' +
+	'to reuse the existing project and repository; for a new extension, create_project makes one (idempotent). ' +
+	'Read get_decisions early: the AMO add-on id, license, seller identity and pricing are owner decisions — ' +
+	'propose defaults with propose_decision; the owner decides them in Dojo, and release readiness blocks on them. ' +
+	'Use list_extension_templates before the manifest, ' +
 	'and get_project_scaffold for a new project. Preserve existing source. For an existing extension, read get_project_workspace then preview and apply import_manifest to fill Dojo from its real manifest and default-locale messages before configuring services. Review the integration diff and preserve local edits; write integration.file ' +
 	'verbatim to integration.path, check integration.unwired and re-read state after cabinet edits. ' +
 	'Check get_credit_balance before metered work. get_risk_by_store_ids covers up to 40 store IDs ' +
@@ -567,6 +584,26 @@ const TOOL_ANNOTATIONS: Record<
 		idempotentHint: true,
 		openWorldHint: false,
 	},
+	create_project: {
+		title: 'Create an extension project',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	get_decisions: {
+		title: 'Read owner decisions',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	propose_decision: {
+		title: 'Propose an owner decision',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
 	list_my_projects: {
 		title: 'List my extension projects',
 		readOnlyHint: true,
@@ -683,11 +720,109 @@ const TOOL_ANNOTATIONS: Record<
 		idempotentHint: true,
 		openWorldHint: true,
 	},
+	draft_landing_page: {
+		title: 'Draft a homepage from project state',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	preview_landing_page: {
+		title: 'Preview and validate a homepage',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	list_landing_page_versions: {
+		title: 'List homepage versions',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	rollback_landing_page: {
+		title: 'Restore an earlier homepage version',
+		readOnlyHint: false,
+		idempotentHint: false,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	get_custom_domain: {
+		title: 'Read the custom domain setup',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	set_custom_domain: {
+		title: 'Add a custom domain',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	verify_custom_domain: {
+		title: 'Verify a custom domain',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	remove_custom_domain: {
+		title: 'Remove the custom domain',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: true,
+		openWorldHint: true,
+	},
 	unpublish_landing_page: {
 		title: 'Unpublish the hosted landing page',
 		readOnlyHint: false,
 		idempotentHint: true,
 		destructiveHint: true,
+		openWorldHint: true,
+	},
+	get_install_instructions: {
+		title: 'Read the hosted install instructions',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	publish_install_instructions: {
+		title: 'Publish install instructions on extenshi.io',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	unpublish_install_instructions: {
+		title: 'Unpublish the hosted install instructions',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: true,
+		openWorldHint: true,
+	},
+	get_page_translations: {
+		title: 'Read uninstall / welcome page translations',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	set_page_translations: {
+		title: 'Save translations of an uninstall / welcome page',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
+		openWorldHint: true,
+	},
+	get_legal_translations: {
+		title: 'Read privacy policy / license terms translations',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	set_legal_translations: {
+		title: 'Save translations of the privacy policy / license terms',
+		readOnlyHint: false,
+		idempotentHint: true,
+		destructiveHint: false,
 		openWorldHint: true,
 	},
 	upload_project_media: {
@@ -704,6 +839,135 @@ const TOOL_ANNOTATIONS: Record<
 		destructiveHint: true,
 		openWorldHint: true,
 	},
+}
+
+const hex = z.string().max(9)
+const palette = z
+	.object({
+		accent: hex.optional(),
+		accentText: hex.optional(),
+		background: hex.optional(),
+		surface: hex.optional(),
+		text: hex.optional(),
+		muted: hex.optional(),
+		border: hex.optional(),
+	})
+	.optional()
+const FONT_IDS = Object.keys(LANDING_FONTS) as [keyof typeof LANDING_FONTS, ...(keyof typeof LANDING_FONTS)[]]
+
+/**
+ * Schema v2 of the landing form (shared-types/landing-sections.ts): a full,
+ * declarative homepage. Only read when schemaVersion is 2; a form without it
+ * renders exactly as before. Section contents are checked by the shared
+ * landingFormProblems, so the errors here, in the CLI and on the server match.
+ */
+const LANDING_V2_SHAPE = {
+	schemaVersion: z
+		.literal(2)
+		.optional()
+		.describe(
+			'2 builds a full homepage from sections, theme tokens, SEO and locales. Absent: the classic ' +
+				'one-screen page (unchanged output). draft_landing_page returns a complete v2 form.',
+		),
+	sections: z
+		.array(
+			z
+				.object({
+					id: z
+						.string()
+						.max(LANDING_V2_LIMITS.sectionId)
+						.describe('Lowercase slug, unique; also the locale override key.'),
+					type: z.enum(LANDING_SECTION_TYPES),
+					hidden: z.boolean().optional().describe('Keep in the form, leave out of the page.'),
+					title: z.string().max(LANDING_V2_LIMITS.title).optional(),
+					intro: z.string().max(LANDING_V2_LIMITS.intro).optional(),
+				})
+				.passthrough(),
+		)
+		.max(LANDING_V2_LIMITS.sections)
+		.optional()
+		.describe(
+			'Ordered page sections (v2). Fields per type: ' +
+				'hero {headline?, subheadline?, showBadges?}; about {body — plain text, blank line = new paragraph}; ' +
+				'features {items: [{title, description?}]}; screenshots {items: [{url, alt, caption?}]} (hosted: ' +
+				'upload_project_media URLs or store screenshots); how-it-works {steps: [{title, description?}]}; ' +
+				'pricing {plans: [{name?, price?, period? one-time|month|year|lifetime, description?, features?, ' +
+				"highlighted?, offerSku?, ctaLabel?, ctaUrl?}], note?} — offerSku binds the plan to the project's " +
+				'Extenshi Pay offer so price and period come from the live offer; faq {items: [{question, answer}]} ' +
+				'(also emitted as FAQPage JSON-LD); testimonials {items: [{quote, author, role?, sourceUrl, ' +
+				'sourceLabel?}]} — real, attributed quotes only: author and a public https sourceUrl are required; ' +
+				'store-badges {browsers?: [chrome|firefox|edge]}; changelog {entries: [{version, ' +
+				'date? YYYY-MM-DD, notes: [string]}]}; links {items?: [{label, url}], includeProjectLinks?}. ' +
+				'Plain text only everywhere — no HTML, no scripts.',
+		),
+	tokens: z
+		.object({
+			mode: z
+				.enum(['light', 'dark', 'auto'])
+				.optional()
+				.describe('auto ships both palettes (prefers-color-scheme).'),
+			light: palette,
+			dark: palette,
+			headingFont: z.enum(FONT_IDS).optional(),
+			bodyFont: z.enum(FONT_IDS).optional(),
+			radius: z.enum(['none', 'small', 'medium', 'large']).optional(),
+			width: z.enum(['narrow', 'normal', 'wide']).optional(),
+		})
+		.optional()
+		.describe(
+			'Theme tokens (v2): hex colours per mode and fonts from a system-font allowlist (no web fonts — the ' +
+				'hosted CSP loads nothing external). Poor contrast is reported as a warning.',
+		),
+	seo: z
+		.object({
+			title: z.string().max(LANDING_V2_LIMITS.seoTitle).optional(),
+			description: z.string().max(LANDING_V2_LIMITS.seoDescription).optional(),
+			ogImageUrl: z.string().max(LANDING_LIMITS.url).optional(),
+			twitterSite: z.string().max(16).optional(),
+			authorName: z.string().max(120).optional(),
+			noindex: z.boolean().optional(),
+		})
+		.optional()
+		.describe('SEO / Open Graph (v2): <title>, meta description, og:image, twitter:site, JSON-LD author.'),
+	defaultLocale: z.string().max(35).optional().describe('Locale of the base content (default en).'),
+	locales: z
+		.record(
+			z.string().max(35),
+			z
+				.object({
+					extensionName: z.string().max(LANDING_LIMITS.extensionName).optional(),
+					tagline: z.string().max(LANDING_LIMITS.tagline).optional(),
+					description: z.string().max(LANDING_LIMITS.description).optional(),
+					seo: z
+						.object({ title: z.string().optional(), description: z.string().optional() })
+						.passthrough()
+						.optional(),
+					ui: z.record(z.string(), z.string().max(120)).optional(),
+					sections: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
+				})
+				.passthrough(),
+		)
+		.optional()
+		.describe(
+			'Translations (v2), keyed by locale (de, pt-BR or the _locales spelling pt_BR; hosted pages accept ' +
+				'store locales). Each is served at {url}/{locale} with hreflang alternates. sections.{id} mirrors ' +
+				"that section's shape; only strings are taken (arrays merge by index), so a translation cannot " +
+				'change structure. ui overrides built-in headings and button labels.',
+		),
+	ui: z
+		.record(z.string(), z.string().max(LANDING_V2_LIMITS.shortText))
+		.optional()
+		.describe(`Built-in strings to override (v2): ${Object.keys(LANDING_UI_DEFAULTS).join(', ')}.`),
+	uninstallUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe('Hosted uninstall feedback form URL (footer, v2).'),
+	termsUrl: z
+		.string()
+		.max(LANDING_LIMITS.url)
+		.optional()
+		.describe('License terms & refunds URL (footer, v2).'),
 }
 
 /**
@@ -797,6 +1061,7 @@ const LANDING_FORM_SHAPE = {
 		.max(LANDING_LIMITS.logoUrl)
 		.optional()
 		.describe('Logo image as an https URL, a relative path, or a data:image/(png|jpeg|gif|webp);base64 URL.'),
+	...LANDING_V2_SHAPE,
 }
 
 /**
@@ -883,6 +1148,63 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			execute: async (args, context) => {
 				try {
 					return JSON.stringify(await bff(context).importManifest(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'create_project',
+			description:
+				'Create a new extension project (a Dojo workspace) owned by this identity, through the same service ' +
+				'the Dojo project wizard uses, with the same ownership and limits. Returns JSON {projectId, dojoUrl, ' +
+				'project, pendingDecisions, nextSteps}: the next steps cover binding the repository and the starter ' +
+				'files. Idempotent: a repeated request with the same idempotencyKey returns the project it already ' +
+				'created (replayed: true); the same key with different input is rejected. Requires project.write.',
+			parameters: agentCreateProjectSchema,
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).createProject(args), null, 2)
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'get_decisions',
+			description:
+				'Owner decisions for one project: the AMO add-on id, license, seller public name, support contact ' +
+				'and terms, pricing, target browsers and target locales. Each entry reports its status (undecided, ' +
+				'proposed or decided), the value, a suggested default where one is derivable (a stable {GUID} add-on ' +
+				'id or the id already in the Firefox manifest, the project browsers), who proposed or decided it and ' +
+				'when, and which releases it blocks (blocksBrowsers, blocksPayment). `pending` lists the keys the ' +
+				'owner has not decided. FREE.',
+			annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+			parameters: z.object({ projectId: z.string().uuid().describe('Project id from list_my_projects.') }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).getDecisions(args), null, 2)
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'propose_decision',
+			description:
+				'Propose a value for one owner decision. The proposal is stored with its rationale, proposer and ' +
+				'time; the owner accepts or edits it on the Dojo project page, which is the only place a decision ' +
+				'becomes decided. A key the owner already decided is refused (DECISION_ALREADY_DECIDED). Value ' +
+				'formats: amo.addonId {GUID} or name@domain; license an SPDX id such as MIT, or all-rights-reserved; ' +
+				'seller.publicName text; seller.supportContact an email or HTTPS URL; seller.terms an HTTPS URL; ' +
+				'pricing {model: free|paid|donations, trialDays?, plans?: subscription|lifetime|one_time}; ' +
+				'targetBrowsers an array of chrome/firefox/edge; targetLocales an array of locale codes. Idempotent ' +
+				'per idempotencyKey. Requires project.write.',
+			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
+			parameters: proposeDecisionSchema,
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).proposeDecision(args), null, 2)
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1043,8 +1365,11 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			description:
 				"Publish the project's landing page (homepage) on Extenshi hosting — the same page " +
 				'generate_landing_page returns, rendered server-side from the form (no caller HTML is stored) and ' +
-				'served at page.extenshi.io/{code}, or https://{custom-domain}/landing when the project has an ' +
-				'active custom domain. The code is permanent: republishing creates a new version at the same URL. ' +
+				"served at page.extenshi.io/{code}, or at the root of the project's custom domain once it is ACTIVE " +
+				'(set_custom_domain). A schema-v2 form (schemaVersion 2; draft_landing_page returns one, ' +
+				'preview_landing_page validates it) adds sections, theme tokens, SEO, per-locale pages at {url}/{locale} with ' +
+				'hreflang, and llms.txt; pricing plans with offerSku take price and period from the live Pay offer. ' +
+				'The code is permanent: republishing creates a new version at the same URL. ' +
 				'By default the URL is also registered as the project homepage, which feeds HOMEPAGE_URL. Hosted ' +
 				'images are limited to store screenshot URLs (from get_extension) and images uploaded in the Dojo ' +
 				'Page generator or with upload_project_media (use its url for local screenshots or a logo); the logo ' +
@@ -1099,6 +1424,353 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			execute: async (args, context) => {
 				try {
 					return JSON.stringify(await bff(context).unpublishLandingPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'draft_landing_page',
+			description:
+				'Draft a full homepage (schema v2) from what the project already knows: the manifest draft and its ' +
+				'store translations, the published page or saved Page generator form, public project media, ' +
+				'Extenshi Pay offers (pricing plans bound by SKU), hosted artifacts (privacy policy, uninstall ' +
+				'feedback form, license terms, support page) and the workspace release/locales. Writes nothing. ' +
+				'Returns JSON {form, sources (field → where it came from), todos (what only you can supply — ' +
+				'features, how-it-works, real testimonials, translations), problems, previewUrl}. The form is ' +
+				'accepted as-is by preview_landing_page and publish_landing_page. storeUrls fills the install ' +
+				'buttons when the project does not know its listings yet. Requires project.read.',
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				storeUrls: z
+					.object({
+						chrome: z.string().url().max(2000).optional(),
+						firefox: z.string().url().max(2000).optional(),
+						edge: z.string().url().max(2000).optional(),
+					})
+					.optional()
+					.describe('Store listing URLs, when the project does not have them yet.'),
+			}),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).draftLandingPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'preview_landing_page',
+			description:
+				'Validate and render a landing form exactly as publish_landing_page would — same image rules, ' +
+				'store-locale check, Pay offer prices and canonical URL — without publishing. Returns JSON ' +
+				'{ok, problems: [{path, severity, message, fix}], html (the page for `locale`), url, locales, ' +
+				'bytes, contentHash, llmsTxt, warnings}. `ok: false` means publish would refuse the form; every ' +
+				'problem says what to change. `html` is byte-for-byte the page publish would serve. ' +
+				'Requires project.read.',
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				locale: z
+					.string()
+					.max(35)
+					.optional()
+					.describe('Which locale page to return (default the default locale).'),
+				...LANDING_FORM_SHAPE,
+			}),
+			execute: async (args, context) => {
+				const { projectId, locale, ...fields } = args
+				try {
+					return JSON.stringify(
+						await bff(context).previewLandingPage({
+							projectId,
+							locale,
+							form: landingFormFromArgs(fields) as unknown as Record<string, unknown>,
+						}),
+					)
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'list_landing_page_versions',
+			description:
+				'Version history of the hosted landing page, newest first: versionNumber, createdAt, contentHash, ' +
+				'reason (publish | rollback | domain — a canonical switch after the custom domain changed), ' +
+				'restoredFromVersion, schemaVersion, locales and which one is live. Requires project.read.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).listLandingVersions(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'rollback_landing_page',
+			description:
+				'Restore an earlier version of the hosted landing page. History stays append-only: the old form ' +
+				"is published as a NEW version, re-rendered with today's URL and Pay offer prices. Returns the " +
+				'same JSON as publish_landing_page. Requires hosted.write.',
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				versionNumber: z.number().int().min(1),
+				registerAsHomepage: z.boolean().optional(),
+			}),
+			execute: async (args, context) => {
+				try {
+					const result = (await bff(context).rollbackLandingPage(args)) as Record<string, unknown>
+					return JSON.stringify({ ...result, nextSteps: hostedLandingNextSteps(result) })
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'get_custom_domain',
+			description:
+				"The project's custom domain: hostname, status (PENDING → VERIFIED → ACTIVE; FAILED; SUSPENDED when " +
+				'the TXT record disappeared), the exact DNS records to set, whether HTTPS for custom domains is ' +
+				'enabled on the platform (edgeConfigured) and the next step. Only ACTIVE is served. Requires project.read.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).getCustomDomain(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'set_custom_domain',
+			description:
+				'Add a custom domain (www.example.com, or the apex) for the homepage and every hosted page of the ' +
+				'project (Pro; one hostname per project). Returns the exact DNS records: a CNAME to ' +
+				'hosted.extenshi.io (at an apex: CNAME flattening / ALIAS / ANAME, or use www) and a TXT ownership ' +
+				'token that stays in place (it is re-checked). Nothing is served until verify_custom_domain confirms the token and the ' +
+				'HTTPS certificate is issued; then the homepage is served at the domain root, its canonical and ' +
+				'HOMEPAGE_URL switch to it. Replacing the hostname starts over. Requires hosted.write.',
+			parameters: z.object({ projectId: z.string().uuid(), hostname: z.string().max(253) }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).setCustomDomain(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'verify_custom_domain',
+			description:
+				'Check the custom domain now: looks up the TXT token, requests or refreshes the HTTPS certificate, ' +
+				'and moves the status (PENDING/FAILED → VERIFIED → ACTIVE). When it becomes ACTIVE the landing page ' +
+				'is republished with the new canonical and HOMEPAGE_URL moves to https://{hostname}/ (the ' +
+				'integration file in get_project_state follows). Safe to call repeatedly; DNS changes can take ' +
+				'minutes. The platform also re-checks every 6 hours. Requires hosted.write.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).verifyCustomDomain(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'remove_custom_domain',
+			description:
+				'Remove the custom domain: it stops being served, the certificate is released, and the landing ' +
+				'canonical and HOMEPAGE_URL move back to page.extenshi.io/{code}. Remove the DNS records afterwards. ' +
+				'Requires hosted.write.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).removeCustomDomain(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'get_install_instructions',
+			description:
+				'The hosted install instructions page of a project: {page: {publicCode, enabled, publishedAt, ' +
+				'input, url} or null, draft, draftProblems} — `draft` is the form saved by the install-instructions ' +
+				'tool in the cabinet; `draftProblems` lists why it cannot be published as it is. The page shows store and optional sideload steps for Chrome, Firefox and Edge in the ' +
+				'visitor’s browser language (en, es, pt-BR, fr, de, it, ru, ja, ko, zh-CN, ar), the visitor’s own ' +
+				'browser first. Free. Requires project.read.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).getInstructionsPage(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'publish_install_instructions',
+			description:
+				'Publish (or update) the project’s install instructions at a stable public URL ' +
+				'(dojo.extenshi.io/instructions/<code>, or https://<custom domain>/instructions). Without `input` ' +
+				'the form saved in the cabinet is published (a saved form that does not validate is refused with ' +
+				'INSTRUCTIONS_INVALID and its field errors). Store URLs are the https listing links on ' +
+				'chromewebstore.google.com, addons.mozilla.org and microsoftedge.microsoft.com; browsers without one ' +
+				'are hidden unless none is set. The install steps are translated by Extenshi; `features` are ' +
+				'translated with set_page_translations (surface instructions). Returns {publicCode, url}. Free. ' +
+				'Requires hosted.write.',
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				input: z
+					.object({
+						extensionName: z.string().max(120),
+						storeUrls: z
+							.object({
+								chrome: z.string().max(2048).optional(),
+								firefox: z.string().max(2048).optional(),
+								edge: z.string().max(2048).optional(),
+							})
+							.optional(),
+						features: z.array(z.string().max(200)).max(20).optional(),
+						includeSideload: z.boolean().optional(),
+						supportUrl: z.string().max(2048).optional().describe('https:// URL or an email address.'),
+					})
+					.optional(),
+			}),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).publishInstructions(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'unpublish_install_instructions',
+			description:
+				'Take the hosted install instructions offline. The code and URL are kept, so publishing again ' +
+				'restores the same URL. Requires hosted.write.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(
+						await bff(context).setInstructionsEnabled({ projectId: args.projectId, enabled: false }),
+					)
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'get_page_translations',
+			description:
+				"The developer-written text on the project's hosted uninstall forms, welcome pages and install " +
+				'instructions (the features list), for ' +
+				'translation: per page {surface, publicCode, name, defaultLocale, locales, fields [{path, source, ' +
+				'label, max, multiline}], status per language [{locale, translated, missing, outdated}], ' +
+				'translations}. Languages are the project’s (manifest translations + the targetLocales decision); ' +
+				'the install instructions page offers every language its steps come in. ' +
+				'Built-in text (buttons, reasons, footers) is translated by Extenshi into en, es, pt-BR, fr, de, ' +
+				'it, ru, ja, ko, zh-CN and ar and is not listed. A page is shown in the user’s browser language ' +
+				'when the project offers it, otherwise in defaultLocale; an untranslated or outdated field shows ' +
+				'its original. Requires project.read.',
+			parameters: z.object({ projectId: z.string().uuid() }),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).getPageTranslations(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'set_page_translations',
+			description:
+				'Save one language of one uninstall form, welcome page or install instructions page: `translations` ' +
+				'maps field paths (from ' +
+				'get_page_translations) to translated text; the server records which original each translates, so ' +
+				'a later edit of the original marks it outdated. An empty string removes a translation. Unknown ' +
+				'paths, over-long text and the default language are refused (TRANSLATIONS_INVALID). Placeholders ' +
+				'and product names are kept as written. Returns the page’s updated translation status. Requires ' +
+				'hosted.write.',
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				surface: z.enum(['uninstall', 'welcome', 'instructions']),
+				publicCode: z.string().max(40).describe('The page code, from get_page_translations.'),
+				locale: z.string().max(35).describe('BCP 47 tag or the _locales spelling (de, pt-BR, pt_BR).'),
+				translations: z.record(z.string().max(80), z.string().max(2000)),
+			}),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).setPageTranslations(args))
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		const legalDocument = z
+			.enum(['privacy_policy', 'license_terms'])
+			.describe(
+				'privacy_policy (hosted policy, Pro) or license_terms (Extenshi Pay license terms & refunds).',
+			)
+		add({
+			name: 'get_legal_translations',
+			description:
+				"Translated copies of the project's published privacy policy or license terms. The English " +
+				'version is the binding text and stays at the base URL; each translation lives at ' +
+				'<url>/<locale>, says it is a translation for convenience and links to the English original. ' +
+				'Extenshi translates its own template text (en, es, pt-BR, fr, de, it, ru, ja, ko, zh-CN, ar); ' +
+				'what you translate is listed in fields: `section:<id>` for a section the author edited or added ' +
+				'(translate the whole section, heading line included) and `answer:<field>` for free-text answers ' +
+				'inside template sentences (e.g. a retention period). A section without a current translation is ' +
+				'shown in English. Returns {defaultLocale: "en", locales, fields, status per language, ' +
+				'translations, urls}. Languages are the project’s (manifest translations + targetLocales). ' +
+				'Requires a published document; privacy_policy needs project.read, license_terms pay.read.',
+			parameters: z.object({ projectId: z.string().uuid(), document: legalDocument }),
+			execute: async ({ projectId, document }, context) => {
+				try {
+					const client = bff(context)
+					return JSON.stringify(
+						document === 'privacy_policy'
+							? await client.getPrivacyPolicyTranslations({ projectId })
+							: await client.getLicenseTermsTranslations({ projectId }),
+					)
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+		add({
+			name: 'set_legal_translations',
+			description:
+				'Save one language of the privacy policy or license terms translation: `translations` maps field ' +
+				'paths from get_legal_translations to text. A `section:<id>` text is accepted as exactly one ' +
+				'section: its "## " heading line first ("# " for `section:lead`) and no other heading. ' +
+				'The server records which English text each translates, so a later edit marks it outdated; an ' +
+				'empty string removes one. Only the project’s languages are accepted (TRANSLATIONS_INVALID ' +
+				'otherwise). Nothing changes in the English original. privacy_policy needs hosted.write and a ' +
+				'Pro project; license_terms needs pay.write.',
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				document: legalDocument,
+				locale: z.string().max(35).describe('BCP 47 tag or the _locales spelling (de, pt-BR, pt_BR).'),
+				translations: z.record(z.string().max(300), z.string().max(16000)),
+				sources: z
+					.record(z.string().max(300), z.string().max(64000))
+					.optional()
+					.describe(
+						'The `source` of each field as get_legal_translations returned it; a save whose English has changed since is refused (TRANSLATIONS_STALE).',
+					),
+			}),
+			execute: async ({ document, ...args }, context) => {
+				try {
+					const client = bff(context)
+					return JSON.stringify(
+						document === 'privacy_policy'
+							? await client.setPrivacyPolicyTranslations(args)
+							: await client.setLicenseTermsTranslations(args),
+					)
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1942,7 +2614,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'as an image, or an image URL), screenshots and the canonical homepage URL for Open Graph and ' +
 				'JSON-LD. Returns JSON {html, bytes, warnings, nextSteps}: warnings list input that was dropped ' +
 				'or clamped; nextSteps cover hosting the file on HTTPS and registering the URL with ' +
-				'upsert_hosted_page, which feeds HOMEPAGE_URL. Extenshi does not host the page. Static content: ' +
+				'upsert_hosted_page, which feeds HOMEPAGE_URL. Extenshi does not host the page. With schemaVersion 2 ' +
+				'the page is built from sections, theme tokens, SEO and locales (see the field descriptions); the ' +
+				'result adds problems [{path, severity, message, fix}] and localePages. Static content: ' +
 				'no API key, no network, no credits.',
 			parameters: z.object(LANDING_FORM_SHAPE),
 			execute: async (args) => JSON.stringify(renderGenerateLandingPage(args)),
@@ -2044,8 +2718,12 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'CHROME_REFRESH_TOKEN, FIREFOX_ADDON_GUID/FIREFOX_JWT_ISSUER/FIREFOX_JWT_SECRET, ' +
 				'EDGE_PRODUCT_ID/EDGE_CLIENT_ID/EDGE_CLIENT_SECRET/EDGE_TENANT_ID). The upload itself is local, but ' +
 				'publishing is in an active testing phase: a quick Extenshi access check runs first (it identifies your ' +
-				'account by EXTENSHI_API_KEY). Edge submissions are polled to a terminal status. The artifact is ' +
-				'not security-scanned by this tool (scanning is scan_extension).',
+				'account by EXTENSHI_API_KEY). Edge submissions are polled to a terminal status. For Firefox, ' +
+				'listing_path turns the upload into a listed AMO submission with metadata: first-time add-on creation ' +
+				'(gated by allow_new_addon or the project decision), per-locale name/summary/description, categories, ' +
+				'license, homepage, support email and URL, privacy policy, release and reviewer notes, reviewer source ' +
+				'(source_path) and previews (screenshots_dir); the result lists each step. The artifact is not ' +
+				'security-scanned by this tool (scanning is scan_extension).',
 			parameters: z.object({
 				artifact_path: z
 					.string()
@@ -2061,6 +2739,52 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					.optional()
 					.describe('Separate Firefox artifact (.xpi); defaults to artifact_path.'),
 				release_notes: z.string().optional().describe('Release notes for stores that accept them.'),
+				listing_path: z
+					.string()
+					.optional()
+					.describe(
+						'Firefox: AMO listing file (JSON with per-locale fields, or the AMO.md that generate-listing --store ' +
+							'firefox writes, placeholders filled). Makes the Firefox submission a listed one with metadata: ' +
+							'the add-on is created on first submission (see allow_new_addon) or its listing is edited, then ' +
+							'privacy policy, release notes, reviewer notes, source and previews are applied.',
+					),
+				source_path: z
+					.string()
+					.optional()
+					.describe('Firefox: reviewer source archive (.zip/.tar.gz/.tgz/.tar.bz2) for the new version.'),
+				screenshots_dir: z
+					.string()
+					.optional()
+					.describe(
+						'Firefox: AMO previews in file-name order: a directory of .png/.jpg/.gif files, or the extenshi ' +
+							'screenshots output directory (its firefox/<locale>/ set, default locale first).',
+					),
+				allow_new_addon: z
+					.boolean()
+					.optional()
+					.describe(
+						'Firefox: permits creating a NEW AMO add-on, whose id becomes permanent. With project_id the ' +
+							"project's decided amo.addonId governs creation instead.",
+					),
+				addon_id: z
+					.string()
+					.max(255)
+					.optional()
+					.describe(
+						'Firefox: the AMO add-on id ({GUID} or name@domain), stated explicitly. Needed with allow_new_addon ' +
+							'when there is no project_id; fills FIREFOX_ADDON_GUID when the environment has none.',
+					),
+				replace_screenshots: z
+					.boolean()
+					.optional()
+					.describe('Firefox: replaces the previews of an existing AMO add-on with screenshots_dir.'),
+				project_id: z
+					.string()
+					.uuid()
+					.optional()
+					.describe(
+						'Dojo project id. Its owner-decided amo.addonId gates first-time AMO creation and has to equal FIREFOX_ADDON_GUID.',
+					),
 				extension_id: z
 					.number()
 					.optional()
@@ -2081,7 +2805,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					// preflight evaluates the `publish-access` PostHog flag for this developer
 					// / extension. Fails open on any transport error — only a definitive
 					// server "no" blocks here (see checkPublishAccess).
-					const creds = readStoreCredentials()
+					const creds = storeCredentialsFor(args.addon_id)
 					const storeIds: Partial<Record<'chrome' | 'firefox' | 'edge', string>> = {}
 					if (creds.chrome) storeIds.chrome = creds.chrome.appId
 					if (creds.firefox) storeIds.firefox = creds.firefox.addonGuid
@@ -2099,12 +2823,42 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 						)
 					}
 
+					let firefoxListing: PublishArgs['firefoxListing']
+					if (args.listing_path || args.source_path || args.screenshots_dir) {
+						if (!args.listing_path)
+							throw new UserError(
+								'source_path and screenshots_dir need listing_path, the AMO listing they belong to.',
+							)
+						let decision: { status: string; value: unknown } | null = null
+						if (args.project_id) {
+							const view = (await bff(context).getDecisions({ projectId: args.project_id })) as {
+								decisions?: Array<{ key: string; status: string; value: unknown }>
+							}
+							decision = view.decisions?.find((d) => d.key === 'amo.addonId') ?? null
+						}
+						firefoxListing = {
+							listingPath: args.listing_path,
+							sourcePath: args.source_path,
+							screenshotsDir: args.screenshots_dir,
+							replaceScreenshots: args.replace_screenshots,
+							allowCreate: amoCreateAllowed({
+								addonGuid: creds.firefox?.addonGuid ?? '',
+								allowNewAddon: args.allow_new_addon,
+								addonId: args.addon_id,
+								projectId: args.project_id,
+								decision,
+							}),
+						}
+					}
+
 					void context.reportProgress({ progress: 0, total: 1 })
 					const result = await publishArtifact({
 						artifactPath: args.artifact_path,
 						stores: args.stores,
 						firefoxArtifactPath: args.firefox_artifact_path,
 						releaseNotes: args.release_notes,
+						addonId: args.addon_id,
+						firefoxListing,
 					})
 					void context.reportProgress({ progress: 1, total: 1 })
 					return JSON.stringify(result, null, 2)

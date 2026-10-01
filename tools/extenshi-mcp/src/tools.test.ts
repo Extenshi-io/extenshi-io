@@ -102,10 +102,15 @@ const READ_TOOLS = [
 	'set_pay_seller_profile',
 	'upsert_pay_offer',
 	'archive_pay_offer',
+	'get_pay_offer_translations',
+	'set_pay_offer_translations',
 	'set_pay_enabled',
 	'rotate_pay_key',
 
 	'import_manifest',
+	'create_project',
+	'get_decisions',
+	'propose_decision',
 	'get_project_workspace',
 	'get_release_readiness',
 	'connection_diagnostics',
@@ -120,6 +125,21 @@ const READ_TOOLS = [
 	'publish_landing_page',
 	'get_landing_page',
 	'unpublish_landing_page',
+	'draft_landing_page',
+	'preview_landing_page',
+	'list_landing_page_versions',
+	'rollback_landing_page',
+	'get_custom_domain',
+	'set_custom_domain',
+	'verify_custom_domain',
+	'remove_custom_domain',
+	'get_install_instructions',
+	'publish_install_instructions',
+	'unpublish_install_instructions',
+	'get_page_translations',
+	'set_page_translations',
+	'get_legal_translations',
+	'set_legal_translations',
 	'upload_project_media',
 	'search_extensions',
 	'get_extension',
@@ -595,10 +615,14 @@ describe('directory tool annotations', () => {
 			'set_pay_seller_profile',
 			'upsert_pay_offer',
 			'archive_pay_offer',
+			'set_pay_offer_translations',
 			'set_pay_enabled',
 			'rotate_pay_key',
 
 			'import_manifest',
+			// Owner-scoped project writes (project.write): creation and proposals.
+			'create_project',
+			'propose_decision',
 			'publish_privacy_policy',
 			'update_privacy_policy_with_ai',
 			'apply_project_patch',
@@ -610,6 +634,17 @@ describe('directory tool annotations', () => {
 			'remove_hosted_page',
 			'publish_landing_page',
 			'unpublish_landing_page',
+			'rollback_landing_page',
+			// Custom domain for the project's hosted pages (hosted.write).
+			'set_custom_domain',
+			'verify_custom_domain',
+			'remove_custom_domain',
+			'publish_install_instructions',
+			'unpublish_install_instructions',
+			// Translations of the project's uninstall forms / welcome pages (hosted.write).
+			'set_page_translations',
+			// Translations of the privacy policy (hosted.write) / license terms (pay.write).
+			'set_legal_translations',
 			'upload_project_media',
 		])
 		for (const t of tools) {
@@ -1025,6 +1060,48 @@ describe('generate_landing_page execute', () => {
 	})
 })
 
+describe('generate_landing_page schema v2', () => {
+	type Exec = { execute: (args: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<string> }
+	const tool = () => {
+		const { tools, server } = recordingServer()
+		registerTools(server, depsFor(['docs']))
+		return tools.find((t) => t.name === 'generate_landing_page') as unknown as Exec
+	}
+
+	it('renders sections and one page per locale, offline, with problems', async () => {
+		const out = JSON.parse(
+			await tool().execute(
+				{
+					schemaVersion: 2,
+					extensionName: 'Ruler',
+					homepageUrl: 'https://ruler.example/',
+					sections: [
+						{ id: 'hero', type: 'hero' },
+						{ id: 'faq', type: 'faq', items: [{ question: 'Free?', answer: 'Yes.' }] },
+					],
+					locales: { de: { ui: { faq: 'Fragen' } } },
+				},
+				{},
+			),
+		)
+		expect(out.html).toContain('id="faq"')
+		expect(out.localePages).toEqual([expect.objectContaining({ locale: 'de', path: 'de/index.html' })])
+		expect(out.localePages[0].html).toContain('<h2>Fragen</h2>')
+		expect(out.html).toContain('hreflang="de" href="https://ruler.example/de"')
+		expect(out.problems.filter((p: { severity: string }) => p.severity === 'error')).toEqual([])
+	})
+
+	it('keeps v1 output byte-identical and flags v2 fields sent without schemaVersion', async () => {
+		const v1 = JSON.parse(await tool().execute({ extensionName: 'Ruler' }, {}))
+		expect(v1.problems).toBeUndefined()
+		const mixed = JSON.parse(
+			await tool().execute({ extensionName: 'Ruler', sections: [{ id: 'hero', type: 'hero' }] }, {}),
+		)
+		expect(mixed.html).toBe(v1.html)
+		expect(mixed.problems[0]).toMatchObject({ path: 'schemaVersion', severity: 'error' })
+	})
+})
+
 describe('hosted landing page tools', () => {
 	function toolsWith(stub: Partial<Bff>) {
 		const tools: Record<string, any> = {}
@@ -1094,6 +1171,177 @@ describe('hosted landing page tools', () => {
 			homepageRemoved: true,
 		})
 		expect(unpublishLandingPage).toHaveBeenCalledWith({ projectId })
+	})
+
+	it('draft passes store URLs through; preview sends the v2 form and returns problems as data', async () => {
+		const draftLandingPage = vi.fn(async () => ({
+			form: { schemaVersion: 2 },
+			sources: {},
+			todos: [],
+			problems: [],
+		}))
+		const previewLandingPage = vi.fn(async () => ({
+			ok: false,
+			problems: [
+				{ path: 'sections[0].items[0].sourceUrl', severity: 'error', message: 'no source', fix: 'add it' },
+			],
+		}))
+		const tools = toolsWith({ draftLandingPage, previewLandingPage })
+		await tools.draft_landing_page.execute(
+			{ projectId, storeUrls: { chrome: 'https://chromewebstore.google.com/detail/x' } },
+			{},
+		)
+		expect(draftLandingPage).toHaveBeenCalledWith({
+			projectId,
+			storeUrls: { chrome: 'https://chromewebstore.google.com/detail/x' },
+		})
+		const out = JSON.parse(
+			await tools.preview_landing_page.execute(
+				{
+					projectId,
+					locale: 'de',
+					schemaVersion: 2,
+					extensionName: 'Ruler',
+					sections: [
+						{ id: 'love', type: 'testimonials', items: [{ quote: 'Great', author: 'A', sourceUrl: '' }] },
+					],
+					locales: { de: { tagline: 'Lesen' } },
+				},
+				{},
+			),
+		)
+		expect(previewLandingPage).toHaveBeenCalledWith({
+			projectId,
+			locale: 'de',
+			form: expect.objectContaining({
+				schemaVersion: 2,
+				sections: [expect.objectContaining({ type: 'testimonials' })],
+				locales: { de: { tagline: 'Lesen' } },
+			}),
+		})
+		expect(out.problems[0].fix).toBe('add it')
+	})
+
+	it('versions, rollback and the custom-domain tools reach their BFF procedures', async () => {
+		const stub = {
+			listLandingVersions: vi.fn(async () => ({ live: 2, versions: [] })),
+			rollbackLandingPage: vi.fn(async () => ({
+				url: 'https://page.extenshi.io/abc234def',
+				versionNumber: 3,
+				warnings: [],
+				homepage: { registered: true, previousUrl: null },
+			})),
+			getCustomDomain: vi.fn(async () => ({ domain: null })),
+			setCustomDomain: vi.fn(async () => ({ domain: { status: 'PENDING' } })),
+			verifyCustomDomain: vi.fn(async () => ({ domain: { status: 'VERIFIED' } })),
+			removeCustomDomain: vi.fn(async () => ({ removed: true })),
+		}
+		const tools = toolsWith(stub)
+		await tools.list_landing_page_versions.execute({ projectId }, {})
+		const rolled = JSON.parse(await tools.rollback_landing_page.execute({ projectId, versionNumber: 1 }, {}))
+		expect(stub.rollbackLandingPage).toHaveBeenCalledWith({ projectId, versionNumber: 1 })
+		expect(rolled.nextSteps.join('\n')).toContain('list_landing_page_versions')
+		await tools.set_custom_domain.execute({ projectId, hostname: 'www.example.com' }, {})
+		expect(stub.setCustomDomain).toHaveBeenCalledWith({ projectId, hostname: 'www.example.com' })
+		await tools.verify_custom_domain.execute({ projectId }, {})
+		await tools.get_custom_domain.execute({ projectId }, {})
+		await tools.remove_custom_domain.execute({ projectId }, {})
+		for (const fn of Object.values(stub)) expect(fn).toHaveBeenCalledTimes(1)
+		expect(tools.rollback_landing_page.parameters.safeParse({ projectId, versionNumber: 0 }).success).toBe(
+			false,
+		)
+	})
+
+	it('accepts the v2 fields and rejects an unknown section type or font', () => {
+		const schema = toolsWith({}).publish_landing_page.parameters
+		const base = { projectId, extensionName: 'x', schemaVersion: 2 }
+		expect(
+			schema.safeParse({
+				...base,
+				sections: [{ id: 'hero', type: 'hero' }],
+				tokens: { mode: 'auto', bodyFont: 'hyperlegible' },
+			}).success,
+		).toBe(true)
+		expect(schema.safeParse({ ...base, sections: [{ id: 'x', type: 'carousel' }] }).success).toBe(false)
+		expect(schema.safeParse({ ...base, tokens: { bodyFont: 'Comic Sans' } }).success).toBe(false)
+	})
+
+	it('install instructions: read, publish the saved form, unpublish keeps the URL', async () => {
+		const getInstructionsPage = vi.fn(async () => ({ page: null, draft: null }))
+		const publishInstructions = vi.fn(async () => ({
+			publicCode: 'abc234def',
+			url: 'https://x/instructions/abc234def',
+		}))
+		const setInstructionsEnabled = vi.fn(async () => ({ enabled: false }))
+		const tools = toolsWith({ getInstructionsPage, publishInstructions, setInstructionsEnabled })
+		await tools.get_install_instructions.execute({ projectId }, {})
+		expect(getInstructionsPage).toHaveBeenCalledWith({ projectId })
+		await tools.publish_install_instructions.execute({ projectId }, {})
+		expect(publishInstructions).toHaveBeenCalledWith({ projectId })
+		await tools.unpublish_install_instructions.execute({ projectId }, {})
+		expect(setInstructionsEnabled).toHaveBeenCalledWith({ projectId, enabled: false })
+		expect(
+			tools.set_page_translations.parameters.safeParse({
+				projectId,
+				surface: 'instructions',
+				publicCode: 'abc234def',
+				locale: 'de',
+				translations: { 'feature:0': 'Tabs synchronisieren' },
+			}).success,
+		).toBe(true)
+	})
+
+	it('page translations: read on project.read, save one language of one page', async () => {
+		const getPageTranslations = vi.fn(async () => ({ pages: [] }))
+		const setPageTranslations = vi.fn(async () => ({ status: [] }))
+		const tools = toolsWith({ getPageTranslations, setPageTranslations })
+		await tools.get_page_translations.execute({ projectId }, {})
+		expect(getPageTranslations).toHaveBeenCalledWith({ projectId })
+		const args = {
+			projectId,
+			surface: 'uninstall',
+			publicCode: 'abc234def',
+			locale: 'de',
+			translations: { headline: 'Schade' },
+		}
+		await tools.set_page_translations.execute(args, {})
+		expect(setPageTranslations).toHaveBeenCalledWith(args)
+		expect(tools.set_page_translations.parameters.safeParse({ ...args, surface: 'privacy' }).success).toBe(
+			false,
+		)
+	})
+
+	it('legal translations: dispatch by document, never to the other document', async () => {
+		const getPrivacyPolicyTranslations = vi.fn(async () => ({ fields: [] }))
+		const setPrivacyPolicyTranslations = vi.fn(async () => ({ status: [] }))
+		const getLicenseTermsTranslations = vi.fn(async () => ({ fields: [] }))
+		const setLicenseTermsTranslations = vi.fn(async () => ({ status: [] }))
+		const tools = toolsWith({
+			getPrivacyPolicyTranslations,
+			setPrivacyPolicyTranslations,
+			getLicenseTermsTranslations,
+			setLicenseTermsTranslations,
+		})
+		await tools.get_legal_translations.execute({ projectId, document: 'privacy_policy' }, {})
+		expect(getPrivacyPolicyTranslations).toHaveBeenCalledWith({ projectId })
+		await tools.set_legal_translations.execute(
+			{
+				projectId,
+				document: 'license_terms',
+				locale: 'de',
+				translations: { 'answer:paidFeatures': 'Designs' },
+			},
+			{},
+		)
+		expect(setLicenseTermsTranslations).toHaveBeenCalledWith({
+			projectId,
+			locale: 'de',
+			translations: { 'answer:paidFeatures': 'Designs' },
+		})
+		expect(setPrivacyPolicyTranslations).not.toHaveBeenCalled()
+		expect(
+			tools.get_legal_translations.parameters.safeParse({ projectId, document: 'uninstall' }).success,
+		).toBe(false)
 	})
 
 	it('shares the generate_landing_page field limits', () => {

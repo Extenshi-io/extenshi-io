@@ -44,6 +44,15 @@ export interface ExtensionRef {
 }
 
 export interface Bff extends PayBff {
+	/**
+	 * Create a project owned by this identity — the same service as the Dojo
+	 * wizard. Idempotent per `idempotencyKey`. Requires project.write.
+	 */
+	createProject(input: import('@extenshi/contracts').AgentCreateProject): Promise<unknown>
+	/** Owner decisions with status, suggested defaults and what each blocks. */
+	getDecisions(input: { projectId: string }): Promise<unknown>
+	/** Record a PROPOSAL; only the owner decides, in Dojo. Requires project.write. */
+	proposeDecision(input: import('@extenshi/contracts').ProposeDecision): Promise<unknown>
 	importManifest(input: import('@extenshi/contracts').ManifestImport): Promise<unknown>
 	getProjectWorkspace(input: { projectId: string }): Promise<unknown>
 	diffProjectWorkspace(input: import('@extenshi/contracts').WorkspacePatch): Promise<unknown>
@@ -132,6 +141,64 @@ export interface Bff extends PayBff {
 	}): Promise<unknown>
 	getLandingPage(input: { projectId: string }): Promise<unknown>
 	unpublishLandingPage(input: { projectId: string }): Promise<unknown>
+	/** Schema-v2 homepage drafted from project state: {form, sources, todos, problems, previewUrl}. Writes nothing. */
+	draftLandingPage(input: {
+		projectId: string
+		storeUrls?: { chrome?: string; firefox?: string; edge?: string }
+	}): Promise<unknown>
+	/** Render exactly as publish would (validation, Pay offers, canonical) without writing. */
+	previewLandingPage(input: {
+		projectId: string
+		form: Record<string, unknown>
+		locale?: string
+	}): Promise<unknown>
+	listLandingVersions(input: { projectId: string }): Promise<unknown>
+	/** Publish an earlier version's form as a new version. */
+	rollbackLandingPage(input: {
+		projectId: string
+		versionNumber: number
+		registerAsHomepage?: boolean
+	}): Promise<unknown>
+	/** Custom domain: records to set, verification state, next step. */
+	getCustomDomain(input: { projectId: string }): Promise<unknown>
+	setCustomDomain(input: { projectId: string; hostname: string }): Promise<unknown>
+	verifyCustomDomain(input: { projectId: string }): Promise<unknown>
+	removeCustomDomain(input: { projectId: string }): Promise<unknown>
+	/** The hosted install instructions page (it. 10 T8): state, URL and the saved form. */
+	getInstructionsPage(input: { projectId: string }): Promise<unknown>
+	/** Publish the install instructions (the saved form when `input` is omitted). */
+	publishInstructions(input: { projectId: string; input?: Record<string, unknown> }): Promise<unknown>
+	setInstructionsEnabled(input: { projectId: string; enabled: boolean }): Promise<unknown>
+	/** Every uninstall form and welcome page of the project: translatable fields and per-language status. */
+	getPageTranslations(input: { projectId: string }): Promise<unknown>
+	/** Save one language of one page (text by field path; the server records the source text). */
+	setPageTranslations(input: {
+		projectId: string
+		surface: 'uninstall' | 'welcome' | 'instructions'
+		publicCode: string
+		locale: string
+		translations: Record<string, string>
+	}): Promise<unknown>
+	/**
+	 * Translated copies of the hosted privacy policy / license terms (it. 13 T10
+	 * L3): what the developer can translate (edited sections, own answers),
+	 * languages, status per language and the translation URLs. The English
+	 * version stays the binding text.
+	 */
+	getPrivacyPolicyTranslations(input: { projectId: string }): Promise<unknown>
+	setPrivacyPolicyTranslations(input: {
+		projectId: string
+		locale: string
+		translations: Record<string, string>
+		sources?: Record<string, string>
+	}): Promise<unknown>
+	getLicenseTermsTranslations(input: { projectId: string }): Promise<unknown>
+	setLicenseTermsTranslations(input: {
+		projectId: string
+		locale: string
+		translations: Record<string, string>
+		sources?: Record<string, string>
+	}): Promise<unknown>
 	/**
 	 * Upload one PNG/JPEG/WebP to the project's PUBLIC media store (the same one
 	 * Dojo uploads use). The BFF re-checks magic bytes, strips metadata, enforces
@@ -178,6 +245,9 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 	) as unknown as PayBff
 	return {
 		...pay,
+		createProject: (input) => client.devProject.agentCreateProject.mutate(input),
+		getDecisions: (input) => client.devProject.agentGetDecisions.query(input),
+		proposeDecision: (input) => client.devProject.agentProposeDecision.mutate(input),
 		importManifest: (input) => client.devProject.agentImportManifest.mutate(input),
 		getProjectWorkspace: (input) => client.devProject.agentGetWorkspace.query(input),
 		diffProjectWorkspace: (input) => client.devProject.agentDiffWorkspace.mutate(input),
@@ -213,6 +283,23 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		publishLandingPage: (input) => client.devProject.agentPublishLandingPage.mutate(input as never),
 		getLandingPage: (input) => client.devProject.agentGetLandingPage.query(input),
 		unpublishLandingPage: (input) => client.devProject.agentUnpublishLandingPage.mutate(input),
+		draftLandingPage: (input) => client.devProject.agentDraftLandingPage.query(input),
+		previewLandingPage: (input) => client.devProject.agentPreviewLandingPage.mutate(input as never),
+		listLandingVersions: (input) => client.devProject.agentListLandingVersions.query(input),
+		rollbackLandingPage: (input) => client.devProject.agentRollbackLandingPage.mutate(input),
+		getCustomDomain: (input) => client.devProject.agentGetCustomDomain.query(input),
+		setCustomDomain: (input) => client.devProject.agentSetCustomDomain.mutate(input),
+		verifyCustomDomain: (input) => client.devProject.agentVerifyCustomDomain.mutate(input),
+		removeCustomDomain: (input) => client.devProject.agentRemoveCustomDomain.mutate(input),
+		getInstructionsPage: (input) => client.devProject.agentGetInstructionsPage.query(input),
+		publishInstructions: (input) => client.devProject.agentPublishInstructions.mutate(input as never),
+		setInstructionsEnabled: (input) => client.devProject.agentSetInstructionsEnabled.mutate(input),
+		getPageTranslations: (input) => client.devProject.agentGetPageTranslations.query(input),
+		setPageTranslations: (input) => client.devProject.agentSetPageTranslations.mutate(input),
+		getPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentGetTranslations.query(input),
+		setPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentSetTranslations.mutate(input),
+		getLicenseTermsTranslations: (input) => client.payLicenseTerms.getTranslations.query(input),
+		setLicenseTermsTranslations: (input) => client.payLicenseTerms.setTranslations.mutate(input),
 		uploadProjectMedia: (input) => client.devProject.agentUploadProjectMedia.mutate(input),
 	}
 }
