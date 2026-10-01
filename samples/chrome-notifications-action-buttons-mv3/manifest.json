@@ -1,0 +1,14 @@
+{
+  "name": "Stand-up Reminder",
+  "description": "Recurring reminders with notification action buttons that survive service worker restarts.",
+  "version": "1.0",
+  "manifest_version": 3,
+  "permissions": ["alarms", "notifications", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Stand-up reminder"
+  }
+}
