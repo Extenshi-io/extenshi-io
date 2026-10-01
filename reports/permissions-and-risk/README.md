@@ -5,7 +5,7 @@ report covers two things extenshi.io is built to measure: the **sensitive
 permissions** extensions request, and the **automated risk rating** of the
 extensions we've scanned.
 
-> **Snapshot:** 2026-09-01 · Permissions over 373,095 extensions · Risk over 299,886 scanned extensions
+> **Snapshot:** 2026-10-01 · Permissions over 392,811 extensions · Risk over 321,327 scanned extensions
 
 ## Sensitive permissions requested
 
@@ -15,40 +15,40 @@ these are the ones that meaningfully widen access to you or your browsing.
 
 | Permission | What it grants | Extensions | Share |
 |---|---|---:|---:|
-| `tabs` | Read your tabs | 105,449 | 28.3% |
-| `<all_urls>` | Access all sites | 25,385 | 6.8% |
-| `downloads` | Manage downloads | 21,711 | 5.8% |
-| `cookies` | Read/write cookies | 18,817 | 5.0% |
-| `webRequest` | Intercept web requests | 18,728 | 5.0% |
-| `webNavigation` | Track navigation | 13,965 | 3.7% |
-| `declarativeNetRequest` | Modify network requests | 11,583 | 3.1% |
-| `webRequestBlocking` | Block web requests | 6,932 | 1.9% |
-| `bookmarks` | Read/write bookmarks | 6,131 | 1.6% |
-| `clipboardRead` | Read clipboard | 4,518 | 1.2% |
-| `nativeMessaging` | Talk to native apps | 4,376 | 1.2% |
-| `history` | Read browsing history | 3,442 | 0.9% |
-| `proxy` | Control proxy settings | 2,996 | 0.8% |
-| `debugger` | Attach the debugger | 2,849 | 0.8% |
-| `management` | Manage other extensions | 2,523 | 0.7% |
-| `geolocation` | Access location | 1,296 | 0.3% |
-| `privacy` | Change privacy settings | 927 | 0.2% |
+| `tabs` | Read your tabs | 109,889 | 28.0% |
+| `<all_urls>` | Access all sites | 26,340 | 6.7% |
+| `downloads` | Manage downloads | 23,576 | 6.0% |
+| `cookies` | Read/write cookies | 19,768 | 5.0% |
+| `webRequest` | Intercept web requests | 19,608 | 5.0% |
+| `webNavigation` | Track navigation | 14,780 | 3.8% |
+| `declarativeNetRequest` | Modify network requests | 12,301 | 3.1% |
+| `webRequestBlocking` | Block web requests | 7,208 | 1.8% |
+| `bookmarks` | Read/write bookmarks | 6,472 | 1.6% |
+| `nativeMessaging` | Talk to native apps | 4,799 | 1.2% |
+| `clipboardRead` | Read clipboard | 4,723 | 1.2% |
+| `history` | Read browsing history | 3,566 | 0.9% |
+| `debugger` | Attach the debugger | 3,273 | 0.8% |
+| `proxy` | Control proxy settings | 3,082 | 0.8% |
+| `management` | Manage other extensions | 2,575 | 0.7% |
+| `geolocation` | Access location | 1,355 | 0.3% |
+| `privacy` | Change privacy settings | 993 | 0.3% |
 
 Raw data: [`data/sensitive-permissions.csv`](./data/sensitive-permissions.csv)
 
 ## Risk distribution
 
 extenshi.io runs automated security scans and assigns each scanned extension a
-risk tier. Across **299,886** extensions scanned so far:
+risk tier. Across **321,327** extensions scanned so far:
 
 | Risk tier | Extensions | Share |
 |---|---:|---:|
-| Critical | 1,360 | 0.5% |
-| High | 1,313 | 0.4% |
-| Medium | 21,828 | 7.3% |
-| Low | 136,815 | 45.6% |
-| None | 138,570 | 46.2% |
+| Critical | 1,493 | 0.5% |
+| High | 1,326 | 0.4% |
+| Medium | 23,649 | 7.4% |
+| Low | 148,615 | 46.3% |
+| None | 146,244 | 45.5% |
 
-**2,673** extensions (0.9%) scored **High or Critical**.
+**2,819** extensions (0.9%) scored **High or Critical**.
 
 Raw data: [`data/risk-distribution.csv`](./data/risk-distribution.csv)
 

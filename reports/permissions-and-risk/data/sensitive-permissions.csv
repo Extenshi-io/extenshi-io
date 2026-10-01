@@ -1,18 +1,18 @@
 snapshot_date,permission,label,extensions,share_pct
-2026-09-01,tabs,"Read your tabs",105449,28.3
-2026-09-01,<all_urls>,"Access all sites",25385,6.8
-2026-09-01,downloads,"Manage downloads",21711,5.8
-2026-09-01,cookies,"Read/write cookies",18817,5.0
-2026-09-01,webRequest,"Intercept web requests",18728,5.0
-2026-09-01,webNavigation,"Track navigation",13965,3.7
-2026-09-01,declarativeNetRequest,"Modify network requests",11583,3.1
-2026-09-01,webRequestBlocking,"Block web requests",6932,1.9
-2026-09-01,bookmarks,"Read/write bookmarks",6131,1.6
-2026-09-01,clipboardRead,"Read clipboard",4518,1.2
-2026-09-01,nativeMessaging,"Talk to native apps",4376,1.2
-2026-09-01,history,"Read browsing history",3442,0.9
-2026-09-01,proxy,"Control proxy settings",2996,0.8
-2026-09-01,debugger,"Attach the debugger",2849,0.8
-2026-09-01,management,"Manage other extensions",2523,0.7
-2026-09-01,geolocation,"Access location",1296,0.3
-2026-09-01,privacy,"Change privacy settings",927,0.2
+2026-10-01,tabs,"Read your tabs",109889,28.0
+2026-10-01,<all_urls>,"Access all sites",26340,6.7
+2026-10-01,downloads,"Manage downloads",23576,6.0
+2026-10-01,cookies,"Read/write cookies",19768,5.0
+2026-10-01,webRequest,"Intercept web requests",19608,5.0
+2026-10-01,webNavigation,"Track navigation",14780,3.8
+2026-10-01,declarativeNetRequest,"Modify network requests",12301,3.1
+2026-10-01,webRequestBlocking,"Block web requests",7208,1.8
+2026-10-01,bookmarks,"Read/write bookmarks",6472,1.6
+2026-10-01,nativeMessaging,"Talk to native apps",4799,1.2
+2026-10-01,clipboardRead,"Read clipboard",4723,1.2
+2026-10-01,history,"Read browsing history",3566,0.9
+2026-10-01,debugger,"Attach the debugger",3273,0.8
+2026-10-01,proxy,"Control proxy settings",3082,0.8
+2026-10-01,management,"Manage other extensions",2575,0.7
+2026-10-01,geolocation,"Access location",1355,0.3
+2026-10-01,privacy,"Change privacy settings",993,0.3
