@@ -1572,6 +1572,20 @@ describe('import_manifest execute', () => {
 		expect(imported).toHaveBeenCalledWith(input)
 		expect(() => tool.parameters.parse({ ...envelope, dryRun: false })).toThrow('expectedStateHash')
 		expect(() => tool.parameters.parse({ ...envelope, tombstones: ['/release'] })).toThrow('tombstones')
+
+		const localized = tool.parameters.parse({
+			...envelope,
+			messagesByLocale: { en: { name: { message: 'Reader' } }, pt_BR: { name: { message: 'Leitor' } } },
+		})
+		await tool.execute(localized, {})
+		expect(imported).toHaveBeenLastCalledWith(
+			expect.objectContaining({ messagesByLocale: localized.messagesByLocale }),
+		)
+		expect(() =>
+			tool.parameters.parse({ ...envelope, messagesByLocale: { 'pt-BR': { name: { message: 'x' } } } }),
+		).toThrow('Chrome Web Store locale')
+		const schema = tool.parameters['~standard'].jsonSchema.input({ target: 'draft-07' })
+		expect(schema.properties.messagesByLocale.description).toContain('_locales/<lang>')
 	})
 })
 

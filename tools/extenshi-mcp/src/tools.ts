@@ -150,7 +150,7 @@ export const SERVER_INSTRUCTIONS =
 	'Read get_decisions early: the AMO add-on id, license, seller identity and pricing are owner decisions — ' +
 	'propose defaults with propose_decision; the owner decides them in Dojo, and release readiness blocks on them. ' +
 	'Use list_extension_templates before the manifest, ' +
-	'and get_project_scaffold for a new project. Preserve existing source. For an existing extension, read get_project_workspace then preview and apply import_manifest to fill Dojo from its real manifest and default-locale messages before configuring services. Review the integration diff and preserve local edits; write integration.file ' +
+	'and get_project_scaffold for a new project. Preserve existing source. For an existing extension, read get_project_workspace then preview and apply import_manifest to fill Dojo from its real manifest and its _locales messages (messagesByLocale) before configuring services. Review the integration diff and preserve local edits; write integration.file ' +
 	'verbatim to integration.path, check integration.unwired and re-read state after cabinet edits. ' +
 	'Check get_credit_balance before metered work. get_risk_by_store_ids covers up to 40 store IDs ' +
 	'for one read; get_security costs three reads for detailed findings. Hosted policy tools require ' +
@@ -1141,7 +1141,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'import_manifest',
 			description:
-				'Import an existing manifest.json into the Dojo manifest editor and project labels. Input: parsed JSON and optional default-locale messages. Source import fills supported fields and preserves all other JSON; built imports remain separate observations. Default dryRun=true returns changes and expectedStateHash without writing; dryRun=false with that hash applies them. Does not infer data collection, prices, or publication. Requires project.write.' +
+				'Import an existing manifest.json into the Dojo manifest editor and project labels. Input: parsed JSON, optional default-locale messages, and optional messagesByLocale — every _locales/<lang>/messages.json keyed by locale code (only the keys named by the __MSG_*__ fields of the manifest are needed) — whose non-default locales fill the Dojo translations of name and description. Repository translations replace editor text per field; translations the repository lacks are kept, and warnings name each replaced one. Source import fills supported fields and preserves all other JSON; built imports remain separate observations. Default dryRun=true returns changes and expectedStateHash without writing; dryRun=false with that hash applies them. Does not infer data collection, prices, or publication. Requires project.write.' +
 				PROVENANCE_HINT,
 			parameters: importManifestSchema,
 			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: true, openWorldHint: true },

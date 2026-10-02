@@ -56,7 +56,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_development_guide` | Complete tool inventory for this connection, service directory, GitHub guidance and the ordered development-to-maintenance plan; compact overview by default, full parts via `sections` | Free (no key) |
 | `list_extension_templates` | Extension shapes, minimum permissions and browser-specific manifest requirements | Free (no key) |
 | `connection_diagnostics` | Authentication, scopes, backend workspace contracts and capabilities | Free; identity required |
-| `import_manifest` | Import manifest JSON into the Dojo editor and project labels; preview changes and apply with a state hash. | Requires project.write for OAuth |
+| `import_manifest` | Import manifest JSON (plus its `_locales` messages via `messagesByLocale`) into the Dojo editor, translations and project labels; preview changes and apply with a state hash. | Requires project.write for OAuth |
 | `get_project_workspace` | Revisioned repository metadata, source/built manifests, scope and release snapshot | Free; identity required |
 | `diff_project_state` | Three-way metadata preview against a server-held base revision | Free; project read access |
 | `apply_project_patch` | Apply a typed metadata patch with conflicts, tombstones and idempotency | Requires project.write for OAuth |
