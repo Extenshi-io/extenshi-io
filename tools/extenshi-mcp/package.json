@@ -48,6 +48,10 @@
     "./telemetry": {
       "types": "./dist/telemetry.d.ts",
       "default": "./dist/telemetry.js"
+    },
+    "./mcp-analytics": {
+      "types": "./dist/mcp-analytics.d.ts",
+      "default": "./dist/mcp-analytics.js"
     }
   },
   "files": [
@@ -64,6 +68,7 @@
   "dependencies": {
     "@extenshi/contracts": "^0.2.0",
     "@extenshi/publisher": "^0.8.1",
+    "@posthog/mcp": "0.21.2",
     "@trpc/client": "^11.19.0",
     "@trpc/server": "^11.19.0",
     "fastmcp": "^4.20.17",

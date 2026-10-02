@@ -141,6 +141,15 @@ function getClient(): PostHog | null {
 	return client
 }
 
+/**
+ * The shared posthog-node client, or null when telemetry is disabled. Exposed so
+ * the MCP package's PostHog MCP Analytics instrumentation (mcp-analytics.ts)
+ * rides this same client: one opt-out, one flush path (flushTelemetry).
+ */
+export function telemetryClient(): PostHog | null {
+	return getClient()
+}
+
 function baseProps(): Record<string, unknown> {
 	return {
 		surface,

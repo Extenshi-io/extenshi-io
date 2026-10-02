@@ -24,6 +24,7 @@ import { createRequire } from 'node:module'
 import { FastMCP, UserError } from 'fastmcp'
 import { type Bff, makeBff } from './bff.js'
 import { loadConfig } from './config.js'
+import { instrumentMcpAnalytics } from './mcp-analytics.js'
 import { reportServerStarted } from './startup.js'
 import { flushTelemetry, initTelemetry } from './telemetry.js'
 import {
@@ -74,6 +75,7 @@ const stdioDeps: ToolDeps = {
 }
 
 registerTools(server, stdioDeps)
+instrumentMcpAnalytics({ surface: 'mcp' })
 
 // Flush buffered telemetry on shutdown. 'beforeExit' covers the natural
 // stdin-closed exit; SIGTERM/SIGINT (the MCP client killing the server) bypass
