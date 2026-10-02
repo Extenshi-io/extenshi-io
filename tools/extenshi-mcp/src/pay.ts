@@ -37,7 +37,8 @@ export const paySchemas = {
 	getPaySeller: app,
 	connectPaySeller: app.extend({
 		provider: z.literal('stripe').default('stripe'),
-		accountKind: z.enum(['standard', 'express']).default('standard'),
+		// Standard only: the BFF refuses new Express accounts (platform would be liable for them).
+		accountKind: z.literal('standard').default('standard'),
 	}),
 	refreshPaySeller: app,
 	setPaySellerProfile: app.extend({
