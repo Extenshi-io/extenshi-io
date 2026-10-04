@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<style>
+		body {
+			--bg: #ffffff;
+			--fg: #1f1b16;
+			--field: #faf9f5;
+			--accent: #fb5b1a;
+			width: 320px;
+			margin: 0;
+			padding: 12px;
+			background: var(--bg);
+			color: var(--fg);
+			font-family: system-ui, sans-serif;
+		}
+		body[data-theme="sepia"] { --bg: #f6eeda; --fg: #4a3b28; --field: #fbf5e6; --accent: #b06a2c; }
+		body[data-theme="dark"] { --bg: #1f1b16; --fg: #f0ece4; --field: #2a251e; --accent: #ff8a4c; }
+		textarea {
+			width: 100%;
+			box-sizing: border-box;
+			min-height: 200px;
+			padding: 8px;
+			background: var(--field);
+			color: var(--fg);
+			border: 1px solid var(--accent);
+			border-radius: 8px;
+			resize: vertical;
+			font-family: inherit;
+		}
+		.row {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-top: 8px;
+			font-size: 12px;
+		}
+		.row a { color: var(--accent); }
+		#status { opacity: 0.75; }
+	</style>
+</head>
+<body data-theme="light">
+	<textarea id="note" placeholder="Type — this saves as you go (locally)."></textarea>
+	<div class="row">
+		<span id="status">Loading…</span>
+		<a href="#" id="open-options">Settings</a>
+	</div>
+	<script src="popup.js"></script>
+</body>
+</html>
