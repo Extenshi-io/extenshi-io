@@ -35,7 +35,7 @@ export interface ScanArtifactOptions {
 	apiKey: string
 	/** Scan backend base URL, no trailing slash (e.g. https://scan.extenshi.io). */
 	scanUrl: string
-	/** Numeric catalog ID — required to spend a FREE credit on an unverified extension. */
+	/** Numeric catalog ID, forwarded as-is. Optional: free and paid scans both run without it. */
 	extensionId?: string
 	/** Called for each upstream progress event so the caller can stream it. */
 	onProgress?: (p: ScanProgress) => void
