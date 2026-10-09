@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<style>
+		body {
+			width: 320px;
+			margin: 0;
+			padding: 14px;
+			background: #ffffff;
+			color: #1f1b16;
+			font-family: system-ui, sans-serif;
+			line-height: 1.45;
+		}
+		h1 { font-size: 16px; margin: 0 0 10px; }
+		ul { list-style: none; margin: 0 0 12px; padding: 0; }
+		li {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 10px;
+			padding: 6px 0;
+			border-bottom: 1px solid #faf9f5;
+			font-size: 13px;
+		}
+		kbd {
+			font-family: ui-monospace, monospace;
+			font-size: 12px;
+			border: 1px solid #e3ded4;
+			border-radius: 6px;
+			padding: 2px 7px;
+			background: #faf9f5;
+			white-space: nowrap;
+		}
+		kbd.missing { border-color: #fb5b1a; color: #fb5b1a; }
+		button {
+			width: 100%;
+			padding: 8px;
+			border: 1px solid #fb5b1a;
+			border-radius: 8px;
+			background: #ffffff;
+			color: #fb5b1a;
+			font-size: 13px;
+			font-weight: 600;
+			cursor: pointer;
+		}
+		button:hover { background: #fb5b1a; color: #ffffff; }
+		.hint { font-size: 11px; color: #777; margin: 10px 0 0; }
+	</style>
+</head>
+<body>
+	<h1>Tab Tamer shortcuts</h1>
+	<ul id="command-list"></ul>
+	<button id="rebind">Rebind in Chrome's shortcut settings</button>
+	<p class="hint">
+		Orange means Chrome refused the binding or nobody assigned one yet —
+		the rebind page fixes both.
+	</p>
+	<script src="popup.js"></script>
+</body>
+</html>

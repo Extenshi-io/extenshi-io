@@ -1,0 +1,40 @@
+{
+	"name": "Tab Tamer",
+	"description": "Keyboard shortcuts that pin and mute the current tab — plus one global binding that works when Chrome is in the background.",
+	"version": "1.0",
+	"manifest_version": 3,
+	"background": {
+		"service_worker": "background.js"
+	},
+	"action": {
+		"default_popup": "popup.html",
+		"default_title": "Tab Tamer — shortcut cheat sheet"
+	},
+	"commands": {
+		"toggle-pin": {
+			"suggested_key": {
+				"default": "Alt+Shift+P"
+			},
+			"description": "Pin or unpin the current tab"
+		},
+		"mute-tab": {
+			"suggested_key": {
+				"default": "Alt+Shift+M"
+			},
+			"description": "Mute or unmute the current tab"
+		},
+		"mute-tab-global": {
+			"suggested_key": {
+				"default": "Ctrl+Shift+0"
+			},
+			"description": "Mute or unmute the current tab from any app",
+			"global": true
+		},
+		"_execute_action": {
+			"suggested_key": {
+				"default": "Ctrl+Shift+Y",
+				"mac": "Command+Shift+Y"
+			}
+		}
+	}
+}
