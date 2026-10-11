@@ -145,6 +145,7 @@ export interface Bff extends PayBff {
 	draftLandingPage(input: {
 		projectId: string
 		storeUrls?: { chrome?: string; firefox?: string; edge?: string }
+		accentColor?: string
 	}): Promise<unknown>
 	/** Render exactly as publish would (validation, Pay offers, canonical) without writing. */
 	previewLandingPage(input: {

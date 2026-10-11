@@ -65,7 +65,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `verify_hosted_artifact` | Re-fetch and compare a hosted page against its record (verified/changed/unreachable) | Requires hosted.write for OAuth |
 | `remove_hosted_page` | Forget a registered homepage/support URL (public page keeps working) | Requires hosted.write for OAuth |
 | `list_hosted_pages` | Registered hosted pages with verification status | Free; identity required |
-| `publish_landing_page` | Host the landing page at page.extenshi.io/{code} (or a custom domain root) from the Page generator form, v1 or schema v2 (versioned; registered as the homepage by default) | Requires hosted.write for OAuth |
+| `publish_landing_page` | Host the landing page at page.extenshi.io/{code} (or a custom domain root) from the Page generator form, v1 or schema v2 (versioned; registered as the homepage by default; `live.status` says whether the public URL serves it) | Requires hosted.write for OAuth |
 | `get_landing_page` | Hosted landing page code, live version, URL and form | Free; identity required |
 | `unpublish_landing_page` | Take the hosted landing page offline (same URL on the next publish) | Requires hosted.write for OAuth |
 | `draft_landing_page` | Draft a schema-v2 homepage (sections, theme, SEO, locales) from project state, with sources and to-dos | Free; identity required |

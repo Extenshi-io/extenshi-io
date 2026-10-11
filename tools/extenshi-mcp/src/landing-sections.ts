@@ -13,8 +13,9 @@
  *   - theme tokens: palette per light/dark (or `auto` = both, by
  *     prefers-color-scheme), fonts from LANDING_FONTS, radius, width;
  *   - per-locale content (`locales`) rendered as one page per locale with
- *     hreflang alternates;
- *   - SEO / Open Graph fields and JSON-LD (SoftwareApplication + FAQPage).
+ *     hreflang alternates and `dir="rtl"` for right-to-left languages;
+ *   - SEO / Open Graph fields and JSON-LD (SoftwareApplication + FAQPage),
+ *     whose `offers` carry the real prices of plans bound to Pay offers.
  *
  * Output rules are the v1 rules: no JavaScript, every string HTML-escaped,
  * links scheme-clamped (safeHref), images clamped (safeImageSrc), CSS built
@@ -34,7 +35,7 @@
  *   sed "s#from 'shared-types\/#from './#" shared-types/landing-sections.ts > tools/extenshi-cli/src/landing-sections.ts
  */
 
-import { generateJsonLd, jsonLdFromLanding } from './json-ld.js'
+import { generateJsonLd, type JsonLdPriceInput, jsonLdFromLanding } from './json-ld.js'
 import {
 	absoluteImageUrl,
 	buildLandingPage,
@@ -293,6 +294,8 @@ export const LANDING_UI_DEFAULTS = {
 	lifetime: 'lifetime',
 	source: 'Source',
 	languages: 'Languages',
+	/** Alt text of the hero logo; `{name}` is replaced by the extension name. */
+	logoAlt: '{name} logo',
 } as const
 export type LandingUiKey = keyof typeof LANDING_UI_DEFAULTS
 
@@ -352,6 +355,16 @@ export function normalizeLandingLocale(raw: unknown): string | null {
 	if (script) tag += `-${script.charAt(0).toUpperCase()}${script.slice(1).toLowerCase()}`
 	if (region) tag += `-${region.toUpperCase()}`
 	return tag
+}
+
+// Same set as RTL_LANGUAGES in shared-types/end-user-locale.ts (this file is
+// copied into the CLI and MCP packages, so it cannot import it; a test pins them).
+const RTL_LANGUAGES = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'ug', 'yi', 'dv'])
+
+/** `<html dir>` for a locale page: `rtl` for Arabic, Hebrew, Persian, Urdu and other RTL scripts. */
+export function landingLocaleDir(locale: string): 'ltr' | 'rtl' {
+	const lang = normalizeLandingLocale(locale)?.split('-')[0]
+	return lang && RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr'
 }
 
 /** URL path segment for a locale: lowercase BCP 47 (`pt-br`). */
@@ -789,10 +802,12 @@ function uiProblems(out: LandingProblem[], path: string, ui: unknown) {
 	}
 	for (const [key, value] of Object.entries(ui)) {
 		if (!hasOwn(LANDING_UI_DEFAULTS, key)) {
+			// A warning, not an error: the renderer ignores unknown keys, and a form drafted by a
+			// newer BFF (with a key added since) must still publish on an older replica mid-rollout.
 			out.push({
 				path: `${path}.${key}`,
-				severity: 'error',
-				message: `unknown ui string "${key}"`,
+				severity: 'warning',
+				message: `unknown ui string "${key}" is ignored`,
 				fix: `Use one of: ${Object.keys(LANDING_UI_DEFAULTS).join(', ')}.`,
 			})
 		} else textLimit(out, `${path}.${key}`, value, LANDING_V2_LIMITS.shortText)
@@ -1006,9 +1021,23 @@ function arr<T>(v: unknown, max: number): T[] {
 	return Array.isArray(v) ? (v.slice(0, max) as T[]) : []
 }
 
+/** A live Extenshi Pay offer as the renderer needs it (the BFF's LandingPayOffer fits). */
+export interface LandingRenderOffer {
+	sku: string
+	/** Minor units, as stored on the offer (formatLandingPrice divides by 100). */
+	amountMinor: number
+	currency: string
+}
+
 export interface RenderLandingOptions {
 	/** Locale to render; default the form's default locale. */
 	locale?: string
+	/**
+	 * The project's active Pay offers (hosted rendering only). Plans bound to
+	 * one by offerSku get a JSON-LD Offer with its real price; without them a
+	 * page that sells something claims no price rather than a free one.
+	 */
+	payOffers?: readonly LandingRenderOffer[]
 }
 
 /**
@@ -1021,7 +1050,39 @@ export function renderLandingForm(form: LandingForm, opts: RenderLandingOptions 
 	const locales = landingLocales(form)
 	const requested = normalizeLandingLocale(opts.locale)
 	const locale = requested && locales.includes(requested) ? requested : def
-	return renderV2(localizeLandingForm(form, locale), form, locale, locales, def)
+	return renderV2(localizeLandingForm(form, locale), form, locale, locales, def, opts.payOffers ?? [])
+}
+
+/**
+ * JSON-LD prices: one per visible plan bound to a live Pay offer. `paid` is
+ * set whenever the page sells something it cannot price exactly (an unbound
+ * or unresolved plan, or offers with no pricing section), so the free default
+ * offer is dropped instead of claiming price 0.
+ */
+function landingJsonLdPrices(
+	sections: LandingSection[],
+	payOffers: readonly LandingRenderOffer[],
+): { paidOffers: JsonLdPriceInput[]; paid: boolean } {
+	const bySku = new Map(payOffers.map((o) => [o.sku, o]))
+	const plans = sections.flatMap((s) =>
+		s.type === 'pricing' ? arr<LandingPricingPlan>(s.plans, LANDING_V2_LIMITS.plans) : [],
+	)
+	const paidOffers: JsonLdPriceInput[] = []
+	let sells = payOffers.length > 0
+	for (const plan of plans) {
+		if (!plan || typeof plan !== 'object') continue
+		const offer = bySku.get(str(plan.offerSku))
+		if (offer && Number.isFinite(offer.amountMinor) && offer.amountMinor >= 0) {
+			paidOffers.push({
+				name: str(plan.name),
+				price: (offer.amountMinor / 100).toFixed(2),
+				currency: offer.currency,
+				...(plan.period ? { period: plan.period } : {}),
+			})
+		}
+		if (str(plan.offerSku) || (str(plan.name) && str(plan.price))) sells = true
+	}
+	return { paidOffers, paid: sells }
 }
 
 function renderV2(
@@ -1030,6 +1091,7 @@ function renderV2(
 	locale: string,
 	locales: string[],
 	def: string,
+	payOffers: readonly LandingRenderOffer[],
 ): string {
 	const ui = (key: LandingUiKey) => str(form.ui?.[key]) || LANDING_UI_DEFAULTS[key]
 	const rawName = str(form.extensionName) || 'My Extension'
@@ -1066,8 +1128,9 @@ function renderV2(
 		svg && !landingLogoSvgProblem(svg)
 			? `data:image/svg+xml,${encodeURIComponent(svg)}`
 			: safeImageSrc(form.logoUrl)
+	const logoAlt = ui('logoAlt').replace(/\{name\}/g, rawName)
 	const logo = logoSrc
-		? `<div class="logo"><img src="${logoSrc}" alt="${name} logo" width="64" height="64" /></div>`
+		? `<div class="logo"><img src="${logoSrc}" alt="${esc(logoAlt)}" width="64" height="64" /></div>`
 		: `<div class="logo monogram" aria-hidden="true">${esc(rawName.charAt(0).toUpperCase() || 'E')}</div>`
 
 	const heading = (s: LandingSection, key?: LandingUiKey) => {
@@ -1289,6 +1352,7 @@ function renderV2(
 				]
 			: []
 
+	const prices = landingJsonLdPrices(sections, payOffers)
 	const app = generateJsonLd(
 		jsonLdFromLanding({
 			extensionName: rawName,
@@ -1301,6 +1365,8 @@ function renderV2(
 			privacyPolicyUrl: str(form.privacyPolicyUrl),
 			homepageUrl: pageUrl || undefined,
 			screenshots: shotUrls,
+			offersPrice: prices.paid ? 'paid' : '0',
+			paidOffers: prices.paidOffers,
 		}),
 	) as ReturnType<typeof generateJsonLd> & { inLanguage?: string }
 	if (str(seo.authorName)) app.author = { '@type': 'Organization', name: str(seo.authorName) }
@@ -1353,8 +1419,10 @@ function renderV2(
 	const bodyFont = font(t.bodyFont)
 	const headingFont = t.headingFont ? font(t.headingFont) : bodyFont
 
+	const dir = landingLocaleDir(locale)
+
 	return `<!doctype html>
-<html lang="${esc(locale)}">
+<html lang="${esc(locale)}"${dir === 'rtl' ? ' dir="rtl"' : ''}>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1367,8 +1435,8 @@ ${head}
 	h1, h2, h3 { font-family: var(--font-heading); line-height: 1.2; }
 	a { color: var(--accent); }
 	.wrap { max-width: var(--width); margin: 0 auto; padding: 0 24px; }
-	.langs { padding: 16px 0 0; text-align: right; font-size: 0.85rem; color: var(--muted); }
-	.langs a, .langs span { margin-left: 10px; }
+	.langs { padding: 16px 0 0; text-align: end; font-size: 0.85rem; color: var(--muted); }
+	.langs a, .langs span { margin-inline-start: 10px; }
 	.hero { padding: 88px 0 56px; text-align: center; }
 	.logo { width: 88px; height: 88px; margin: 0 auto 28px; border-radius: calc(var(--radius) * 1.8); display: flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--border); overflow: hidden; }
 	.logo img { width: 64px; height: 64px; object-fit: contain; }
@@ -1391,15 +1459,15 @@ ${head}
 	.shot img { display: block; width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--border); }
 	.shot figcaption { margin-top: 8px; font-size: 0.85rem; color: var(--muted); text-align: center; }
 	.step-list { list-style: none; counter-reset: step; display: grid; gap: 14px; max-width: 680px; margin: 0 auto; }
-	.step-list li { counter-increment: step; position: relative; padding: 18px 18px 18px 64px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
-	.step-list li::before { content: counter(step); position: absolute; left: 18px; top: 18px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+	.step-list li { counter-increment: step; position: relative; padding: 18px; padding-inline-start: 64px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+	.step-list li::before { content: counter(step); position: absolute; inset-inline-start: 18px; top: 18px; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-weight: 700; display: flex; align-items: center; justify-content: center; }
 	.step-list p { color: var(--muted); font-size: 0.92rem; }
 	.plan { display: flex; flex-direction: column; gap: 10px; }
 	.plan.highlighted { border-color: var(--accent); }
 	.plan .badge { font-size: 0.75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; }
 	.plan .price { font-size: 1.6rem; font-weight: 700; color: var(--fg); }
 	.plan .period { font-size: 0.9rem; font-weight: 400; color: var(--muted); }
-	.plan ul { padding-left: 18px; }
+	.plan ul { padding-inline-start: 18px; }
 	.plan .cta { margin-top: auto; }
 	.note { margin-top: 16px; text-align: center; font-size: 0.85rem; color: var(--muted); }
 	.faq details { max-width: 720px; margin: 0 auto 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; }
@@ -1409,8 +1477,8 @@ ${head}
 	.quote figcaption { margin-top: 12px; font-size: 0.85rem; color: var(--muted); }
 	.releases { list-style: none; max-width: 720px; margin: 0 auto; }
 	.releases > li { padding: 14px 0; border-bottom: 1px solid var(--border); }
-	.releases time { font-size: 0.85rem; font-weight: 400; color: var(--muted); margin-left: 8px; }
-	.releases ul { padding-left: 18px; color: var(--muted); }
+	.releases time { font-size: 0.85rem; font-weight: 400; color: var(--muted); margin-inline-start: 8px; }
+	.releases ul { padding-inline-start: 18px; color: var(--muted); }
 	.link-list { list-style: none; display: flex; flex-wrap: wrap; gap: 10px 22px; justify-content: center; }
 	footer { border-top: 1px solid var(--border); margin-top: 24px; padding: 28px 0 48px; text-align: center; font-size: 0.85rem; color: var(--muted); }
 	footer a { color: var(--muted); margin: 0 10px; }
@@ -1448,12 +1516,15 @@ function projectLinks(form: LandingForm, ui: (k: LandingUiKey) => string): strin
 }
 
 /** Every locale's page: `[{ locale, path, html }]`, default locale first (path ''). */
-export function renderLandingLocales(form: LandingForm): { locale: string; slug: string; html: string }[] {
+export function renderLandingLocales(
+	form: LandingForm,
+	opts: Omit<RenderLandingOptions, 'locale'> = {},
+): { locale: string; slug: string; html: string }[] {
 	const def = landingDefaultLocale(form)
 	return landingLocales(form).map((locale) => ({
 		locale,
 		slug: locale === def ? '' : landingLocaleSlug(locale),
-		html: renderLandingForm(form, { locale }),
+		html: renderLandingForm(form, { ...opts, locale }),
 	}))
 }
 

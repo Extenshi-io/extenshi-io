@@ -1157,6 +1157,42 @@ describe('hosted landing page tools', () => {
 		expect(out.nextSteps.join('\n')).toContain('verify_hosted_artifact')
 	})
 
+	it('publish says the page is live only when the server fetched it back', async () => {
+		const url = 'https://page.extenshi.io/zn53kyn66'
+		const publishWith = async (live: unknown) =>
+			JSON.parse(
+				await toolsWith({
+					publishLandingPage: vi.fn(async () => ({
+						url,
+						publicCode: 'zn53kyn66',
+						versionNumber: 2,
+						warnings: [],
+						homepage: { registered: true, previousUrl: null },
+						...(live ? { live } : {}),
+					})),
+				}).publish_landing_page.execute({ projectId, extensionName: 'Ruler' }, {}),
+			) as { nextSteps: string[] }
+
+		const verified = (await publishWith({ status: 'verified', url })).nextSteps
+		expect(verified[0]).toBe(`The page is live at ${url}; the same URL keeps serving every later version.`)
+		expect(verified.join('\n')).toMatch(/It is now the project homepage/)
+
+		// 2026-10-10: page.extenshi.io had no DNS record, so every path answered Traefik's 404.
+		const unreachable = (
+			await publishWith({ status: 'unreachable', url, detail: 'the page answered HTTP 404' })
+		).nextSteps.join('\n')
+		expect(unreachable).toContain(
+			`PUBLISHED BUT UNREACHABLE: ${url} does not serve the page (the page answered HTTP 404). Do not tell the user it is live.`,
+		)
+		expect(unreachable).not.toMatch(/is live at/)
+		expect(unreachable).toMatch(/HOMEPAGE_URL would send users to an error/)
+
+		// An older BFF without the check: never claimed live.
+		const unknown = (await publishWith(null)).nextSteps.join('\n')
+		expect(unknown).toContain(`Published at ${url}, not verified`)
+		expect(unknown).not.toMatch(/is live at/)
+	})
+
 	it('get and unpublish pass the project through', async () => {
 		const getLandingPage = vi.fn(async () => ({ page: null, url: null, form: null }))
 		const unpublishLandingPage = vi.fn(async () => ({ unpublished: true, homepageRemoved: true }))
@@ -1188,13 +1224,21 @@ describe('hosted landing page tools', () => {
 		}))
 		const tools = toolsWith({ draftLandingPage, previewLandingPage })
 		await tools.draft_landing_page.execute(
-			{ projectId, storeUrls: { chrome: 'https://chromewebstore.google.com/detail/x' } },
+			{
+				projectId,
+				storeUrls: { chrome: 'https://chromewebstore.google.com/detail/x' },
+				accentColor: '#4f46e5',
+			},
 			{},
 		)
 		expect(draftLandingPage).toHaveBeenCalledWith({
 			projectId,
 			storeUrls: { chrome: 'https://chromewebstore.google.com/detail/x' },
+			accentColor: '#4f46e5',
 		})
+		expect(tools.draft_landing_page.parameters.safeParse({ projectId, accentColor: 'indigo' }).success).toBe(
+			false,
+		)
 		const out = JSON.parse(
 			await tools.preview_landing_page.execute(
 				{

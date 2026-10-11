@@ -7,9 +7,10 @@
  * synced copy of shared-types/landing-page.ts: the page an agent generates here
  * is byte-for-byte what the cabinet Page generator downloads for the same form.
  *
- * Extenshi does not host the page. The returned `nextSteps` describe hosting it
- * on any HTTPS origin and registering the URL with `upsert_hosted_page`, which
- * is what feeds HOMEPAGE_URL in the generated integration config.
+ * This tool does not host the page (publish_landing_page does, on
+ * page.extenshi.io). The returned `nextSteps` describe hosting it on any HTTPS
+ * origin and registering the URL with `upsert_hosted_page`, which is what feeds
+ * HOMEPAGE_URL in the generated integration config.
  */
 
 import {
@@ -162,16 +163,41 @@ export function renderGenerateLandingPage(args: LandingPageArgs): GeneratedLandi
 	}
 }
 
-/** Follow-ups after publish_landing_page, from the fields the BFF returned. */
+/**
+ * Follow-ups after publish_landing_page, from the fields the BFF returned.
+ * "Live" is said only when the server fetched the public URL and got the
+ * published bytes back (`live.status: verified`); a BFF without the check
+ * (older deploy) is reported as unverified, never as live.
+ */
 export function hostedLandingNextSteps(result: Record<string, unknown>): string[] {
 	const homepage = (result.homepage ?? {}) as { registered?: boolean; previousUrl?: string | null }
-	const steps = [
-		`The page is live at ${String(result.url)}; the same URL keeps serving every later version.`,
+	const live = (result.live ?? null) as { status?: string; detail?: string } | null
+	const url = String(result.url)
+	const why = live?.detail ? ` (${live.detail})` : ''
+	const verify =
+		'verify_hosted_artifact {projectId, kind: "homepage"} re-checks it (CLI: extenshi page verify); the version is stored and goes live as soon as the URL serves it.'
+	const reachable = live?.status === 'verified'
+	const steps =
+		live?.status === 'verified'
+			? [`The page is live at ${url}; the same URL keeps serving every later version.`]
+			: live?.status === 'unreachable'
+				? [
+						`PUBLISHED BUT UNREACHABLE: ${url} does not serve the page${why}. Do not tell the user it is live. ${verify}`,
+					]
+				: live?.status === 'changed'
+					? [`PUBLISHED BUT NOT SERVED: ${url} answers with different content${why}. ${verify}`]
+					: [`Published at ${url}, not verified (this server does not check the public URL). ${verify}`]
+	steps.push(
 		homepage.registered
-			? 'It is now the project homepage. Re-read get_project_state and write integration.file verbatim to integration.path so HOMEPAGE_URL uses it.'
+			? reachable
+				? 'It is now the project homepage. Re-read get_project_state and write integration.file verbatim to integration.path so HOMEPAGE_URL uses it.'
+				: 'It is registered as the project homepage, but until the URL serves the page HOMEPAGE_URL would send users to an error — verify first, then re-read get_project_state and write integration.file.'
 			: 'The homepage registration was left unchanged (registerAsHomepage: false).',
-		'verify_hosted_artifact {projectId, kind: "homepage"} confirms the public URL serves the published bytes (the hash is contentHash).',
-	]
+	)
+	if (reachable)
+		steps.push(
+			'verify_hosted_artifact {projectId, kind: "homepage"} confirms the public URL serves the published bytes (the hash is contentHash).',
+		)
 	if (homepage.previousUrl)
 		steps.push(`This replaced the previously registered homepage ${homepage.previousUrl}.`)
 	const warnings = Array.isArray(result.warnings) ? result.warnings : []

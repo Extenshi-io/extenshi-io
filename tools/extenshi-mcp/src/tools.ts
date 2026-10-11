@@ -1373,8 +1373,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'By default the URL is also registered as the project homepage, which feeds HOMEPAGE_URL. Hosted ' +
 				'images are limited to store screenshot URLs (from get_extension) and images uploaded in the Dojo ' +
 				'Page generator or with upload_project_media (use its url for local screenshots or a logo); the logo ' +
-				'may also be an inline SVG or a raster data: URL. Returns JSON {url, publicCode, ' +
-				'versionNumber, contentHash, bytes, warnings, homepage, nextSteps}. Requires hosted.write. ' +
+				'may also be an inline SVG or a raster data: URL. After publishing, the server fetches the public URL: ' +
+				'live.status is verified (it serves these bytes), changed or unreachable (with live.detail, e.g. HTTP 404) — ' +
+				'only verified means visitors see the page. Returns JSON {url, publicCode, ' +
+				'versionNumber, contentHash, bytes, warnings, homepage, live, nextSteps}. Requires hosted.write. ' +
 				`API reference: ${HOSTED_PAGES_DOCS}`,
 			parameters: z.object({
 				projectId: z.string().uuid(),
@@ -1435,11 +1437,14 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Draft a full homepage (schema v2) from what the project already knows: the manifest draft and its ' +
 				'store translations, the published page or saved Page generator form, public project media, ' +
 				'Extenshi Pay offers (pricing plans bound by SKU), hosted artifacts (privacy policy, uninstall ' +
-				'feedback form, license terms, support page) and the workspace release/locales. Writes nothing. ' +
+				'feedback form, license terms), owner decisions (seller.supportContact for supportUrl, pricing for the ' +
+				'trial in the FAQ), the newest source/built manifest version and the locales, with built-in headings ' +
+				'translated for the languages Extenshi ships. Writes nothing. ' +
 				'Returns JSON {form, sources (field → where it came from), todos (what only you can supply — ' +
 				'features, how-it-works, real testimonials, translations), problems, previewUrl}. The form is ' +
 				'accepted as-is by preview_landing_page and publish_landing_page. storeUrls fills the install ' +
-				'buttons when the project does not know its listings yet. Requires project.read.',
+				'buttons when the project does not know its listings yet; accentColor sets the brand colour ' +
+				'(the server cannot see your Pay SDK theme). Requires project.read.',
 			parameters: z.object({
 				projectId: z.string().uuid(),
 				storeUrls: z
@@ -1450,6 +1455,13 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					})
 					.optional()
 					.describe('Store listing URLs, when the project does not have them yet.'),
+				accentColor: z
+					.string()
+					.regex(/^#[0-9a-fA-F]{6}$/)
+					.optional()
+					.describe(
+						'Brand colour #rrggbb for the accent — e.g. theme.primaryColor of the Extenshi Pay SDK config in the extension.',
+					),
 			}),
 			execute: async (args, context) => {
 				try {

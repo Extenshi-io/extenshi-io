@@ -31,6 +31,11 @@ export interface JsonLdInput {
 	privacyPolicyUrl?: string
 	/** Free (default) vs paid. Paid still omits a number — we are not the store. */
 	offersPrice?: '0' | 'paid'
+	/**
+	 * Real prices (an Extenshi Pay offer bound to the page). When non-empty they
+	 * replace the free offer: one Offer, or an AggregateOffer for several plans.
+	 */
+	paidOffers?: JsonLdPriceInput[]
 	capabilities?: string[]
 	/** ISO date; omitted when blank. */
 	datePublished?: string
@@ -47,12 +52,87 @@ export interface SoftwareApplicationJsonLd {
 	applicationCategory: 'BrowserApplication'
 	operatingSystem?: string
 	author?: { '@type': 'Organization'; name: string }
-	offers?: { '@type': 'Offer'; price: string; priceCurrency: 'USD' }
+	offers?: JsonLdOffer | JsonLdAggregateOffer | JsonLdOffer[]
 	installUrl?: string
 	sameAs?: string[]
 	featureList?: string[]
 	privacyPolicy?: string
 	screenshot?: string[]
+}
+
+export interface JsonLdPriceInput {
+	name?: string
+	/** Decimal amount in major units ("4.99"). */
+	price: string
+	/** ISO 4217 code, any case. */
+	currency: string
+	period?: 'month' | 'year' | 'one-time' | 'lifetime'
+}
+
+export interface JsonLdOffer {
+	'@type': 'Offer'
+	name?: string
+	price: string
+	priceCurrency: string
+	priceSpecification?: {
+		'@type': 'UnitPriceSpecification'
+		price: string
+		priceCurrency: string
+		billingDuration: 'P1M' | 'P1Y'
+	}
+}
+
+export interface JsonLdAggregateOffer {
+	'@type': 'AggregateOffer'
+	lowPrice: string
+	highPrice: string
+	priceCurrency: string
+	offerCount: number
+	offers: JsonLdOffer[]
+}
+
+const PRICE_RE = /^\d{1,9}(\.\d{1,4})?$/
+const CURRENCY_RE = /^[A-Za-z]{3}$/
+
+/**
+ * Offers for real prices: one Offer, an AggregateOffer when every plan is in
+ * one currency, else a list. Malformed entries are dropped; null when none is left.
+ */
+export function jsonLdOffers(
+	list: readonly JsonLdPriceInput[],
+): JsonLdOffer | JsonLdAggregateOffer | JsonLdOffer[] | null {
+	const offers: JsonLdOffer[] = []
+	for (const p of list) {
+		const price = p.price.trim()
+		const currency = p.currency.trim().toUpperCase()
+		if (!PRICE_RE.test(price) || !CURRENCY_RE.test(currency)) continue
+		const offer: JsonLdOffer = { '@type': 'Offer', price, priceCurrency: currency }
+		const name = (p.name ?? '').trim()
+		if (name) offer.name = name
+		if (p.period === 'month' || p.period === 'year') {
+			offer.priceSpecification = {
+				'@type': 'UnitPriceSpecification',
+				price,
+				priceCurrency: currency,
+				billingDuration: p.period === 'month' ? 'P1M' : 'P1Y',
+			}
+		}
+		offers.push(offer)
+	}
+	const [first] = offers
+	if (!first) return null
+	if (offers.length === 1) return first
+	if (offers.some((o) => o.priceCurrency !== first.priceCurrency)) return offers
+	const prices = offers.map((o) => Number(o.price))
+	const at = (n: number) => offers[prices.indexOf(n)]?.price ?? first.price
+	return {
+		'@type': 'AggregateOffer',
+		lowPrice: at(Math.min(...prices)),
+		highPrice: at(Math.max(...prices)),
+		priceCurrency: first.priceCurrency,
+		offerCount: offers.length,
+		offers,
+	}
 }
 
 function httpUrl(raw: string | undefined): string | null {
@@ -98,7 +178,9 @@ export function generateJsonLd(input: JsonLdInput): SoftwareApplicationJsonLd {
 	if (site) json.url = site
 	if (os.length > 0) json.operatingSystem = os.join(', ')
 	if (author) json.author = { '@type': 'Organization', name: author }
-	if (input.offersPrice !== 'paid') {
+	const paid = jsonLdOffers(input.paidOffers ?? [])
+	if (paid) json.offers = paid
+	else if (input.offersPrice !== 'paid') {
 		json.offers = { '@type': 'Offer', price: '0', priceCurrency: 'USD' }
 	}
 	if (sameAs[0]) json.installUrl = sameAs[0]
@@ -134,6 +216,10 @@ export function jsonLdFromLanding(input: {
 	homepageUrl?: string
 	/** Absolute https screenshot URLs (JSON-LD `screenshot`). */
 	screenshots?: string[]
+	/** `paid` drops the free offer when no real price is known. Default free. */
+	offersPrice?: '0' | 'paid'
+	/** Prices of the plans the page shows (bound Pay offers). */
+	paidOffers?: JsonLdPriceInput[]
 }): JsonLdInput {
 	const capabilities = input.features
 		.map((f) => {
@@ -154,5 +240,7 @@ export function jsonLdFromLanding(input: {
 	}
 	if (input.homepageUrl) out.websiteUrl = input.homepageUrl
 	if (input.screenshots && input.screenshots.length > 0) out.screenshots = input.screenshots
+	if (input.offersPrice) out.offersPrice = input.offersPrice
+	if (input.paidOffers && input.paidOffers.length > 0) out.paidOffers = input.paidOffers
 	return out
 }
