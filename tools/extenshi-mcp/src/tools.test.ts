@@ -140,6 +140,8 @@ const READ_TOOLS = [
 	'set_page_translations',
 	'get_legal_translations',
 	'set_legal_translations',
+	'get_license_terms_questionnaire',
+	'draft_license_terms',
 	'upload_project_media',
 	'search_extensions',
 	'get_extension',
@@ -1200,13 +1202,95 @@ describe('hosted landing page tools', () => {
 		expect(JSON.parse(await tools.get_landing_page.execute({ projectId }, {}))).toEqual({
 			page: null,
 			url: null,
-			form: null,
+			view: 'summary',
+			formSummary: null,
 		})
+		expect(getLandingPage).toHaveBeenCalledWith({ projectId })
 		expect(JSON.parse(await tools.unpublish_landing_page.execute({ projectId }, {}))).toEqual({
 			unpublished: true,
 			homepageRemoved: true,
 		})
 		expect(unpublishLandingPage).toHaveBeenCalledWith({ projectId })
+	})
+
+	// DX report 2026-10-10 §2 row 15: an 11-locale form did not fit an MCP response.
+	it('get summarizes the live form by default and returns it narrowed on request', async () => {
+		const translation = { tagline: 'x'.repeat(4000) }
+		const form = {
+			schemaVersion: 2,
+			extensionName: 'Reading Ruler',
+			tagline: 'Read line by line',
+			sections: [{ id: 'hero', type: 'hero' }],
+			locales: Object.fromEntries(['de', 'fr', 'es', 'ar', 'ja'].map((l) => [l, translation])),
+		}
+		const page = { publicCode: 'zn53kyn66', enabled: true, publishedVersionNumber: 4 }
+		const getLandingPage = vi.fn(async () => ({ page, url: 'https://page.extenshi.io/zn53kyn66', form }))
+		const tools = toolsWith({ getLandingPage })
+
+		const raw = await tools.get_landing_page.execute({ projectId }, {})
+		expect(raw.length).toBeLessThan(JSON.stringify(form).length / 4)
+		const summary = JSON.parse(raw)
+		expect(summary).not.toHaveProperty('form')
+		expect(summary).toMatchObject({ page, view: 'summary', formSummary: { extensionName: 'Reading Ruler' } })
+		expect(summary.formSummary.translations.map((t: { locale: string }) => t.locale)).toEqual([
+			'de',
+			'fr',
+			'es',
+			'ar',
+			'ja',
+		])
+
+		const narrowed = JSON.parse(
+			await tools.get_landing_page.execute(
+				{ projectId, view: 'full', fields: ['locales'], locales: ['de'] },
+				{},
+			),
+		)
+		expect(narrowed.form).toEqual({ schemaVersion: 2, locales: { de: translation } })
+		expect(getLandingPage).toHaveBeenLastCalledWith({ projectId })
+
+		const full = JSON.parse(await tools.get_landing_page.execute({ projectId, view: 'full' }, {}))
+		expect(full).toEqual({ page, url: 'https://page.extenshi.io/zn53kyn66', form })
+	})
+
+	// DX report 2026-10-10 §2 row 16: the questionnaire without pay.read.
+	it('license terms questionnaire and draft are read-only pass-throughs', async () => {
+		const getLicenseTermsQuestionnaire = vi.fn(async () => ({ version: 1, questions: [] }))
+		const draftLicenseTerms = vi.fn(async () => ({ persisted: false, gaps: [] }))
+		const tools = toolsWith({ getLicenseTermsQuestionnaire, draftLicenseTerms })
+		expect(JSON.parse(await tools.get_license_terms_questionnaire.execute({ projectId }, {}))).toEqual({
+			version: 1,
+			questions: [],
+		})
+		const answers = { sellerCountry: 'Spain', planKinds: ['lifetime'] }
+		expect(JSON.parse(await tools.draft_license_terms.execute({ projectId, answers }, {}))).toEqual({
+			persisted: false,
+			gaps: [],
+		})
+		expect(getLicenseTermsQuestionnaire).toHaveBeenCalledWith({ projectId })
+		expect(draftLicenseTerms).toHaveBeenCalledWith({ projectId, answers })
+		for (const name of ['get_license_terms_questionnaire', 'draft_license_terms']) {
+			expect(tools[name].annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false })
+			expect(tools[name].description).not.toMatch(/pay\.read permission is required/)
+		}
+	})
+
+	it('get_project_state asks for manifest summaries by default and returns compact JSON', async () => {
+		const getMyProjectState = vi.fn(async () => ({ schemaVersion: 5, manifestView: 'summary' }))
+		const tools = toolsWith({ getMyProjectState })
+		const out = await tools.get_project_state.execute({ projectId }, {})
+		expect(getMyProjectState).toHaveBeenLastCalledWith({
+			projectId,
+			includeToolStates: undefined,
+			manifests: 'summary',
+		})
+		expect(out).toBe('{"schemaVersion":5,"manifestView":"summary"}')
+		await tools.get_project_state.execute({ projectId, includeToolStates: [], manifests: 'full' }, {})
+		expect(getMyProjectState).toHaveBeenLastCalledWith({
+			projectId,
+			includeToolStates: [],
+			manifests: 'full',
+		})
 	})
 
 	it('draft passes store URLs through; preview sends the v2 form and returns problems as data', async () => {

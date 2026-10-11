@@ -55,6 +55,7 @@ import {
 } from './docs.js'
 import { renderIconWorkflow } from './icon-workflow.js'
 import { LANDING_LIMITS } from './landing-page.js'
+import { LANDING_READ_SHAPE, shapeLandingRead } from './landing-read.js'
 import {
 	LANDING_FONTS,
 	LANDING_SECTION_TYPES,
@@ -62,6 +63,7 @@ import {
 	LANDING_V2_LIMITS,
 } from './landing-sections.js'
 import { hostedLandingNextSteps, landingFormFromArgs, renderGenerateLandingPage } from './landing-workflow.js'
+import { registerLicenseTermsTools } from './license-terms-tools.js'
 import { renderLocalizeWorkflow } from './localize-workflow.js'
 import { PAY_OPERATIONS, paySchemas } from './pay.js'
 import { describePrivacyAiUpdate } from './privacy-ai-outcome.js'
@@ -1406,11 +1408,16 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			name: 'get_landing_page',
 			description:
 				"The project's hosted landing page: public code, live version, publish state, URL (null when " +
-				'unpublished) and the form the live version was rendered from.',
-			parameters: z.object({ projectId: z.string().uuid() }),
-			execute: async (args, context) => {
+				'unpublished) and the form the live version was rendered from. By default the form comes as a ' +
+				'summary (locales, sections, links, logo, size of each field); view "full" returns the form, ' +
+				'narrowed by fields and locales when given.',
+			parameters: z.object({
+				projectId: z.string().uuid(),
+				...LANDING_READ_SHAPE,
+			}),
+			execute: async ({ projectId, ...options }, context) => {
 				try {
-					return JSON.stringify(await bff(context).getLandingPage(args))
+					return JSON.stringify(shapeLandingRead(await bff(context).getLandingPage({ projectId }), options))
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1788,6 +1795,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				}
 			},
 		})
+		// get_license_terms_questionnaire / draft_license_terms (project.read, read-only).
+		registerLicenseTermsTools(add, bff, (err) => readError(err, missingKeyMessage))
 		// A local filesystem exists only where local artifacts do (stdio).
 		const localFiles = caps.has('scan')
 		add({
@@ -2297,7 +2306,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'site then stops managing the values in it. `integration.unwired` lists the links this ' +
 				'project has not set up yet (no URLs exist for them). Tool-state payloads are NOT inlined by ' +
 				'default (a single row can be 256 KiB); includeToolStates selects which keys to inline. ' +
-				'FREE — spends no credit. Type definitions are in list_extension_templates.',
+				'Manifests come as summaries by default (version, top-level keys, size, digest, origin ' +
+				'imported/generated, and which keys of each drafted manifest differ from the imported ' +
+				'source/built one); pass manifests "full" for the bodies, or get_project_scaffold for one ' +
+				"browser's manifest file. FREE — spends no credit. Type definitions are in list_extension_templates.",
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				includeToolStates: z
@@ -2306,14 +2318,21 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					.describe(
 						'Tool keys whose saved payload to inline, e.g. ["manifest-generator", "privacy-policy-generator"]. When omitted, only the index is returned.',
 					),
+				manifests: z
+					.enum(['summary', 'full'])
+					.optional()
+					.describe(
+						'"summary" (default): each manifest as version, keys, size and digest — the same digest release.manifestDigest (built) and release.sourceManifestDigest (source) carry. "full": the drafted manifests and the imported source/built manifests in full (can be ~60 KB).',
+					),
 			}),
 			execute: async (args, context) => {
 				try {
 					const state = await bff(context).getMyProjectState({
 						projectId: args.projectId,
 						includeToolStates: args.includeToolStates,
+						manifests: args.manifests ?? 'summary',
 					})
-					return JSON.stringify(state, null, 2)
+					return JSON.stringify(state)
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}

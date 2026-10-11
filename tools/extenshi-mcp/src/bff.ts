@@ -109,7 +109,12 @@ export interface Bff extends PayBff {
 	 * index of saved tool state. FREE, same reasoning. `includeToolStates` inlines
 	 * named payloads; without it the response lists what exists and how big.
 	 */
-	getMyProjectState(input: { projectId: string; includeToolStates?: string[] }): Promise<unknown>
+	getMyProjectState(input: {
+		projectId: string
+		includeToolStates?: string[]
+		/** `summary` (BFF ≥ 2026-10): manifest bodies become digest + keys. An older BFF ignores it. */
+		manifests?: 'full' | 'summary'
+	}): Promise<unknown>
 	/**
 	 * The starter extension one own project produces, as files — the same set the
 	 * site commits and packs into its download. FREE, same reasoning. One browser
@@ -200,6 +205,13 @@ export interface Bff extends PayBff {
 		translations: Record<string, string>
 		sources?: Record<string, string>
 	}): Promise<unknown>
+	/**
+	 * The "License terms & refunds" questions as data, and a draft generated from
+	 * answers the caller sends. project.read: neither reads saved answers or Pay
+	 * state, and neither writes (BFF payLicenseTerms.agentGetQuestionnaire / agentDraft).
+	 */
+	getLicenseTermsQuestionnaire(input: { projectId: string }): Promise<unknown>
+	draftLicenseTerms(input: { projectId: string; answers?: Record<string, unknown> }): Promise<unknown>
 	/**
 	 * Upload one PNG/JPEG/WebP to the project's PUBLIC media store (the same one
 	 * Dojo uploads use). The BFF re-checks magic bytes, strips metadata, enforces
@@ -301,6 +313,8 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		setPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentSetTranslations.mutate(input),
 		getLicenseTermsTranslations: (input) => client.payLicenseTerms.getTranslations.query(input),
 		setLicenseTermsTranslations: (input) => client.payLicenseTerms.setTranslations.mutate(input),
+		getLicenseTermsQuestionnaire: (input) => client.payLicenseTerms.agentGetQuestionnaire.query(input),
+		draftLicenseTerms: (input) => client.payLicenseTerms.agentDraft.mutate(input),
 		uploadProjectMedia: (input) => client.devProject.agentUploadProjectMedia.mutate(input),
 	}
 }

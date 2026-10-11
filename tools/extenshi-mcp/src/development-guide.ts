@@ -247,9 +247,11 @@ export const DEVELOPMENT_SERVICES = [
 			'set_pay_offer_translations',
 			'set_pay_enabled',
 			'rotate_pay_key',
+			'get_license_terms_questionnaire',
+			'draft_license_terms',
 		],
 		access:
-			'Pay applications work independently of development projects. Explicit pay.read/pay.write permission is required; older connections and API keys have no Pay grant. Readiness (get_pay_readiness) and the actual SDK distribution determine whether integration is possible. The author completes the seller agreement and Stripe KYC in the browser. Checkout is enabled only after offers and profile are configured, and only with explicit authorization. Registration does not prove production deployment or npm publication.',
+			'Pay applications work independently of development projects. Explicit pay.read/pay.write permission is required; older connections and API keys have no Pay grant. The exceptions are get_license_terms_questionnaire and draft_license_terms: they need only project read access because they return the questions and an unsaved draft built from the answers in the call, not saved answers or Pay state. Readiness (get_pay_readiness) and the actual SDK distribution determine whether integration is possible. The author completes the seller agreement and Stripe KYC in the browser. Checkout is enabled only after offers and profile are configured, and only with explicit authorization. Registration does not prove production deployment or npm publication.',
 		urls: [docs('pay-sdk'), 'https://dojo.extenshi.io/payments'],
 	},
 ] as const

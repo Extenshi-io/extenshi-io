@@ -66,7 +66,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `remove_hosted_page` | Forget a registered homepage/support URL (public page keeps working) | Requires hosted.write for OAuth |
 | `list_hosted_pages` | Registered hosted pages with verification status | Free; identity required |
 | `publish_landing_page` | Host the landing page at page.extenshi.io/{code} (or a custom domain root) from the Page generator form, v1 or schema v2 (versioned; registered as the homepage by default; `live.status` says whether the public URL serves it) | Requires hosted.write for OAuth |
-| `get_landing_page` | Hosted landing page code, live version, URL and form | Free; identity required |
+| `get_landing_page` | Hosted landing page code, live version, URL and a summary of the form; `view: "full"` (with optional `fields` / `locales`) returns the form | Free; identity required |
 | `unpublish_landing_page` | Take the hosted landing page offline (same URL on the next publish) | Requires hosted.write for OAuth |
 | `draft_landing_page` | Draft a schema-v2 homepage (sections, theme, SEO, locales) from project state, with sources and to-dos | Free; identity required |
 | `preview_landing_page` | Validate and render a form exactly as publish would; every problem with a path and fix | Free; identity required |
@@ -82,6 +82,8 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_page_translations` | Developer-written text on uninstall forms / welcome pages / install instructions with per-language translation status | Free; identity required |
 | `set_page_translations` | Save one language of one uninstall form / welcome page / install instructions page | Requires hosted.write for OAuth |
 | `get_legal_translations` | Translated copies of the published privacy policy or license terms (the English version binds): what is left to translate, per language | Free; identity required (license terms: pay.read) |
+| `get_license_terms_questionnaire` | The license terms & refunds questions as data (types, choices, limits, when each is required); no saved answers | Free; identity required (no pay.read) |
+| `draft_license_terms` | License terms text from answers sent in the call, with the gaps that block publishing; saves nothing | Free; identity required (no pay.read) |
 | `set_legal_translations` | Save one language of the privacy policy or license terms translation (edited sections and free-text answers) | Requires hosted.write + Pro (policy) or pay.write (terms) for OAuth |
 | `upload_project_media` | Upload a PNG/JPEG/WebP logo or screenshot to the project's public media store and get a stable URL for `publish_landing_page` (metadata stripped, per-project quota; `filePath` inside the workspace on stdio, `dataBase64` everywhere) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
@@ -90,7 +92,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `create_project` | Create a project through the Dojo wizard's service; idempotent per key; returns id, next steps and open owner decisions | Requires project.write for OAuth |
 | `get_decisions` | Owner decisions (AMO add-on id, license, seller identity, pricing, targets): status, suggested default, what each blocks | Free; identity required |
 | `propose_decision` | Propose a decision value with rationale; the owner decides in Dojo, and decided keys are refused | Requires project.write for OAuth |
-| `get_project_state` | Manifest, selected types, saved-state index, hosted URLs and exact integration file | Free; identity required |
+| `get_project_state` | Manifest summaries (imported or generated, digest, keys that differ from the imported files), selected types, saved-state index, hosted URLs and exact integration file; `manifests: "full"` returns the manifest bodies | Free; identity required |
 | `get_project_scaffold` | Starter files for one project and target browser | Free; identity required |
 | `list_privacy_policy_versions` | Hosted policy version history | Pro project; no read credit |
 | `get_privacy_policy_version` | One hosted policy's markdown and HTML | Pro project; no read credit |
