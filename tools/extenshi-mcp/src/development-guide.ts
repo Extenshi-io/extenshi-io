@@ -297,7 +297,7 @@ const WORKFLOW = [
 	{
 		id: 'architecture-and-scaffold',
 		actions:
-			'Stage 4 — Architecture and scaffold: extension types, minimum permissions and browser-specific files are chosen. A new project gets one scaffold per browser in separate outputs; an existing repository keeps its code. Tool states are read only for the keys the extension needs. integration.file is written verbatim to integration.path, integration.unwired lists what is still unconnected, and project state is re-read after cabinet changes.',
+			'Stage 4 — Architecture and scaffold: extension types, minimum permissions and browser-specific files are chosen. A new project gets one scaffold per browser in separate outputs; an existing repository keeps its code. Tool states are read only for the keys the extension needs. get_project_state returns integration.file, the content for integration.path, and integration.unwired, which lists what is still unconnected; the repository changes only when the author asks for them.',
 		relatedTools: ['list_extension_templates', 'get_project_scaffold', 'get_project_state'],
 		doneWhen:
 			'Each manifest references real packaged files; browser variants and the project integration contract are preserved.',

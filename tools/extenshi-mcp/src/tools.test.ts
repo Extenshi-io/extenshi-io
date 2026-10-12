@@ -19,8 +19,10 @@ import { scanArtifact } from './scan.js'
 import { captureError, captureEvent } from './telemetry.js'
 import {
 	type Capability,
+	getServerInstructions,
 	isExpectedError,
 	MAX_BATCH_EXTENSIONS,
+	type McpAuth,
 	registerTools,
 	type ToolDeps,
 } from './tools.js'
@@ -318,7 +320,7 @@ describe('get_reviews execute — arg mapping', () => {
 })
 
 /** Register the read tools against a stub BFF and return them keyed by name. */
-function readToolsWith(stubBff: Partial<Bff>): Record<string, any> {
+function readToolsWith(stubBff: Partial<Bff>, auth?: McpAuth): Record<string, any> {
 	const tools: Record<string, any> = {}
 	const server = {
 		addTool: (t: { name: string }) => {
@@ -329,6 +331,7 @@ function readToolsWith(stubBff: Partial<Bff>): Record<string, any> {
 		cfg: { bffUrl: 'https://bff.test', scanUrl: 'https://scan.test', docsUrl: 'https://docs.test' },
 		capabilities: new Set<Capability>(['read']),
 		getBff: () => stubBff as Bff,
+		...(auth ? { auth } : {}),
 	})
 	return tools
 }
@@ -1801,6 +1804,92 @@ describe('tool descriptions (Anthropic Software Directory Policy §2)', () => {
 	it('states the extension-safe keys fact once, on get_pay_seller', () => {
 		const withFact = tools.filter((t) => /embedded in extension code/.test(t.description ?? ''))
 		expect(withFact.map((t) => t.name)).toEqual(['get_pay_seller'])
+	})
+
+	// The remote connector signs in over OAuth, so a shared description that talks
+	// about "your API key" sends the model hunting for something the user never had.
+	it.each(['list_my_projects', 'get_credit_balance', 'connection_diagnostics'])(
+		'%s describes the signed-in account, not an API key',
+		(name) => {
+			const description = tools.find((t) => t.name === name)?.description ?? ''
+			expect(description).not.toMatch(/api[- ]?key|extenshi login/i)
+		},
+	)
+})
+
+describe('server instructions (Anthropic Software Directory Policy §2)', () => {
+	const IMPERATIVE = /\b(never|always|do not|don't|must)\b/i
+	const STEERING =
+		/\b(start (extension|with)|keep a checklist|check [\w_]+ before|then call|call this|re-read|write [\w.]+ verbatim|before reporting)\b/i
+	const combos: Array<[string, ReadonlySet<Capability>, McpAuth]> = [
+		['remote (read+docs, oauth)', new Set<Capability>(['read', 'docs']), 'oauth'],
+		['stdio (all, api-key)', new Set<Capability>(['read', 'docs', 'scan', 'publish']), 'api-key'],
+		['stdio (read+docs, api-key)', new Set<Capability>(['read', 'docs']), 'api-key'],
+	]
+
+	// Directory review reads this block in full and the capture truncates it; the
+	// block was ~2.5k characters when it was cut off, so keep a wide margin.
+	it.each(combos)('%s fits the review capture', (_name, capabilities, auth) => {
+		expect(getServerInstructions(capabilities, auth).length).toBeLessThanOrEqual(1900)
+	})
+
+	it.each(combos)('%s states what is available, not how to work', (_name, capabilities, auth) => {
+		const text = getServerInstructions(capabilities, auth)
+		expect(text).not.toMatch(IMPERATIVE)
+		expect(text).not.toMatch(STEERING)
+	})
+
+	it('names integration.file as content returned, never as a write to the repository', () => {
+		const text = getServerInstructions(new Set<Capability>(['read', 'docs']), 'oauth')
+		expect(text).toContain('integration.file')
+		expect(text).not.toMatch(/verbatim|write integration/i)
+	})
+
+	it('sends the remote connector nowhere near an API key, and stdio to its key page', () => {
+		const remote = getServerInstructions(new Set<Capability>(['read', 'docs']), 'oauth')
+		expect(remote).not.toMatch(/api[- ]?keys?|ek_|dojo\.extenshi\.io\/api-keys/i)
+		const stdio = getServerInstructions(new Set<Capability>(['read', 'docs']), 'api-key')
+		expect(stdio).toContain('https://dojo.extenshi.io/api-keys')
+	})
+})
+
+describe('sign-in failures name the transport’s own recovery path', () => {
+	const trpcError = (message: string, httpStatus: number) =>
+		Object.assign(new Error(message), { data: { httpStatus } })
+	const unauthorized = () => Promise.reject(trpcError('Unauthorized', 401))
+	const appId = '11111111-1111-4111-8111-111111111111'
+
+	it('remote (oauth): a rejected catalog read says to reconnect, with no key to find', async () => {
+		const tools = readToolsWith({ listMyProjects: unauthorized }, 'oauth')
+		const error = await tools.list_my_projects.execute({}, {}).catch((e: Error) => e)
+		expect(error).toBeInstanceOf(UserError)
+		expect((error as Error).message).toMatch(/Reconnect the Extenshi connector/)
+		expect((error as Error).message).not.toMatch(/EXTENSHI_API_KEY|api-keys|extenshi login/)
+		// The connector authenticates before any tool runs, so no tool works while signed out.
+		expect((error as Error).message).not.toMatch(/search_docs|keeps working/)
+	})
+
+	it('stdio (api-key): a rejected catalog read still points at the key', async () => {
+		const tools = readToolsWith({ listMyProjects: unauthorized })
+		await expect(tools.list_my_projects.execute({}, {})).rejects.toThrow(/EXTENSHI_API_KEY/)
+	})
+
+	it('remote (oauth): a rejected Pay call says to reconnect and names only the scope that call needs', async () => {
+		const write = readToolsWith({ rotatePayKey: unauthorized }, 'oauth')
+		const writeError = await write.rotate_pay_key.execute({ appId }, {}).catch((e: Error) => e)
+		expect((writeError as Error).message).toMatch(/Reconnect the Extenshi connector.*pay\.write/)
+		expect((writeError as Error).message).not.toMatch(/API key|pay\.read/)
+
+		// A read must not ask the owner to widen the connector to mutation authority.
+		const read = readToolsWith({ listPayApps: unauthorized }, 'oauth')
+		const readError = await read.list_pay_apps.execute({}, {}).catch((e: Error) => e)
+		expect((readError as Error).message).toMatch(/Reconnect the Extenshi connector.*pay\.read/)
+		expect((readError as Error).message).not.toMatch(/API key|pay\.write/)
+	})
+
+	it('stdio (api-key): a rejected Pay call keeps the developer-key guidance', async () => {
+		const tools = readToolsWith({ rotatePayKey: unauthorized })
+		await expect(tools.rotate_pay_key.execute({ appId }, {})).rejects.toThrow(/developer API key/)
 	})
 })
 

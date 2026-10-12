@@ -121,10 +121,10 @@ describe('development guide discovery contract', () => {
 	it('preserves mutation hints and docs links in the discovery result', async () => {
 		const { tools } = register(['read', 'docs'])
 		const result = await readGuide(tools)
-		expect(
-			result.tools.find((tool: GuideTool) => tool.name === 'publish_privacy_policy')?.annotations
-				.readOnlyHint,
-		).toBe(false)
+		const publishPolicy = result.tools.find((tool: GuideTool) => tool.name === 'publish_privacy_policy')
+		expect(publishPolicy?.annotations.readOnlyHint).toBe(false)
+		// It overwrites the live public policy page.
+		expect(publishPolicy?.annotations.destructiveHint).toBe(true)
 		for (const tool of result.tools) expect(tool.docs.length, tool.name).toBeGreaterThan(0)
 		expect(result.workflow.at(-1)?.id).toBe('operate')
 		expect(result.repository.recommendation).toContain('GitHub')

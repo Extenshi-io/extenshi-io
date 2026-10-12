@@ -128,6 +128,14 @@ export const MISSING_KEY_MESSAGE =
 	'look up product docs and CLI commands.'
 
 /**
+ * The remote connector's counterpart of MISSING_KEY_MESSAGE. It signs in over
+ * OAuth, so a rejected request means the sign-in lapsed — there is no key to find.
+ */
+export const RECONNECT_MESSAGE =
+	'The Extenshi sign-in for this connection is missing, has expired or was revoked. ' +
+	'Reconnect the Extenshi connector in your MCP client and sign in again; no API key is needed.'
+
+/**
  * Max extensions `get_risk_by_store_ids` accepts per call.
  *
  * CROSS-PACKAGE SYNC POINT — nothing can import across it: this is a published
@@ -141,29 +149,38 @@ export const MAX_BATCH_EXTENSIONS = 40
 
 export const SERVER_NAME = 'extenshi'
 
+/**
+ * How the caller signs in. The stdio package reads an `ek_…` API key; the remote
+ * connector signs in over OAuth and has no key at all, so any text that sends the
+ * user to find one is wrong there.
+ */
+export type McpAuth = 'api-key' | 'oauth'
+
+/**
+ * Shown to the model at `initialize`. It states what the tools return and what
+ * the account can do — not how to work — and is kept short: directory review
+ * reads this block in full, and a cut-off copy hides the end of it. The length
+ * is pinned by a test.
+ */
 export const SERVER_INSTRUCTIONS =
-	'Extenshi helps develop and operate browser extensions. Start extension-development tasks with ' +
-	'get_development_guide (free): it lists every tool on this connection, the service directory, ' +
-	'account/local prerequisites, documentation links, GitHub repository guidance and the ordered ' +
-	'plan from scope and research through code, assets, privacy, CI, store release and maintenance. ' +
-	'Keep a checklist covering the whole requested lifecycle. For standalone Pay, start with list_pay_apps; create_pay_app needs no development project or repository. Request explicit pay.read/pay.write scopes, use get_pay_readiness, and leave agreement acceptance and KYC to the author in the browser. Only the publishable SDK key and public verification key belong in extension code. Use search_docs (free) for current ' +
-	'product details and exact CLI flags. With identity, call list_my_projects then get_project_state ' +
-	'to reuse the existing project and repository; for a new extension, create_project makes one (idempotent). ' +
-	'Read get_decisions early: the AMO add-on id, license, seller identity and pricing are owner decisions — ' +
-	'propose defaults with propose_decision; the owner decides them in Dojo, and release readiness blocks on them. ' +
-	'Use list_extension_templates before the manifest, ' +
-	'and get_project_scaffold for a new project. Preserve existing source. For an existing extension, read get_project_workspace then preview and apply import_manifest to fill Dojo from its real manifest and its _locales messages (messagesByLocale) before configuring services. Review the integration diff and preserve local edits; write integration.file ' +
-	'verbatim to integration.path, check integration.unwired and re-read state after cabinet edits. ' +
-	'Check get_credit_balance before metered work. get_risk_by_store_ids covers up to 40 store IDs ' +
-	'for one read; get_security costs three reads for detailed findings. Hosted policy tools require ' +
-	'Pro; publish_privacy_policy changes the live policy, while update_privacy_policy_with_ai returns ' +
-	"a proposal to review. Respect the author's authorization for publication and repository writes. " +
-	'Tool registration is not proof of account entitlements or a completed release. Verify hosted ' +
-	'URLs, built artifacts, store status and optional purchases before reporting completion. ' +
-	`API keys: ${KEY_PAGE}. Credits: ${BILLING_PAGE}.`
+	"Extenshi covers browser-extension development and operations: catalog and security data on other people's extensions, " +
+	"and the signed-in developer's own projects, hosted pages, Pay applications and privacy policy. " +
+	'get_development_guide (free) returns the end-to-end workflow, the tools on this connection, the service directory and documentation links; ' +
+	'search_docs (free) returns current product documentation and exact CLI flags. ' +
+	'get_credit_balance reports the remaining read, scan, icon and inventory credits; get_risk_by_store_ids covers up to 40 store IDs for one read, and get_security costs three reads. ' +
+	"list_my_projects returns the developer's own projects (create_project adds one); get_project_state returns a project's configuration, including integration.file " +
+	'(the content for integration.path that links a repository to the project) and integration.unwired. ' +
+	'get_decisions lists the owner decisions (AMO add-on id, license, seller identity, pricing); propose_decision proposes a value and the owner decides it in Dojo. ' +
+	'Pay applications are independent of projects (list_pay_apps, create_pay_app, get_pay_readiness) and need the pay.read / pay.write scopes; ' +
+	'agreement acceptance and KYC take place in the browser, and only the publishable SDK key and the public verification key belong in extension code. ' +
+	'Hosted privacy-policy tools need a Pro project: publish_privacy_policy puts a policy on the live public page, update_privacy_policy_with_ai returns a proposal only. ' +
+	'Registered tools are not proof of account entitlements or a completed release.'
 
 /** Match initialize instructions to the same capabilities used for registration. */
-export function getServerInstructions(capabilities: ReadonlySet<Capability>): string {
+export function getServerInstructions(
+	capabilities: ReadonlySet<Capability>,
+	auth: McpAuth = 'api-key',
+): string {
 	const local = [
 		capabilities.has('scan') ? 'scan_extension' : null,
 		capabilities.has('publish') ? 'publish_extension' : null,
@@ -171,8 +188,9 @@ export function getServerInstructions(capabilities: ReadonlySet<Capability>): st
 	return (
 		SERVER_INSTRUCTIONS +
 		(local.length
-			? ` This connection exposes ${local.join(' and ')} for local artifacts; check credentials and access before use.`
-			: " This connection has no local artifact scan or store-publishing tool. Use the local stdio server or CLI on the developer's machine for those stages; hosted privacy-policy publishing is a separate capability.")
+			? ` This connection exposes ${local.join(' and ')} for local artifacts; they need valid credentials and publishing access.`
+			: ' This connection has no local artifact scan or store-publishing tool; the local stdio server and the CLI provide those stages.') +
+		(auth === 'api-key' ? ` API keys for the local package: ${KEY_PAGE}.` : '')
 	)
 }
 
@@ -216,7 +234,13 @@ export interface ToolDeps {
 	 * key or undefined. stdio supplies the (nullable) env key.
 	 */
 	getApiKey?: (ctx: ToolCallContext) => string | undefined
-	/** Optional override of the missing-key message (defaults to MISSING_KEY_MESSAGE). */
+	/**
+	 * How this transport signs the caller in (default `api-key`, the stdio package).
+	 * The remote connector passes `oauth`, which swaps every "get an API key" hint
+	 * for the reconnect path.
+	 */
+	auth?: McpAuth
+	/** Optional override of the missing-key message (defaults to the one for `auth`). */
 	missingKeyMessage?: string
 }
 
@@ -639,7 +663,8 @@ const TOOL_ANNOTATIONS: Record<
 	publish_privacy_policy: {
 		title: 'Publish a hosted privacy policy',
 		readOnlyHint: false,
-		destructiveHint: false,
+		// Overwrites the live public policy page, so a client treats it like any other overwrite.
+		destructiveHint: true,
 		openWorldHint: true,
 	},
 	update_privacy_policy_with_ai: {
@@ -1073,7 +1098,8 @@ const LANDING_FORM_SHAPE = {
 export function registerTools(server: FastMCP, deps: ToolDeps): void {
 	const registeredTools: GuideTool[] = []
 	const caps = deps.capabilities
-	const missingKeyMessage = deps.missingKeyMessage ?? MISSING_KEY_MESSAGE
+	const oauth = deps.auth === 'oauth'
+	const missingKeyMessage = deps.missingKeyMessage ?? (oauth ? RECONNECT_MESSAGE : MISSING_KEY_MESSAGE)
 	// Generic so each tool's Zod `parameters` infers its own `args` type (a
 	// non-generic wrapper would collapse Params to `never`).
 	function add<P extends ToolParameters>(tool: Tool<FastMCPSessionAuth, P>): void {
@@ -1131,7 +1157,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 											: status === 404
 												? 'Pay application or resource not found. Check the appId with list_pay_apps.'
 												: status === 401
-													? 'Pay authentication failed. Reconnect or configure a developer API key with explicit Pay permissions.'
+													? oauth
+														? `Pay authentication failed. Reconnect the Extenshi connector and grant the ${mutation ? 'pay.write' : 'pay.read'} permission when asked.`
+														: 'Pay authentication failed. Reconnect or configure a developer API key with explicit Pay permissions.'
 													: 'Pay request failed. Check authentication, application readiness and backend support before retrying a mutation.'
 						// Provider failures may contain customer data or credentials; never echo them.
 						throw userErrorFrom(message, err)
@@ -1259,7 +1287,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'connection_diagnostics',
 			description:
-				'Verify authentication, granted scopes, supported workspace contracts and actual write permissions (incl. hosted.write, evidence uploads and, for a projectId, CI ingest configuration). Includes credit balances; credentials and secrets are not included. Auth failures are recoverable with `extenshi login --recover` (CLI) or a reissued API key from dojo.extenshi.io/api-keys.',
+				'Verify authentication, granted scopes, supported workspace contracts and actual write permissions (incl. hosted.write, evidence uploads and, for a projectId, CI ingest configuration). Includes credit balances; credentials and secrets are not included. A failed sign-in returns an error that says how to sign in again.',
 			annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 			parameters: z.object({}),
 			execute: async (_args, context) => {
@@ -2246,7 +2274,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			name: 'get_credit_balance',
 			description:
 				'Report your remaining Extenshi credits — for checking whether a large request fits the ' +
-				'balance before running it. Returns every credit pool for your API key: `read` (spent one-per-call by ' +
+				'balance before running it. Returns every credit pool of the signed-in Extenshi account: `read` (spent one-per-call by ' +
 				'search_extensions / get_extension / get_reviews / market_overview / get_risk_by_store_ids — the ' +
 				'last one covers up to 40 extensions for that single credit; get_security costs 3) and ' +
 				'`scan` (spent by scan_extension), plus `icon` and `inventory`. Each pool reports `remaining` — the ' +
@@ -2275,7 +2303,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'list_my_projects',
 			description:
-				"List the extension projects owned by this API key — the developer's own workspaces on " +
+				"List the extension projects owned by the signed-in Extenshi account — the developer's own workspaces on " +
 				'extenshi.io. Returns id, name, status, target browsers, the bound GitHub repo (if any) and ' +
 				'the claimed store listing (if any). Applies when the developer refers to "my extension" or ' +
 				'"my project": the returned id is what get_project_state takes. FREE — reading your own ' +
