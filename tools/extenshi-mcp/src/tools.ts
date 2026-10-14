@@ -1225,11 +1225,16 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Propose a value for one owner decision. The proposal is stored with its rationale, proposer and ' +
 				'time; the owner accepts or edits it on the Dojo project page, which is the only place a decision ' +
 				'becomes decided. A key the owner already decided is refused (DECISION_ALREADY_DECIDED). Value ' +
-				'formats: amo.addonId {GUID} or name@domain; license an SPDX id such as MIT, or all-rights-reserved; ' +
-				'seller.publicName text; seller.supportContact an email or HTTPS URL; seller.terms an HTTPS URL; ' +
+				'formats: amo.addonId {GUID} or name@domain; license an AMO license slug (below); seller.publicName ' +
+				'text; seller.supportContact an email or HTTPS URL; seller.terms an HTTPS URL; ' +
 				'pricing {model: free|paid|donations, trialDays?, plans?: subscription|lifetime|one_time}; ' +
-				'targetBrowsers an array of chrome/firefox/edge; targetLocales an array of locale codes. Idempotent ' +
-				'per idempotencyKey. Requires project.write.',
+				'targetBrowsers an array of chrome/firefox/edge; targetLocales an array of locale codes. License: AMO ' +
+				'accepts exactly these case-sensitive slugs: all-rights-reserved, MIT, Apache-2.0, MPL-2.0, GPL-3.0-only, ' +
+				'ISC, BSD-2-Clause, GPL-2.0-only, LGPL-2.1-only, LGPL-3.0-only, AGPL-3.0-only, Unlicense. Another SPDX ' +
+				'id (BSD-3-Clause, GPL-3.0-or-later) is accepted, but AMO then needs it as customLicense (name + text) ' +
+				"in the listing. npm's UNLICENSED in package.json means proprietary, so propose all-rights-reserved; " +
+				'Unlicense is a public-domain dedication. A misspelled slug (mit, GPL-3.0, UNLICENSED) is refused. ' +
+				'Idempotent per idempotencyKey. Requires project.write.',
 			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
 			parameters: proposeDecisionSchema,
 			execute: async (args, context) => {
@@ -1255,7 +1260,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					"When the project has a linked Pay application, the payment check also carries `platform`: what Extenshi's own " +
 					'payment ledger proves (checkout, license, installation activation, recovery, refund). A live-mode purchase through ' +
 					"those stages passes the check with source 'platform'; test-mode purchases are listed without passing it. Clients cannot " +
-					"record source 'platform'.",
+					"record source 'platform'. `warnings` lists what does not block but needs action before upload, such as a " +
+					'decided license that is not an AMO slug and needs customLicense in the AMO listing.',
 				'getReleaseReadiness',
 			],
 		] as const

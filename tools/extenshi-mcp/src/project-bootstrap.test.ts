@@ -1,3 +1,4 @@
+import * as contracts from '@extenshi/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bff } from './bff.js'
 import { amoCreateAllowed, publishArtifact, storeCredentialsFor } from './publish.js'
@@ -73,6 +74,53 @@ describe('decisions tools', () => {
 		await tool.execute(input, {})
 		expect(proposeDecision).toHaveBeenCalledWith(input)
 	})
+})
+
+// The public mirror (mirror-mcp.yml) tests against @extenshi/contracts from npm,
+// which may predate AMO_EXTENSION_LICENSES and the misspelled-slug refusal (new in
+// 0.2.1). The monorepo resolves contracts to its source, so everything runs there.
+const CONTRACT_LICENSES = (contracts as Record<string, unknown>).AMO_EXTENSION_LICENSES as
+	| readonly string[]
+	| undefined
+const AMO_LICENSES = [
+	'all-rights-reserved',
+	'MPL-2.0',
+	'Apache-2.0',
+	'GPL-2.0-only',
+	'GPL-3.0-only',
+	'LGPL-2.1-only',
+	'LGPL-3.0-only',
+	'AGPL-3.0-only',
+	'MIT',
+	'ISC',
+	'BSD-2-Clause',
+	'Unlicense',
+]
+
+describe('license proposals', () => {
+	it('lists every AMO slug and tells UNLICENSED apart from Unlicense', () => {
+		if (CONTRACT_LICENSES) expect([...CONTRACT_LICENSES]).toEqual(AMO_LICENSES)
+		const { description } = toolsWith({}).propose_decision
+		for (const slug of AMO_LICENSES) expect(description).toContain(slug)
+		expect(description).toMatch(
+			/UNLICENSED in package\.json means proprietary, so propose all-rights-reserved/,
+		)
+		expect(description).toMatch(/customLicense \(name \+ text\)/)
+	})
+
+	// The only check that needs contracts 0.2.1. The BFF refuses a misspelled slug
+	// whatever contracts the client runs, so the description holds either way.
+	it.skipIf(!CONTRACT_LICENSES)(
+		'refuses a misspelled slug before it leaves the machine and keeps custom licenses',
+		() => {
+			const tool = toolsWith({}).propose_decision
+			const parse = (value: string) =>
+				tool.parameters.safeParse({ projectId, idempotencyKey: key, key: 'license', value })
+			expect(parse('mit').error?.issues[0]?.message).toMatch(/AMO's slug for this license is MIT/)
+			expect(parse('UNLICENSED').success).toBe(false)
+			expect(parse('BSD-3-Clause').success).toBe(true)
+		},
+	)
 })
 
 describe('AMO first-time creation gate', () => {
