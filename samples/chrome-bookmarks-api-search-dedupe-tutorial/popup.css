@@ -1,0 +1,43 @@
+body {
+	width: 380px;
+	max-height: 560px;
+	overflow-y: auto;
+	margin: 0;
+	font: 13px/1.45 system-ui, sans-serif;
+	color: #1f1b16;
+	background: #faf9f5;
+}
+header { padding: 12px 12px 0; }
+h1 { font-size: 15px; margin: 0 0 8px; }
+#search {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 6px 8px;
+	border: 1px solid #d8d4cc;
+	border-radius: 6px;
+}
+.status { padding: 6px 12px; margin: 0; color: #6f6a61; }
+#dedupe-panel { padding: 0 12px 8px; }
+button {
+	padding: 6px 10px;
+	border: 1px solid #1f1b16;
+	border-radius: 6px;
+	background: #fff;
+	cursor: pointer;
+}
+button:disabled { opacity: 0.45; cursor: default; }
+#remove-selected { margin: 4px 12px 8px; border-color: #fb5b1a; color: #fb5b1a; }
+ul { list-style: none; margin: 0; padding: 0 12px 12px; }
+li {
+	padding: 4px 0;
+	border-bottom: 1px solid #ece9e1;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
+}
+li a { color: #1f1b16; text-decoration: none; font-weight: 500; }
+li a:hover { color: #fb5b1a; text-decoration: underline; }
+.folder { color: #8a857b; font-size: 11px; }
+.empty { color: #8a857b; }
+.keeper { color: #4c7a34; }

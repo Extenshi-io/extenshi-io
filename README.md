@@ -1,7 +1,7 @@
 # extenshi.io
 
 > **The browser-extension intelligence platform.** A cross-store catalog of
-> **373,000+ extensions** (Chrome, Firefox, Edge) with security analysis, plus
+> **390,000+ extensions** (Chrome, Firefox, Edge) with security analysis, plus
 > developer tooling for analytics, pre-publish scanning, and multi-store
 > publishing.
 
@@ -23,9 +23,9 @@ analysis, pre-publish security scanning, and one-command multi-store publishing.
 
 | | |
 |---|---|
-| 🔎 **Catalog** | <https://catalog.extenshi.io> — search 373k+ extensions, filter by store / category / pricing / risk / permissions |
+| 🔎 **Catalog** | <https://catalog.extenshi.io> — search 390k+ extensions, filter by store / category / pricing / risk / permissions |
 | 📚 **Docs** | <https://docs.extenshi.io> — product guides + full CLI reference |
-| ✍️ **Blog** | <https://blog.extenshi.io> — deep dives on extension security & the ecosystem |
+| ✍️ **Blog** | <https://blog.extenshi.io> — extension security research, store-policy changes, and hands-on API tutorials (their code is in [`samples/`](./samples/)) |
 | 🟢 **Status** | <https://status.extenshi.io> — live uptime for every public service |
 | 🛠️ **For developers** | <https://developers.extenshi.io> — analytics, publishing, payments |
 | ⌨️ **CLI** | <https://cli.extenshi.io> — scan, review prediction, icons, publishing |
@@ -69,6 +69,20 @@ npx @extenshi/cli@latest risk --file ./installed.txt                     # 1 rea
 Run it with **`@latest`** every time — that's what keeps you on the current
 scanner rules. A bare `npx @extenshi/cli` re-runs your npx cache, and a global
 install pins whatever version you last remembered to upgrade.
+
+### In Claude: plugin and connector
+
+- **Extenshi plugin** — install it from the Claude directory. It adds the remote
+  connector plus five skills: vetting one extension, auditing the ones you have
+  installed, market research, store-review readiness, and icon design. The
+  plugin's source is [`plugins/extenshi/`](./plugins/extenshi/).
+- **Remote connector only** — in Claude.ai, Claude Desktop, or Cowork, open
+  **Settings → Connectors → Add custom connector** and paste
+  `https://mcp.extenshi.io/mcp`. You sign in with your Extenshi account in the
+  browser; there is no API key to copy.
+
+For Claude Code, Cursor, and other clients that run local servers, use the npm
+package with a key:
 
 ```jsonc
 // Add the catalog to any MCP client (Claude Code / Desktop / Cursor):
@@ -121,7 +135,7 @@ Everything in this list works without signing up. Bookmark what's useful.
 | [Pin guide](https://pin.extenshi.io) | An illustrated “find it and pin it” page, with your own icon, that you can host anywhere |
 | [Uninstall survey](https://uninstall.extenshi.io) | A hosted survey for `setUninstallURL`: churn reasons, by version |
 | [Pricing](https://pricing.extenshi.io) | The one-time free allowance, and prepaid packs for reads, scans, icons, and Guard |
-| [Catalog search](https://catalog.extenshi.io) | 373k+ extensions across three stores, with risk ratings |
+| [Catalog search](https://catalog.extenshi.io) | 390k+ extensions across three stores, with risk ratings |
 | [Methodology](https://docs.extenshi.io/methodology) | How the scanning and risk scoring actually work — and their limits |
 
 **Open data:** the [research reports](#-public-research) below are CC BY 4.0.
@@ -149,7 +163,7 @@ Whether it's in **our** platform or in an **extension** we list, see
 
 ## Links
 
-**In this repo:** [CLI reference](./tools/extenshi-cli/) · [Guard](./tools/extenshi-guard/) · [example output](./examples/) · [agent skills](./skills/) · [sample extensions](./samples/) · [tools setup](./tools/) · [research reports](./reports/) · [security policy](./SECURITY.md)
+**In this repo:** [CLI reference](./tools/extenshi-cli/) · [Guard](./tools/extenshi-guard/) · [MCP server source](./tools/extenshi-mcp/) · [Claude plugin](./plugins/extenshi/) · [example output](./examples/) · [agent skills](./skills/) · [sample extensions](./samples/) · [tools setup](./tools/) · [research reports](./reports/) · [security policy](./SECURITY.md)
 
 - Website — <https://extenshi.io>
 - Catalog — <https://catalog.extenshi.io>
@@ -160,6 +174,7 @@ Whether it's in **our** platform or in an **extension** we list, see
 - `@extenshi/cli` — <https://www.npmjs.com/package/@extenshi/cli>
 - `@extenshi/mcp` — <https://www.npmjs.com/package/@extenshi/mcp>
 - `@extenshi/guard` — <https://www.npmjs.com/package/@extenshi/guard>
+- Remote MCP connector — `https://mcp.extenshi.io/mcp` ([setup](https://docs.extenshi.io/developers/mcp))
 
 ## License
 

@@ -1,0 +1,11 @@
+{
+	"name": "Bookmark Janitor",
+	"description": "Search every bookmark as you type and de-duplicate the tree with a preview step before anything is deleted.",
+	"version": "1.0",
+	"manifest_version": 3,
+	"permissions": ["bookmarks"],
+	"action": {
+		"default_popup": "popup.html",
+		"default_title": "Bookmark Janitor"
+	}
+}

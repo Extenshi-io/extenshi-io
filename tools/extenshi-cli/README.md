@@ -6,7 +6,10 @@ The Extenshi CLI is a command-line tool for browser-extension developers. It run
 a **pre-publish security scan**, **predicts store review outcomes** before you
 submit, **looks up the safety score of extensions you already have**, **previews
 your icon** inside real browser toolbars, and **publishes** a build straight to
-Chrome, Firefox, and Edge from your machine.
+Chrome, Firefox, and Edge from your machine. Around the release it builds one
+store package per browser, smoke-tests that exact package in a real browser,
+renders store artwork and per-locale screenshots, and hosts the project's
+landing page.
 
 Requires **Node 20+**. Nothing to self-host, nothing to install.
 
@@ -55,6 +58,9 @@ Most of the CLI needs **no account and no network**. Two commands spend credits:
 | `extenshi localize …` | **Free**, no API key | ✅ none — fully offline |
 | `extenshi publish <artifact>` | **Free**, no Extenshi key for the upload | Uploads go straight from your machine to the store APIs. An access check runs first (testing phase) |
 | `extenshi login` | **Free** | Opens extenshi.io in your browser and saves the key locally |
+| `extenshi package` / `test smoke` / `amo-source` / `icon store-assets` / `screenshots` | **Free**, no API key | Run on your machine (`test smoke` and `screenshots` drive a local browser) |
+| `extenshi page …` / `media upload` / `uninstall …` | **Free** of catalog credits; API key required | Talks to Dojo about your project's hosted pages. `page generate` and `page validate` run offline without a key |
+| `extenshi domain …` | API key, Pro project | Talks to Dojo; DNS records are yours to add |
 | `extenshi doctor` / `project` / `release` / `evidence` | **Free** of catalog credits; API key required | Talks to Dojo about your project. See the [project sync guide](https://docs.extenshi.io/developers/project-sync) |
 | `extenshi risk [store-ids…]` | **1 read credit per call**, up to 40 extensions per call | Catalog read |
 | `extenshi scan <artifact>` | **1 scan credit** | Uploads the artifact to the scan backend |
@@ -74,15 +80,27 @@ for how metering works.
 
 ## Commands at a glance
 
+The sections below cover the most-used commands in detail. Rows that link to
+docs.extenshi.io are documented there with every flag.
+
 | Command | What it does |
 | --- | --- |
 | [`scan <artifact>`](#extenshi-scan-artifact) | Pre-publish security scan of a `.crx` / `.xpi` / `.zip`, with an HTML report |
-| [`review-risk <artifact>`](#extenshi-review-risk-artifact) | Predict store review outcomes: REJECTED / ATTRITION / SLOW. Alias: `review` |
-| [`generate-listing <artifact>`](#extenshi-generate-listing-artifact) | Write `CHROMEWEBSTORE.md` from the package |
+| [`review-risk <artifact>`](#extenshi-review-risk-artifact) | Predict store review outcomes: REJECTED / ATTRITION / SLOW, per store and per listing locale. Alias: `review` |
+| [`generate-listing <artifact>`](#extenshi-generate-listing-artifact) | Write `CHROMEWEBSTORE.md` from the package, with privacy answers derived from its data flows |
 | [`localize`](#extenshi-localize) | Prepare, check, and apply `_locales` translations |
+| [`package [dir]`](https://docs.extenshi.io/developers/cli#extenshi-package) | Build one reproducible store zip per browser and print each sha256 |
+| [`test smoke <package>`](https://docs.extenshi.io/developers/cli#extenshi-test-smoke) | Install the exact zip (or a build folder) in a real browser and check that it boots without errors; with `--site`, that its content scripts inject |
+| `amo-source <project-dir>` | Produce the AMO source-code archive and `BUILD.md` reviewer instructions for a Firefox add-on; `--verify` rebuilds from the archive and compares SHA-256 |
 | [`risk [store-ids…]`](#extenshi-risk-store-ids) | Safety scores for extensions that are already published, in bulk, by store id |
 | [`icon preview <icon>`](#extenshi-icon-preview-icon) | Render an icon inside Chrome / Firefox / Edge toolbars, with contrast checks + PNG/ZIP export |
+| [`icon store-assets <icon>`](https://docs.extenshi.io/developers/cli#extenshi-icon-store-assets) | Render each store's listing artwork: Chrome Web Store promo tiles, Edge logo and tiles, AMO icons |
+| [`screenshots <build>`](https://docs.extenshi.io/developers/cli#extenshi-screenshots) | Store screenshots per locale from a declarative scenes file, at each store's size (needs Playwright) |
 | [`publish <artifact>`](#extenshi-publish-artifact) | Upload a build to Chrome, Firefox, and/or Edge with your own store credentials |
+| [`page generate` / `publish` / `draft` / `preview` / `validate` / `versions` / `rollback` / `register` / `unpublish`](https://docs.extenshi.io/developers/cli#extenshi-page-generate--publish--register) | Build a static landing page, or host it at `page.extenshi.io/<code>` as the project homepage, with drafts, previews and version history |
+| [`domain add` / `status` / `verify` / `remove`](https://docs.extenshi.io/developers/cli#extenshi-domain) | Serve the homepage and hosted pages at your own domain (Pro project) |
+| [`media upload <files…>`](https://docs.extenshi.io/developers/cli#extenshi-media-upload) | Upload a logo or screenshot to the project's public media store and print its stable URL |
+| `uninstall list` / `get` / `update` / `preview` / `translations` | Read, preview, and change the project's hosted uninstall survey and its translations; the survey URL and responses stay |
 | [`project`](#extenshi-project-release-and-evidence) / [`release`](#extenshi-project-release-and-evidence) / [`evidence`](#extenshi-project-release-and-evidence) / [`doctor`](#extenshi-project-release-and-evidence) | Sync project metadata and release evidence with Dojo |
 | [`login`](#extenshi-login) | Sign in through the browser and save the API key to `~/.extenshi/config.json` |
 | [`telemetry`](#environment-variables) | Show or set anonymous usage reporting: `on`, `off`, `status` |

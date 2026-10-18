@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+	<header>
+		<h1>Bookmark Janitor</h1>
+		<input id="search" type="search" placeholder="Search titles and URLs…" autofocus>
+	</header>
+	<p id="status" class="status"></p>
+	<section id="dedupe-panel">
+		<button id="dedupe">Find duplicates</button>
+	</section>
+	<div id="plan" hidden>
+		<ul id="plan-list"></ul>
+		<button id="remove-selected" disabled>Remove selected</button>
+	</div>
+	<ul id="results"></ul>
+	<script src="popup.js"></script>
+</body>
+</html>

@@ -4,8 +4,8 @@ description: >
   Design a browser-extension icon that stays readable at 16px in real Chrome,
   Firefox, and Edge toolbars, then verify and export it locally. Use when the
   user asks to create, improve, or check an extension icon ("make an icon for
-  my extension", "нарисуй иконку для расширения", "my icon looks bad in the
-  toolbar", "generate extension icons", "prepare store icon set").
+  my extension", "my icon looks bad in the toolbar", "generate extension
+  icons", "prepare store icon set").
 ---
 
 # Extension icon design
@@ -13,7 +13,8 @@ description: >
 Design an icon for a browser extension, verify it inside realistic browser
 toolbars, and export the store-ready PNG set — fully local and free. The only
 external tool used is `npx @extenshi/cli@latest icon preview`, which runs offline,
-needs no account, and sends nothing anywhere.
+needs no account, and sends nothing anywhere. Tell the user what a command does
+before you run it.
 
 ## What the stores need
 

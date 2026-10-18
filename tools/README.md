@@ -34,6 +34,8 @@ npx @extenshi/cli@latest review-risk ./dist/my-extension.zip          # store-re
 npx @extenshi/cli@latest generate-listing ./dist/my-extension.zip     # CHROMEWEBSTORE.md (free, offline)
 npx @extenshi/cli@latest localize check ./extension                   # locale messages (free, offline)
 npx @extenshi/cli@latest icon preview ./icon.svg                      # icon in real toolbars (free, offline)
+npx @extenshi/cli@latest package ./extension --browser chrome,edge,firefox   # one store zip per browser (free, offline)
+npx @extenshi/cli@latest test smoke ./dist/chrome.zip --browser chromium     # boots in a real browser (free, local)
 npx @extenshi/cli@latest risk --file ./installed.txt                  # safety scores in bulk (1 read credit / 40 ids)
 npx @extenshi/cli@latest project diff                                 # Dojo project metadata (API key)
 npx @extenshi/cli@latest publish ./dist/my-extension.zip              # push to Chrome / Firefox / Edge, your own store creds
@@ -79,16 +81,27 @@ npx @extenshi/guard@latest scan          # catalog check + cleanup
 
 ---
 
-## `@extenshi/mcp` — the catalog inside your AI tools
+## `@extenshi/mcp` — the catalog and your projects inside your AI tools
 
 [![npm](https://img.shields.io/npm/v/@extenshi/mcp)](https://www.npmjs.com/package/@extenshi/mcp)
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes
-the Extenshi catalog, security analysis, market research, and pre-publish scanning
-to **Claude Code, Claude Desktop, Cursor**, and any other MCP client. Runs locally
-over stdio.
+the Extenshi catalog, security analysis, market research, your Dojo projects and
+their hosted pages, and pre-publish scanning to **Claude, Cursor**, and any other
+MCP client. It comes in two forms:
 
-**Configure your MCP client:**
+| | Remote connector | Local (stdio) |
+| --- | --- | --- |
+| **Where** | Hosted at `https://mcp.extenshi.io/mcp` | `npx -y @extenshi/mcp@latest` on your machine |
+| **Sign-in** | Your Extenshi account in the browser (OAuth); no key to copy | `EXTENSHI_API_KEY` (`ek_…`) |
+| **Clients** | Claude.ai, Claude Desktop, Cowork (custom connector by URL), or the [Extenshi plugin](../plugins/extenshi/) | Claude Code, Cursor, and any client that runs local servers |
+| **Tools** | Everything except the two that work on local files | All tools, including `scan_extension` and `publish_extension` |
+
+**Remote:** open **Settings → Connectors → Add custom connector**, paste
+`https://mcp.extenshi.io/mcp`, sign in, and approve the consent screen.
+[Setup guide](https://docs.extenshi.io/developers/mcp).
+
+**Local:** add this to your MCP client config:
 
 ```json
 {
@@ -105,33 +118,19 @@ over stdio.
 `-y @extenshi/mcp@latest` is deliberate: the client re-resolves the package on
 launch, so a long-lived MCP config doesn't freeze on an old server build.
 
-**Tools it provides:**
+**What the tools cover.** The complete list, with the cost of every tool, is in
+[`extenshi-mcp/README.md`](./extenshi-mcp/README.md#tools) (the server's source is
+mirrored there from our monorepo on every release). In short:
 
-| Tool | What it does | Cost |
+| Area | Tools | Cost |
 | --- | --- | --- |
-| `search_extensions` | Hybrid search across Chrome/Firefox/Edge with filters (store, category, pricing, rating, risk, permissions, manifest version, freshness) | 1 read |
-| `get_extension` | Full catalog detail for one extension | 1 read |
-| `get_reviews` | Store user reviews from Firefox and Edge, plus store-level rating aggregates | 1 read |
-| `get_security` | Risk score + finding counts + top grouped findings + install preview | 3 reads |
-| `get_risk_by_store_ids` | Safety scores for **up to 40** extensions by store id — for auditing a list of installed extensions | 1 read per call |
-| `market_overview` | Catalog-wide stats: store split, category tree, MV2/MV3 adoption, permission histogram, risk tiers | 1 read |
-| `get_credit_balance` | Remaining credits across read / scan / icon / inventory — check before a big batch | **Free** |
-| `get_development_guide` | Tool inventory, service directory, and the ordered path from a new extension through store release | **Free (no key)** |
-| `list_extension_templates` | Extension shapes, minimum permissions, and browser-specific manifest requirements | **Free (no key)** |
-| `search_docs` | Search the docs + CLI reference so the assistant can quote exact commands | **Free (no key)** |
-| `generate_icon_workflow` | Returns the local draw-SVG → toolbar-preview → export workflow for extension icons | **Free (no key)** |
-| `generate_welcome_page_workflow` | Returns the design brief for the page users land on right after install | **Free (no key)** |
-| `connection_diagnostics` | Authentication, scopes, backend contracts, and capabilities | **Free; identity required** |
-| `list_my_projects` | Your projects, repository bindings, and claimed listings | **Free; identity required** |
-| `get_project_state` | Manifest, saved state, hosted URLs, and the integration file | **Free; identity required** |
-| `get_project_scaffold` | Starter files for one project and target browser | **Free; identity required** |
-| `import_manifest` | Import manifest JSON into the Dojo editor; preview, then apply with a state hash | project.write for OAuth |
-| `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser, and source revision | evidence.write for OAuth |
-| `list_privacy_policy_versions` / `get_privacy_policy_version` | Hosted policy history, and one version's markdown and HTML | Pro project |
-| `update_privacy_policy_with_ai` | Propose a policy update for the author to review | Pro project; daily limit |
-| `publish_privacy_policy` | Publish a policy at the project's hosted URL | Pro project; changes the live page |
-| `scan_extension` | Pre-publish security scan of a local artifact, with live progress | 1 scan |
-| `publish_extension` | Publish to the stores with your own credentials (fully local) | Free; testing-phase access check |
+| Catalog research | `search_extensions`, `get_extension`, `get_reviews`, `get_security`, `get_risk_by_store_ids`, `market_overview` | Read credits (`get_security` = 3, the rest 1 per call) |
+| Guidance | `get_development_guide`, `list_extension_templates`, `search_docs`, `generate_icon_workflow`, `generate_welcome_page_workflow`, `localize_workflow`, `generate_landing_page` | **Free, no key** |
+| Account | `get_credit_balance`, `connection_diagnostics` | **Free** |
+| Projects | `list_my_projects`, `create_project`, `get_project_state`, `import_manifest`, `apply_project_patch`, `get_decisions`, `propose_decision`, `get_release_readiness`, … | Free of credits; project scopes for OAuth; `get_release_readiness` needs a Pro project |
+| Hosted pages | Landing page (`draft_landing_page`, `preview_landing_page`, `publish_landing_page`, versions, rollback), custom domain (Pro), install instructions, uninstall surveys, page translations, `upload_project_media` | Free of credits; `hosted.write` for changes |
+| Legal pages | Privacy policy versions, AI update and publish (Pro), license terms questionnaire and draft, translations of both | Pro project or Pay scopes, per tool |
+| Local artifacts | `scan_extension`, `publish_extension` | 1 scan credit / free with your own store credentials |
 
 Prefer `get_risk_by_store_ids` over calling `get_security` in a loop: 40
 extensions for one read credit instead of three credits each.
