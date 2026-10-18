@@ -72,14 +72,15 @@ install pins whatever version you last remembered to upgrade.
 
 ### In Claude: plugin and connector
 
-- **Extenshi plugin** — install it from the Claude directory. It adds the remote
-  connector plus five skills: vetting one extension, auditing the ones you have
-  installed, market research, store-review readiness, and icon design. The
-  plugin's source is [`plugins/extenshi/`](./plugins/extenshi/).
-- **Remote connector only** — in Claude.ai, Claude Desktop, or Cowork, open
+- **Remote connector** — in Claude.ai, Claude Desktop, or Cowork, open
   **Settings → Connectors → Add custom connector** and paste
   `https://mcp.extenshi.io/mcp`. You sign in with your Extenshi account in the
   browser; there is no API key to copy.
+- **Extenshi plugin** — the connector plus five skills: vetting one extension,
+  auditing the ones you have installed, market research, store-review
+  readiness, and icon design. Its source is
+  [`plugins/extenshi/`](./plugins/extenshi/); copy the skills you want from
+  there (see [`skills/`](./skills/)).
 
 For Claude Code, Cursor, and other clients that run local servers, use the npm
 package with a key:

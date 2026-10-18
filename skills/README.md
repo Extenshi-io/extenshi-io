@@ -16,8 +16,7 @@ file into your agent's skills directory. Read it first — it's a page of text.
 | [`extension-store-readiness`](../plugins/extenshi/skills/extension-store-readiness/) | Trims manifest permissions, predicts store rejections and slow reviews locally with `review-risk`, drafts permission justifications and listing text | Free locally; catalog reads optional |
 
 The last four ship in the [Extenshi plugin](../plugins/extenshi/) together with
-the remote connector they call (`https://mcp.extenshi.io/mcp`). Installing the
-plugin from the Claude directory sets up both; to use one skill on its own,
+the remote connector they call (`https://mcp.extenshi.io/mcp`). To use one,
 copy its `SKILL.md` the same way as below and
 [connect the MCP server](../tools/README.md#extenshimcp--the-catalog-and-your-projects-inside-your-ai-tools)
 first.
