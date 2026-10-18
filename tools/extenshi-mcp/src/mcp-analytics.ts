@@ -33,7 +33,8 @@
 
 import { instrument } from '@posthog/mcp'
 import { FastMCPSession } from 'fastmcp'
-import { telemetryClient } from './telemetry.js'
+import { bindSessionTelemetryGuard } from './session-telemetry.js'
+import { telemetryAnonymousId, telemetryClient, telemetryEnabled } from './telemetry.js'
 
 const DROPPED_PROPERTIES = [
 	'$mcp_parameters',
@@ -49,8 +50,17 @@ interface Options {
 	perSessionConsent?: boolean
 }
 
-/** Latest analytics consent per session, from the auth mcp-proxy passes to updateAuth. */
-const consent = new WeakMap<FastMCPSession, boolean>()
+interface SessionActor {
+	userId?: string
+	allowed: boolean
+	revision: number
+	/** A connection reused by a different account must reconnect for analytics. */
+	ambiguous: boolean
+}
+
+// Auth is private in FastMCP; only validated updateAuth calls populate this map.
+const actors = new WeakMap<FastMCPSession, SessionActor>()
+const AUTH_REVISION = '_extenshi_auth_revision'
 
 let installed = false
 
@@ -67,8 +77,35 @@ export function instrumentMcpAnalytics(opts: Options): void {
 	if (opts.perSessionConsent) {
 		const updateAuth = proto.updateAuth
 		proto.updateAuth = function (this: FastMCPSession, ...args: Parameters<typeof updateAuth>) {
-			// Same rule as tools.ts: only an explicit `telemetry: false` declines.
-			consent.set(this, (args[0] as { telemetry?: unknown } | undefined)?.telemetry !== false)
+			const auth = args[0] as { userId?: unknown; telemetry?: unknown } | undefined
+			const userId = typeof auth?.userId === 'string' && auth.userId.trim() ? auth.userId : undefined
+			const previous = actors.get(this)
+			const allowed = userId !== undefined && auth?.telemetry === true
+			const ambiguous =
+				previous?.ambiguous === true || Boolean(previous?.userId && userId && previous.userId !== userId)
+			const changed = previous?.allowed !== allowed || (userId !== undefined && previous?.userId !== userId)
+			const snapshot: SessionActor = {
+				userId: previous?.userId ?? userId,
+				allowed,
+				revision: (previous?.revision ?? 0) + Number(changed),
+				ambiguous,
+			}
+			actors.set(this, snapshot)
+			// FastMCP reads mutable auth after async validation. Suppress custom
+			// telemetry too if this transport switches accounts; permissions and
+			// backend identity remain the validated auth's own values.
+			if (args[0]) {
+				args[0] = { ...args[0], ...(ambiguous ? { telemetry: false } : {}) }
+				bindSessionTelemetryGuard(args[0], () => {
+					const current = actors.get(this)
+					return (
+						snapshot.allowed &&
+						current?.allowed === true &&
+						!current.ambiguous &&
+						current.revision === snapshot.revision
+					)
+				})
+			}
 			return updateAuth.apply(this, args)
 		}
 	}
@@ -83,10 +120,30 @@ function instrumentSession(session: FastMCPSession, opts: Options): void {
 			captureModel: false,
 			enableConversationId: false,
 			enableExceptionAutocapture: false,
-			eventProperties: () => ({ surface: opts.surface }),
+			eventProperties: () => ({
+				surface: opts.surface,
+				...(session.sessionId ? { mcp_session_id: session.sessionId } : {}),
+				...(opts.perSessionConsent ? { [AUTH_REVISION]: actors.get(session)?.revision ?? 0 } : {}),
+			}),
 			beforeSend: (event) => {
-				if (opts.perSessionConsent && consent.get(session) !== true) return null
+				if (!telemetryEnabled()) return null
 				const props = event.properties ?? {}
+				if (opts.perSessionConsent) {
+					const actor = actors.get(session)
+					// Snapshot the auth revision before the handler runs. Never attribute
+					// an in-flight completion to a later account/consent choice.
+					const revision = props[AUTH_REVISION]
+					delete props[AUTH_REVISION]
+					if (!actor?.allowed || !actor.userId || actor.ambiguous || revision !== actor.revision) return null
+					event.distinct_id = actor.userId
+					props.$process_person_profile = true
+				} else {
+					const anonymousId = telemetryAnonymousId()
+					if (!anonymousId) return null
+					event.distinct_id = anonymousId
+					// The install stays anonymous, with no identify or alias to an account.
+					props.$process_person_profile = false
+				}
 				for (const key of DROPPED_PROPERTIES) delete props[key]
 				return event
 			},

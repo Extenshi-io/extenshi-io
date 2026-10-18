@@ -86,6 +86,7 @@ import {
 import { checkPublishAccess } from './publish-access.js'
 import { ScanError, scanArtifact } from './scan.js'
 import { describeStoreConstraints, validateSearchFilters } from './search-filters.js'
+import { canCaptureSessionTelemetry } from './session-telemetry.js'
 import {
 	DEFAULT_MARKET_TOP_N,
 	MARKET_FACETS,
@@ -207,6 +208,8 @@ export type Capability = 'read' | 'docs' | 'scan' | 'publish'
  */
 export interface ToolCallContext {
 	session?: FastMCPSessionAuth
+	/** Stable transport ID; independent of the per-request auth object. */
+	sessionId?: string
 }
 
 export interface ToolDeps {
@@ -351,25 +354,15 @@ export function isExpectedError(err: unknown, kind: string = classifyError(err))
 }
 
 /**
- * Attribution for a tool call, lifted from the session the surface supplies.
- *
- * Local stdio has no session at all, so both fields come back undefined and
- * captureEvent falls back to the per-install anonymous id — unchanged behaviour.
- * The hosted connector authenticates every request, so it supplies both: the
- * account id becomes the PostHog distinct_id, and the connection id threads one
- * client's calls together (see tools/extenshi-mcp-server/src/identity.ts, which
- * mints it per `authenticate()` — i.e. per connection, NOT per cached token).
- *
- * Read defensively: `session` is FastMCP's opaque auth record, and a surface
- * that carries neither field must degrade to the local behaviour rather than
- * throw inside instrumentation.
+ * Account identity comes from validated auth; connection identity comes from
+ * FastMCP's server-owned transport, not the auth object refreshed on each POST.
+ * Local stdio keeps captureEvent's anonymous per-install identity.
  */
-function attribution(session: unknown): { userId?: string; sessionId?: string } {
-	if (!session || typeof session !== 'object') return {}
-	const s = session as Record<string, unknown>
+function attribution(session: unknown, sessionId: unknown): { userId?: string; sessionId?: string } {
+	const s = session && typeof session === 'object' ? (session as Record<string, unknown>) : {}
 	return {
 		userId: typeof s.userId === 'string' && s.userId ? s.userId : undefined,
-		sessionId: typeof s.sessionId === 'string' && s.sessionId ? s.sessionId : undefined,
+		sessionId: typeof sessionId === 'string' && sessionId ? sessionId : undefined,
 	}
 }
 
@@ -412,15 +405,15 @@ function instrument<Params extends ToolParameters>(
 		execute: async (args, context) => {
 			// The hosted connector lets a user decline analytics on the consent
 			// screen; honour it for every event, including error reports.
-			if ((context.session as { telemetry?: unknown } | undefined)?.telemetry === false)
-				return original(args, context)
+			if (!canCaptureSessionTelemetry(context.session)) return original(args, context)
 			const startedAt = Date.now()
-			const { userId, sessionId } = attribution(context.session)
+			const { userId, sessionId } = attribution(context.session, context.sessionId)
 			const props = { tool: name, ...(sessionId ? { mcp_session_id: sessionId } : {}) }
 			captureEvent('mcp_tool_called', props, userId)
 			try {
 				const result = await original(args, context)
-				captureEvent('mcp_tool_succeeded', { ...props, duration_ms: Date.now() - startedAt }, userId)
+				if (canCaptureSessionTelemetry(context.session))
+					captureEvent('mcp_tool_succeeded', { ...props, duration_ms: Date.now() - startedAt }, userId)
 				return result
 			} catch (err) {
 				// Classified once and threaded into both uses below: the reported
@@ -429,15 +422,17 @@ function instrument<Params extends ToolParameters>(
 				const kind = classifyError(err)
 				// The failure count is always tracked, so we keep visibility into
 				// how often callers hit each condition (incl. the billing gate).
-				captureEvent(
-					'mcp_tool_failed',
-					{ ...props, error_kind: kind, duration_ms: Date.now() - startedAt },
-					userId,
-				)
-				// …but only genuine faults are shipped as exceptions. Expected
-				// user-facing conditions (a quota gate, a bad key, a message we
-				// authored) are not bugs and must not open error-tracking issues.
-				if (!isExpectedError(err, kind)) captureError(err, { tool: name })
+				if (canCaptureSessionTelemetry(context.session)) {
+					captureEvent(
+						'mcp_tool_failed',
+						{ ...props, error_kind: kind, duration_ms: Date.now() - startedAt },
+						userId,
+					)
+					// …but only genuine faults are shipped as exceptions. Expected
+					// user-facing conditions (a quota gate, a bad key, a message we
+					// authored) are not bugs and must not open error-tracking issues.
+					if (!isExpectedError(err, kind)) captureError(err, { tool: name }, userId)
+				}
 				throw err
 			}
 		},

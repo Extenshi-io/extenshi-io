@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // prototype's `connect` / `updateAuth` and the `server` getter.
 class FakeSession {
 	readonly server = { id: Symbol('server') }
+	sessionId?: string
 	async connect(_transport?: unknown): Promise<void> {}
 	updateAuth(_auth: unknown): void {}
 }
@@ -11,7 +12,11 @@ class FakeSession {
 const instrument = vi.fn()
 vi.mock('fastmcp', () => ({ FastMCPSession: FakeSession }))
 vi.mock('@posthog/mcp', () => ({ instrument }))
-vi.mock('./telemetry.js', () => ({ telemetryClient: () => ({}) }))
+vi.mock('./telemetry.js', () => ({
+	telemetryClient: () => ({}),
+	telemetryEnabled: () => true,
+	telemetryAnonymousId: () => 'anonymous-install',
+}))
 
 type BeforeSend = (event: { event: string; properties: Record<string, unknown> }) => unknown
 
@@ -39,7 +44,18 @@ async function install(opts: { surface: string; perSessionConsent?: boolean }) {
 	const session = new FakeSession()
 	await session.connect()
 	const [server, , options] = instrument.mock.calls[0]
-	return { session, server, options, beforeSend: options.beforeSend as BeforeSend }
+	const prepare = (event = toolCall()) => ({
+		...event,
+		distinct_id: 'sdk-session',
+		properties: { ...event.properties, ...options.eventProperties() },
+	})
+	return {
+		session,
+		server,
+		options,
+		prepare,
+		beforeSend: ((event) => options.beforeSend(prepare(event))) as BeforeSend,
+	}
 }
 
 describe('instrumentMcpAnalytics', () => {
@@ -61,6 +77,8 @@ describe('instrumentMcpAnalytics', () => {
 		const { beforeSend } = await install({ surface: 'mcp' })
 		const sent = beforeSend(toolCall()) as { properties: Record<string, unknown> }
 		expect(sent.properties).toEqual({
+			surface: 'mcp',
+			$process_person_profile: false,
 			$mcp_tool_name: 'get_extension',
 			$mcp_is_error: true,
 			$mcp_error_type: 'UserError',
@@ -93,6 +111,20 @@ describe('instrumentMcpAnalytics', () => {
 			const other = new FakeSession()
 			other.updateAuth({ telemetry: true })
 			expect(beforeSend(toolCall())).toBeNull()
+		})
+
+		it('keeps a pending event for repeated same-account auth and drops it after a consent revision', async () => {
+			const { session, options, prepare } = await install({ surface: 'mcp-remote', perSessionConsent: true })
+			session.updateAuth({ userId: 'u1', telemetry: true })
+			const pending = prepare()
+			session.updateAuth({ userId: 'u1', telemetry: true })
+			expect(options.beforeSend({ ...pending, properties: { ...pending.properties } })?.distinct_id).toBe(
+				'u1',
+			)
+			session.updateAuth({ userId: 'u1', telemetry: false })
+			session.updateAuth({ userId: 'u1', telemetry: true })
+			expect(options.beforeSend(pending)).toBeNull()
+			expect(options.beforeSend(prepare())?.distinct_id).toBe('u1')
 		})
 	})
 })

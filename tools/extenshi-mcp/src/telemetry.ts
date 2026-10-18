@@ -122,6 +122,12 @@ function anonId(): string {
 	return id
 }
 
+/** The existing install identity, without identifying or aliasing an account. */
+export function telemetryAnonymousId(): string | undefined {
+	// Do not create a config/identity when usage telemetry is disabled.
+	return telemetryEnabled() ? anonId() : undefined
+}
+
 function getClient(): PostHog | null {
 	// Fast path after the first call: never re-read the config file
 	// (telemetryEnabled does a sync read) on subsequent events — matters for the
@@ -306,11 +312,11 @@ export function captureEvent(
 	}
 }
 
-export function captureError(err: unknown, context: Record<string, unknown> = {}): void {
+export function captureError(err: unknown, context: Record<string, unknown> = {}, distinctId?: string): void {
 	const c = getClient()
 	if (!c) return
 	try {
-		c.captureException(sanitizeError(err), anonId(), { ...baseProps(), ...context })
+		c.captureException(sanitizeError(err), distinctId?.trim() || anonId(), { ...baseProps(), ...context })
 	} catch {
 		// Swallow — see captureEvent.
 	}

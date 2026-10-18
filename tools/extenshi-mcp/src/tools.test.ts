@@ -16,6 +16,7 @@ import { UserError } from 'fastmcp'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bff } from './bff.js'
 import { scanArtifact } from './scan.js'
+import { bindSessionTelemetryGuard } from './session-telemetry.js'
 import { captureError, captureEvent } from './telemetry.js'
 import {
 	type Capability,
@@ -748,7 +749,7 @@ describe('instrument — expected errors skip exception capture', () => {
 		)
 		await expect(tool.execute({ extension_id: 1, limit: 20 }, {})).rejects.toBeInstanceOf(UserError)
 
-		expect(captureError).toHaveBeenCalledWith(expect.any(Error), { tool: 'get_reviews' })
+		expect(captureError).toHaveBeenCalledWith(expect.any(Error), { tool: 'get_reviews' }, undefined)
 		expect(captureEvent).toHaveBeenCalledWith(
 			'mcp_tool_failed',
 			expect.objectContaining({ tool: 'get_reviews', error_kind: 'api_5xx' }),
@@ -760,7 +761,7 @@ describe('instrument — expected errors skip exception capture', () => {
 		const tool = getReviewsToolRejectingWith(new TypeError('x.map is not a function'))
 		await expect(tool.execute({ extension_id: 1, limit: 20 }, {})).rejects.toBeInstanceOf(UserError)
 
-		expect(captureError).toHaveBeenCalledWith(expect.any(Error), { tool: 'get_reviews' })
+		expect(captureError).toHaveBeenCalledWith(expect.any(Error), { tool: 'get_reviews' }, undefined)
 	})
 })
 
@@ -771,14 +772,16 @@ describe('instrument — per-call attribution from the session', () => {
 	beforeEach(() => vi.clearAllMocks())
 
 	/** A get_reviews tool whose BFF call succeeds, so the success path is exercised. */
-	function getReviewsToolResolving(): { execute: (a: unknown, c: unknown) => Promise<unknown> } {
+	function getReviewsToolResolving(result = Promise.resolve({ reviews: [] })): {
+		execute: (a: unknown, c: unknown) => Promise<unknown>
+	} {
 		const tools: Record<string, any> = {}
 		const server = {
 			addTool: (t: { name: string }) => {
 				tools[t.name] = t
 			},
 		}
-		const stubBff = { getReviews: () => Promise.resolve({ reviews: [] }) } as unknown as Bff
+		const stubBff = { getReviews: () => result } as unknown as Bff
 		registerTools(server as unknown as Parameters<typeof registerTools>[0], {
 			cfg: { bffUrl: 'https://bff.test', scanUrl: 'https://scan.test', docsUrl: 'https://docs.test' },
 			capabilities: new Set<Capability>(['read']),
@@ -806,11 +809,36 @@ describe('instrument — per-call attribution from the session', () => {
 		return tools.get_reviews
 	}
 
-	const remote = { userId: 'usr_42', sessionId: 'conn-abc', email: 'someone@example.com' }
+	const remote = { userId: 'usr_42', sessionId: 'obsolete-auth-id', email: 'someone@example.com' }
+
+	it.each(['success', 'failure'])(
+		'drops a pending %s after the session analytics guard closes',
+		async (outcome) => {
+			let complete!: () => void
+			const result = new Promise<{ reviews: never[] }>((resolve, reject) => {
+				complete = () =>
+					outcome === 'success' ? resolve({ reviews: [] }) : reject(new TypeError('private fault'))
+			})
+			let allowed = true
+			const auth = { ...remote, telemetry: true }
+			bindSessionTelemetryGuard(auth, () => allowed)
+			const pending = getReviewsToolResolving(result).execute(
+				{ extension_id: 1, limit: 20 },
+				{ session: auth, sessionId: 'conn-abc' },
+			)
+			allowed = false
+			complete()
+			if (outcome === 'success') await pending
+			else await expect(pending).rejects.toBeInstanceOf(UserError)
+			expect(captureEvent).toHaveBeenCalledTimes(1)
+			expect(captureEvent).toHaveBeenCalledWith('mcp_tool_called', expect.any(Object), 'usr_42')
+			expect(captureError).not.toHaveBeenCalled()
+		},
+	)
 
 	it('reports the account id as the distinct_id and threads the connection', async () => {
 		const tool = getReviewsToolResolving()
-		await tool.execute({ extension_id: 1, limit: 20 }, { session: remote })
+		await tool.execute({ extension_id: 1, limit: 20 }, { session: remote, sessionId: 'conn-abc' })
 
 		for (const event of ['mcp_tool_called', 'mcp_tool_succeeded']) {
 			expect(captureEvent).toHaveBeenCalledWith(
@@ -838,7 +866,7 @@ describe('instrument — per-call attribution from the session', () => {
 
 	it('never reports the email — it stays in our own database', async () => {
 		const tool = getReviewsToolResolving()
-		await tool.execute({ extension_id: 1, limit: 20 }, { session: remote })
+		await tool.execute({ extension_id: 1, limit: 20 }, { session: remote, sessionId: 'conn-abc' })
 
 		const everything = JSON.stringify((captureEvent as unknown as { mock: { calls: unknown[] } }).mock.calls)
 		expect(everything).not.toContain('someone@example.com')
@@ -846,15 +874,16 @@ describe('instrument — per-call attribution from the session', () => {
 
 	it('carries the attribution onto failures too', async () => {
 		const tool = getReviewsToolRejecting(new TypeError('x.map is not a function'))
-		await expect(tool.execute({ extension_id: 1, limit: 20 }, { session: remote })).rejects.toBeInstanceOf(
-			UserError,
-		)
+		await expect(
+			tool.execute({ extension_id: 1, limit: 20 }, { session: remote, sessionId: 'conn-abc' }),
+		).rejects.toBeInstanceOf(UserError)
 
 		expect(captureEvent).toHaveBeenCalledWith(
 			'mcp_tool_failed',
 			expect.objectContaining({ tool: 'get_reviews', mcp_session_id: 'conn-abc' }),
 			'usr_42',
 		)
+		expect(captureError).toHaveBeenCalledWith(expect.any(Error), { tool: 'get_reviews' }, 'usr_42')
 	})
 
 	// Local stdio has no session at all; it must keep falling back to the
