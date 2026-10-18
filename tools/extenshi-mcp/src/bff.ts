@@ -184,7 +184,27 @@ export interface Bff extends PayBff {
 		publicCode: string
 		locale: string
 		translations: Record<string, string>
+		proposedBy?: string
 	}): Promise<unknown>
+	/** The project's uninstall surveys: id, URL, enabled, primary, responses (uninstallFeedback.agentListForms). */
+	listUninstallForms(input: { projectId: string }): Promise<unknown>
+	/** One survey: config, `updatedAt`, heading + its source, translation status. */
+	getUninstallForm(input: { projectId: string; formId: string }): Promise<unknown>
+	/** Partial update with dryRun / expectedUpdatedAt / idempotencyKey. Requires hosted.write. */
+	updateUninstallForm(input: {
+		projectId: string
+		formId: string
+		patch: Record<string, unknown>
+		expectedUpdatedAt?: string
+		dryRun?: boolean
+		idempotencyKey?: string
+		confirmPrivacyChange?: boolean
+		proposedBy?: string
+	}): Promise<unknown>
+	/** The page and after-submit screens in one language; records nothing. */
+	previewUninstallForm(input: { projectId: string; formId: string; locale?: string }): Promise<unknown>
+	/** Where a name appears across the project's hosted text, with the tool that fixes each field. */
+	findBrandMentions(input: { projectId: string; terms: string[] }): Promise<unknown>
 	/**
 	 * Translated copies of the hosted privacy policy / license terms (it. 13 T10
 	 * L3): what the developer can translate (edited sections, own answers),
@@ -309,6 +329,11 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		setInstructionsEnabled: (input) => client.devProject.agentSetInstructionsEnabled.mutate(input),
 		getPageTranslations: (input) => client.devProject.agentGetPageTranslations.query(input),
 		setPageTranslations: (input) => client.devProject.agentSetPageTranslations.mutate(input),
+		listUninstallForms: (input) => client.uninstallFeedback.agentListForms.query(input),
+		getUninstallForm: (input) => client.uninstallFeedback.agentGetForm.query(input),
+		updateUninstallForm: (input) => client.uninstallFeedback.agentUpdateForm.mutate(input),
+		previewUninstallForm: (input) => client.uninstallFeedback.agentPreviewForm.query(input),
+		findBrandMentions: (input) => client.devProject.agentFindBrandMentions.query(input),
 		getPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentGetTranslations.query(input),
 		setPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentSetTranslations.mutate(input),
 		getLicenseTermsTranslations: (input) => client.payLicenseTerms.getTranslations.query(input),

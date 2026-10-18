@@ -59,6 +59,20 @@ export function updateMessage(current: string, latest: string): string {
 	)
 }
 
+/** What the last check learned, for connection_diagnostics: stderr never reaches the agent. */
+export interface KnownUpdate {
+	version: string
+	latestVersion: string
+	updateAvailable: boolean
+	howToUpdate: string | null
+}
+let known: KnownUpdate | null = null
+
+/** The result of this process's update check, or null when none finished (opted out, offline, remote). */
+export function knownUpdate(): KnownUpdate | null {
+	return known
+}
+
 /**
  * Fire-and-forget update check. Never throws; writes at most one line to stderr.
  * `fetchImpl`/`out` are injectable for tests.
@@ -84,7 +98,18 @@ export async function checkForUpdate(
 		if (!res.ok) return
 		const json = (await res.json()) as { version?: unknown }
 		const latest = typeof json.version === 'string' ? json.version : undefined
-		if (latest && isNewerVersion(current, latest)) out(updateMessage(current, latest))
+		if (!latest) return
+		const updateAvailable = isNewerVersion(current, latest)
+		known = {
+			version: current,
+			latestVersion: latest,
+			updateAvailable,
+			// A client with a cached npx copy keeps an older tool list until it fetches @latest.
+			howToUpdate: updateAvailable
+				? 'Restart the client with `npx -y @extenshi/mcp@latest` (or `npm i -g @extenshi/mcp@latest`).'
+				: null,
+		}
+		if (updateAvailable) out(updateMessage(current, latest))
 	} catch {
 		// Offline, aborted, non-JSON, registry hiccup — stay silent.
 	}

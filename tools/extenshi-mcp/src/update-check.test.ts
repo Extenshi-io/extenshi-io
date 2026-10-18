@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkForUpdate, isNewerVersion, updateCheckOptedOut, updateMessage } from './update-check.js'
+import {
+	checkForUpdate,
+	isNewerVersion,
+	knownUpdate,
+	updateCheckOptedOut,
+	updateMessage,
+} from './update-check.js'
 
 describe('isNewerVersion', () => {
 	it('detects a strictly newer version', () => {
@@ -73,5 +79,20 @@ describe('checkForUpdate', () => {
 		const m = updateMessage('0.1.2', '0.1.3')
 		expect(m).toContain('npx -y @extenshi/mcp@latest')
 		expect(m).toContain('npm i -g @extenshi/mcp@latest')
+	})
+})
+
+describe('knownUpdate', () => {
+	it('remembers what the check found, so connection_diagnostics can tell the agent', async () => {
+		const fetchImpl = (async () =>
+			new Response(JSON.stringify({ version: '9.0.0' }), { status: 200 })) as typeof fetch
+		const previous = process.env.CI
+		delete process.env.CI
+		try {
+			await checkForUpdate('1.0.0', fetchImpl, () => {})
+		} finally {
+			if (previous !== undefined) process.env.CI = previous
+		}
+		expect(knownUpdate()).toMatchObject({ version: '1.0.0', latestVersion: '9.0.0', updateAvailable: true })
 	})
 })

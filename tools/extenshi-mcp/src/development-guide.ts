@@ -136,9 +136,14 @@ export const DEVELOPMENT_SERVICES = [
 			'unpublish_install_instructions',
 			'get_page_translations',
 			'set_page_translations',
+			'list_uninstall_forms',
+			'get_uninstall_form',
+			'update_uninstall_form',
+			'preview_uninstall_form',
+			'find_brand_mentions',
 		],
 		access:
-			'Free welcome-page specification. Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state, and publishes the install instructions page (free; hosted.write) — the uninstall form and welcome page are published from the cabinet. The hosted uninstall form, welcome page and install instructions open in the user’s browser language (the generated snippets pass chrome.i18n.getUILanguage() as `hl`) when the project offers it, otherwise in the project’s own language: built-in text is translated by Extenshi (en + 10 languages); the developer’s own text is translated per field with get_page_translations / set_page_translations (identity; hosted.write to save).',
+			'Free welcome-page specification. Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state, and publishes the install instructions page (free; hosted.write) — the uninstall form is created and the welcome page is edited in the cabinet. An existing uninstall survey is read, previewed and changed over MCP (list/get/preview_uninstall_form; update_uninstall_form with dryRun, expectedUpdatedAt and an idempotencyKey; hosted.write), keeping its URL and responses; each change is listed for the owner in Dojo. After a rename, find_brand_mentions lists every hosted field still holding the old name and the tool that fixes it. The hosted uninstall form, welcome page and install instructions open in the user’s browser language (the generated snippets pass chrome.i18n.getUILanguage() as `hl`) when the project offers it, otherwise in the project’s own language: built-in text is translated by Extenshi (en + 10 languages); the developer’s own text is translated per field with get_page_translations / set_page_translations (identity; hosted.write to save).',
 		urls: [
 			DEVELOPMENT_GUIDE_URL,
 			docs('pin-guide'),

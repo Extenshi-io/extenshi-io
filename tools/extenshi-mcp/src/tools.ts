@@ -100,7 +100,9 @@ import {
 } from './shape.js'
 import { captureError, captureEvent, classifyError } from './telemetry.js'
 import { renderExtensionTemplates } from './templates.js'
+import { registerUninstallFormTools } from './uninstall-form-tools.js'
 import { renderCatalogPayload } from './untrusted.js'
+import { knownUpdate } from './update-check.js'
 import { renderWelcomeWorkflow } from './welcome-workflow.js'
 
 // ── Public links (shared by tool bodies + server instructions) ──────────────
@@ -1288,7 +1290,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'connection_diagnostics',
 			description:
-				'Verify authentication, granted scopes, supported workspace contracts and actual write permissions (incl. hosted.write, evidence uploads and, for a projectId, CI ingest configuration). Includes credit balances; credentials and secrets are not included. A failed sign-in returns an error that says how to sign in again.',
+				'Verify authentication, granted scopes, supported workspace contracts and actual write permissions (incl. hosted.write, evidence uploads and, for a projectId, CI ingest configuration) and the Pay scopes a key carries. Includes credit balances, the registered tools and, on the local server, `client` {version, latestVersion, updateAvailable}; credentials and secrets are not included. A failed sign-in returns an error that says how to sign in again.',
 			annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 			parameters: z.object({}),
 			execute: async (_args, context) => {
@@ -1298,7 +1300,13 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 						client.connectionDiagnostics(),
 						client.getApiCallerBalance(),
 					])
-					return JSON.stringify({ connection, balance, registeredTools: registeredTools.map((t) => t.name) })
+					const update = knownUpdate()
+					return JSON.stringify({
+						connection,
+						balance,
+						registeredTools: registeredTools.map((t) => t.name),
+						...(update ? { client: update } : {}),
+					})
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1722,7 +1730,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Built-in text (buttons, reasons, footers) is translated by Extenshi into en, es, pt-BR, fr, de, ' +
 				'it, ru, ja, ko, zh-CN and ar and is not listed. A page is shown in the user’s browser language ' +
 				'when the project offers it, otherwise in defaultLocale; an untranslated or outdated field shows ' +
-				'its original. Requires project.read.',
+				'its original. Uninstall survey text itself is changed with update_uninstall_form. Requires project.read.',
 			parameters: z.object({ projectId: z.string().uuid() }),
 			execute: async (args, context) => {
 				try {
@@ -1748,6 +1756,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				publicCode: z.string().max(40).describe('The page code, from get_page_translations.'),
 				locale: z.string().max(35).describe('BCP 47 tag or the _locales spelling (de, pt-BR, pt_BR).'),
 				translations: z.record(z.string().max(80), z.string().max(2000)),
+				proposedBy: z.string().max(120).optional().describe('Your agent/tool name, shown to the owner.'),
 			}),
 			execute: async (args, context) => {
 				try {
@@ -1826,6 +1835,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		})
 		// get_license_terms_questionnaire / draft_license_terms (project.read, read-only).
 		registerLicenseTermsTools(add, bff, (err) => readError(err, missingKeyMessage))
+		// list/get/update/preview_uninstall_form + find_brand_mentions (project.read / hosted.write).
+		registerUninstallFormTools(add, bff, (err) => readError(err, missingKeyMessage))
 		// A local filesystem exists only where local artifacts do (stdio).
 		const localFiles = caps.has('scan')
 		add({

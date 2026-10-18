@@ -84,6 +84,11 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_legal_translations` | Translated copies of the published privacy policy or license terms (the English version binds): what is left to translate, per language | Free; identity required (license terms: pay.read) |
 | `get_license_terms_questionnaire` | The license terms & refunds questions as data (types, choices, limits, when each is required); no saved answers | Free; identity required (no pay.read) |
 | `draft_license_terms` | License terms text from answers sent in the call, with the gaps that block publishing; saves nothing | Free; identity required (no pay.read) |
+| `list_uninstall_forms` | The project's uninstall surveys: URL, enabled, primary, responses | Free; identity required |
+| `get_uninstall_form` | One survey in full, its `updatedAt`, the heading and its source, translation status | Free; identity required |
+| `update_uninstall_form` | Partial update checked like the Dojo editor; `dryRun` diff, `expectedUpdatedAt`, `idempotencyKey`; URL and responses stay | Requires hosted.write for OAuth |
+| `preview_uninstall_form` | The survey's text in one language and the screen after each answer; counts nothing | Free; identity required |
+| `find_brand_mentions` | Every hosted field holding a name (e.g. an old extension name), with the tool that fixes it | Free; identity required |
 | `set_legal_translations` | Save one language of the privacy policy or license terms translation (edited sections and free-text answers) | Requires hosted.write + Pro (policy) or pay.write (terms) for OAuth |
 | `upload_project_media` | Upload a PNG/JPEG/WebP logo or screenshot to the project's public media store and get a stable URL for `publish_landing_page` (metadata stripped, per-project quota; `filePath` inside the workspace on stdio, `dataBase64` everywhere) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |

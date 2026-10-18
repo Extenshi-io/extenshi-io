@@ -145,6 +145,11 @@ const READ_TOOLS = [
 	'set_legal_translations',
 	'get_license_terms_questionnaire',
 	'draft_license_terms',
+	'list_uninstall_forms',
+	'get_uninstall_form',
+	'update_uninstall_form',
+	'preview_uninstall_form',
+	'find_brand_mentions',
 	'upload_project_media',
 	'search_extensions',
 	'get_extension',
@@ -651,6 +656,8 @@ describe('directory tool annotations', () => {
 			'set_page_translations',
 			// Translations of the privacy policy (hosted.write) / license terms (pay.write).
 			'set_legal_translations',
+			// Edits an existing uninstall survey (hosted.write); its URL and responses stay.
+			'update_uninstall_form',
 			'upload_project_media',
 		])
 		for (const t of tools) {
