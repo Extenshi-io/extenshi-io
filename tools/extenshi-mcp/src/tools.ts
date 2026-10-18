@@ -2349,7 +2349,12 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Manifests come as summaries by default (version, top-level keys, size, digest, origin ' +
 				'imported/generated, and which keys of each drafted manifest differ from the imported ' +
 				'source/built one); pass manifests "full" for the bodies, or get_project_scaffold for one ' +
-				"browser's manifest file. FREE — spends no credit. Type definitions are in list_extension_templates.",
+				"browser's manifest file. `staleNames` is null until the project is renamed; after a rename it " +
+				'lists the earlier names (`earlierNames`), every hosted field that still holds one (`mentions`, ' +
+				'at most 20, each with the tool that fixes it; `total`, `truncated`) and a `warning` sentence — ' +
+				'find_brand_mentions with those names returns them all. License terms and Pay offers are ' +
+				'searched only with pay.read (otherwise listed in `skipped`). ' +
+				'FREE — spends no credit. Type definitions are in list_extension_templates.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				includeToolStates: z
