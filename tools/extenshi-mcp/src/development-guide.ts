@@ -256,9 +256,15 @@ export const DEVELOPMENT_SERVICES = [
 			'rotate_pay_key',
 			'get_license_terms_questionnaire',
 			'draft_license_terms',
+			'get_license_terms',
+			'save_license_terms_draft',
+			'request_license_terms_publication',
+			'publish_license_terms',
+			'verify_license_terms_live',
+			'rollback_license_terms',
 		],
 		access:
-			'Pay applications work independently of development projects. Explicit pay.read/pay.write permission is required; older connections and API keys have no Pay grant. The exceptions are get_license_terms_questionnaire and draft_license_terms: they need only project read access because they return the questions and an unsaved draft built from the answers in the call, not saved answers or Pay state. Readiness (get_pay_readiness) and the actual SDK distribution determine whether integration is possible. The author completes the seller agreement and Stripe KYC in the browser. Checkout is enabled only after offers and profile are configured, and only with explicit authorization. Registration does not prove production deployment or npm publication.',
+			'Pay applications work independently of development projects. Explicit pay.read/pay.write permission is required; older connections and API keys have no Pay grant. The exceptions are get_license_terms_questionnaire and draft_license_terms: they need only project read access because they return the questions and an unsaved draft built from the answers in the call, not saved answers or Pay state. The saved terms are read with get_license_terms (pay.read) and saved with save_license_terms_draft (pay.write); the seller identity answers stay the owner’s. Publication goes through the owner: request_license_terms_publication returns an approval link, and the owner’s approval can also decide seller.terms. Only a developer key with the separate pay.legal.publish permission publishes directly (publish_license_terms, not on the hosted connector). verify_license_terms_live checks the page, the paywall links and the seller.terms decision; rollback_license_terms brings an earlier version back the same two ways. Readiness (get_pay_readiness) and the actual SDK distribution determine whether integration is possible. The author completes the seller agreement and Stripe KYC in the browser. Checkout is enabled only after offers and profile are configured, and only with explicit authorization. Registration does not prove production deployment or npm publication.',
 		urls: [docs('pay-sdk'), 'https://dojo.extenshi.io/payments'],
 	},
 ] as const

@@ -1863,7 +1863,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			},
 		})
 		// get_license_terms_questionnaire / draft_license_terms (project.read, read-only).
-		registerLicenseTermsTools(add, bff, (err) => readError(err, missingKeyMessage))
+		registerLicenseTermsTools(add, bff, (err) => readError(err, missingKeyMessage), { oauth })
 		// list/get/update/preview_uninstall_form + find_brand_mentions (project.read / hosted.write).
 		registerUninstallFormTools(add, bff, (err) => readError(err, missingKeyMessage))
 		// A local filesystem exists only where local artifacts do (stdio).

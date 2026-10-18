@@ -85,6 +85,12 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_legal_translations` | Translated copies of the published privacy policy or license terms (the English version binds): what is left to translate, per language | Free; identity required (license terms: pay.read) |
 | `get_license_terms_questionnaire` | The license terms & refunds questions as data (types, choices, limits, when each is required); no saved answers | Free; identity required (no pay.read) |
 | `draft_license_terms` | License terms text from answers sent in the call, with the gaps that block publishing; saves nothing | Free; identity required (no pay.read) |
+| `get_license_terms` | Saved draft, published version and hash, versions, open and owner-only answers | Requires pay.read |
+| `save_license_terms_draft` | Save answers as the draft; identity answers stay the owner's; `dryRun`, `expectedDraftHash` | Requires pay.write |
+| `request_license_terms_publication` | Ask the owner to publish a draft (approval link); can also decide seller.terms | Requires pay.write |
+| `publish_license_terms` | Publish directly with a key that has `pay.legal.publish`; stdio only | Requires pay.write + pay.legal.publish |
+| `verify_license_terms_live` | Page, hash, paywall links and seller.terms checks of the published terms | Free; identity required |
+| `rollback_license_terms` | Earlier version back as a new one, via approval or directly | Requires pay.write |
 | `list_uninstall_forms` | The project's uninstall surveys: URL, enabled, primary, responses | Free; identity required |
 | `get_uninstall_form` | One survey in full, its `updatedAt`, the heading and its source, translation status | Free; identity required |
 | `update_uninstall_form` | Partial update checked like the Dojo editor; `dryRun` diff, `expectedUpdatedAt`, `idempotencyKey`; URL and responses stay | Requires hosted.write for OAuth |

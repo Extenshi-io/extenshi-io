@@ -237,6 +237,28 @@ export interface Bff extends PayBff {
 	 */
 	getLicenseTermsQuestionnaire(input: { projectId: string }): Promise<unknown>
 	draftLicenseTerms(input: { projectId: string; answers?: Record<string, unknown> }): Promise<unknown>
+	/** The saved terms (pay.read): draft, published version, missing and owner-only answers. */
+	getLicenseTerms(input: { projectId: string }): Promise<unknown>
+	/** Save answers as the draft; identity answers stay the owner's (pay.write). */
+	saveLicenseTermsDraft(input: {
+		projectId: string
+		input: Record<string, unknown>
+		expectedDraftHash?: string
+		dryRun?: boolean
+		idempotencyKey?: string
+	}): Promise<unknown>
+	/** An owner approval to publish this draft (pay.write). */
+	requestLicenseTermsPublication(input: {
+		projectId: string
+		draftHash: string
+		alsoDecideSellerTerms?: boolean
+	}): Promise<unknown>
+	/** Direct publish: an API key with pay.legal.publish only. */
+	publishLicenseTerms(input: { projectId: string; draftHash: string }): Promise<unknown>
+	/** An earlier version back into the draft (pay.write). */
+	restoreLicenseTermsVersion(input: { projectId: string; versionNumber: number }): Promise<unknown>
+	/** Page, hash, paywall links and seller.terms checks (project.read). */
+	verifyLicenseTermsLive(input: { projectId: string }): Promise<unknown>
 	/**
 	 * Upload one PNG/JPEG/WebP to the project's PUBLIC media store (the same one
 	 * Dojo uploads use). The BFF re-checks magic bytes, strips metadata, enforces
@@ -346,6 +368,12 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		setLicenseTermsTranslations: (input) => client.payLicenseTerms.setTranslations.mutate(input),
 		getLicenseTermsQuestionnaire: (input) => client.payLicenseTerms.agentGetQuestionnaire.query(input),
 		draftLicenseTerms: (input) => client.payLicenseTerms.agentDraft.mutate(input),
+		getLicenseTerms: (input) => client.payLicenseTerms.get.query(input),
+		saveLicenseTermsDraft: (input) => client.payLicenseTerms.saveDraft.mutate(input),
+		requestLicenseTermsPublication: (input) => client.payLicenseTerms.requestPublication.mutate(input),
+		publishLicenseTerms: (input) => client.payLicenseTerms.publish.mutate(input),
+		restoreLicenseTermsVersion: (input) => client.payLicenseTerms.restoreVersion.mutate(input),
+		verifyLicenseTermsLive: (input) => client.payLicenseTerms.verifyLive.query(input),
 		uploadProjectMedia: (input) => client.devProject.agentUploadProjectMedia.mutate(input),
 	}
 }

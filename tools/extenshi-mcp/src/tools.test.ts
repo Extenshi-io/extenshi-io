@@ -145,6 +145,12 @@ const READ_TOOLS = [
 	'set_legal_translations',
 	'get_license_terms_questionnaire',
 	'draft_license_terms',
+	'get_license_terms',
+	'save_license_terms_draft',
+	'request_license_terms_publication',
+	'publish_license_terms',
+	'verify_license_terms_live',
+	'rollback_license_terms',
 	'list_uninstall_forms',
 	'get_uninstall_form',
 	'update_uninstall_form',
@@ -733,6 +739,12 @@ describe('directory tool annotations', () => {
 			'set_page_translations',
 			// Translations of the privacy policy (hosted.write) / license terms (pay.write).
 			'set_legal_translations',
+			// The license terms draft, a publication request to the owner, a direct publish (pay.legal.publish) and
+			// a rollback (pay.write).
+			'save_license_terms_draft',
+			'request_license_terms_publication',
+			'publish_license_terms',
+			'rollback_license_terms',
 			// Edits an existing uninstall survey (hosted.write); its URL and responses stay.
 			'update_uninstall_form',
 			'upload_project_media',
@@ -2026,5 +2038,55 @@ describe('Pay error guidance', () => {
 			rotatePayKey: () => Promise.reject(trpcError('sk_live_secret leaked', 404)),
 		})
 		await expect(tools.rotate_pay_key.execute({ appId }, {})).rejects.not.toThrow(/sk_live/)
+	})
+})
+
+describe('license terms publishing on the connector', () => {
+	it('offers no direct publish there: the connector only asks the owner', () => {
+		const { names, server } = recordingServer()
+		registerTools(server, { ...depsFor(['read', 'docs']), auth: 'oauth' })
+		expect(names).toContain('request_license_terms_publication')
+		expect(names).not.toContain('publish_license_terms')
+	})
+})
+
+describe('rollback_license_terms', () => {
+	const register = (bff: Partial<Bff>) => {
+		const tools: Record<string, any> = {}
+		const server = {
+			addTool: (t: { name: string }) => {
+				tools[t.name] = t
+			},
+		}
+		registerTools(server as unknown as Parameters<typeof registerTools>[0], {
+			cfg: { bffUrl: 'https://bff.test', scanUrl: 'https://scan.test', docsUrl: 'https://docs.test' },
+			capabilities: new Set<Capability>(['read']),
+			getBff: () => bff as Bff,
+		})
+		return tools
+	}
+	const projectId = '11111111-1111-4111-8111-111111111111'
+
+	it('mode publish without pay.legal.publish is refused before the draft is touched', async () => {
+		const restore = vi.fn()
+		const tools = register({
+			connectionDiagnostics: async () => ({ scopes: ['project.read', 'pay.write'] }),
+			restoreLicenseTermsVersion: restore,
+		})
+		await expect(
+			tools.rollback_license_terms.execute({ projectId, versionNumber: 1, mode: 'publish' }, {}),
+		).rejects.toThrow(/PAY_LEGAL_PUBLISH_REQUIRED/)
+		expect(restore).not.toHaveBeenCalled()
+	})
+
+	it('mode request restores, then asks the owner', async () => {
+		const request = vi.fn(async () => ({ status: 'pending_approval' }))
+		const tools = register({
+			restoreLicenseTermsVersion: async () => ({ draftHash: 'a'.repeat(64) }),
+			requestLicenseTermsPublication: request,
+		})
+		const out = JSON.parse(await tools.rollback_license_terms.execute({ projectId, versionNumber: 1 }, {}))
+		expect(request).toHaveBeenCalledWith({ projectId, draftHash: 'a'.repeat(64) })
+		expect(out.publication).toEqual({ status: 'pending_approval' })
 	})
 })
