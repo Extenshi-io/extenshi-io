@@ -1,0 +1,13 @@
+{
+	"name": "Tab Pulse",
+	"description": "Counts taps per tab and wears the count as a badge — a tour of the chrome.action API.",
+	"version": "1.0",
+	"manifest_version": 3,
+	"background": {
+		"service_worker": "background.js"
+	},
+	"action": {
+		"default_title": "Tab Pulse — click to count"
+	},
+	"permissions": ["storage"]
+}
