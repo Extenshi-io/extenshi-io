@@ -81,6 +81,11 @@ export interface Bff extends PayBff {
 	/** This caller's credit balances across all pools. FREE — never spends a read credit. */
 	getApiCallerBalance(): Promise<ApiCallerBalance>
 	/**
+	 * Where a change proposed through the hosted connector stands (the `approvalId` of a `pending_approval`
+	 * response). Read-only: the owner decides in Dojo, never through this call.
+	 */
+	getApproval(input: { approvalId: string }): Promise<unknown>
+	/**
 	 * Resolve a public STORE extension id (from the store URL) to the numeric
 	 * catalog id the read tools take. FREE — the read that follows is what's
 	 * metered. Returns null when no catalog listing exists for it yet.
@@ -298,6 +303,7 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		getExtendedFilterFacets: () => client.catalog.getExtendedFilterFacets.query(),
 		getCategoryTree: () => client.catalog.getCategoryTree.query(),
 		getApiCallerBalance: () => client.cli.getApiCallerBalance.query(),
+		getApproval: (input) => client.approval.status.query({ id: input.approvalId }),
 		resolveExtensionRef: (input) => client.catalog.resolveExtensionRef.query(input),
 		getSecuritySummaryBatch: (input) => client.security.getSecuritySummaryBatch.query(input),
 		listMyProjects: () => client.devProject.agentListProjects.query(),

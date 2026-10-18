@@ -33,9 +33,11 @@ export const DEVELOPMENT_SERVICES = [
 	},
 	{
 		id: 'account',
-		purpose: 'Sign-in, API keys for local tools and credit-pool balances ahead of paid work.',
-		tools: ['get_credit_balance', 'connection_diagnostics'],
-		access: 'Balance lookup is free and requires identity; catalog reads and scans use credit pools.',
+		purpose:
+			'Sign-in, API keys for local tools, credit-pool balances ahead of paid work and where a change proposed through the hosted connector stands.',
+		tools: ['get_credit_balance', 'connection_diagnostics', 'get_approval'],
+		access:
+			'Balance lookup and get_approval are free and require identity; get_approval reads only the signed-in account’s own proposals. Catalog reads and scans use credit pools.',
 		urls: [docs('scan-credits'), 'https://dojo.extenshi.io/api-keys', 'https://dojo.extenshi.io/billing'],
 	},
 	{

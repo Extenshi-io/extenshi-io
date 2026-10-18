@@ -179,6 +179,26 @@ export const SERVER_INSTRUCTIONS =
 	'Hosted privacy-policy tools need a Pro project: publish_privacy_policy puts a policy on the live public page, update_privacy_policy_with_ai returns a proposal only. ' +
 	'Registered tools are not proof of account entitlements or a completed release.'
 
+/**
+ * What happens to a payments or live-policy change made through the hosted connector (the owner approves it in
+ * Dojo). A statement of fact, only for the OAuth transport: an `ek_` key acts directly.
+ */
+const CONNECTOR_APPROVAL_FACT =
+	'Through this connector, payment, policy-publish and legal-translation changes are proposals; the owner approves them in Dojo, and get_approval returns the outcome.'
+
+/** Appended to the descriptions of the tools whose connector call is a proposal, never an immediate change. */
+const APPROVAL_NOTE =
+	' On the hosted connector the response is status pending_approval with an approvalId and approvalUrl, and nothing changes until the owner approves it in Dojo; get_approval returns the outcome.'
+
+/** Pay tools whose hosted-connector call is proposed to the owner instead of applied. */
+const APPROVAL_GATED_PAY = new Set<string>([
+	'setPayEnabled',
+	'upsertPayOffer',
+	'archivePayApp',
+	'archivePayOffer',
+	'setPaySellerProfile',
+])
+
 /** Match initialize instructions to the same capabilities used for registration. */
 export function getServerInstructions(
 	capabilities: ReadonlySet<Capability>,
@@ -193,7 +213,8 @@ export function getServerInstructions(
 		(local.length
 			? ` This connection exposes ${local.join(' and ')} for local artifacts; they need valid credentials and publishing access.`
 			: ' This connection has no local artifact scan or store-publishing tool; the local stdio server and the CLI provide those stages.') +
-		(auth === 'api-key' ? ` API keys for the local package: ${KEY_PAGE}.` : '')
+		(auth === 'api-key' ? ` API keys for the local package: ${KEY_PAGE}.` : '') +
+		(auth === 'oauth' ? ` ${CONNECTOR_APPROVAL_FACT}` : '')
 	)
 }
 
@@ -585,6 +606,12 @@ const TOOL_ANNOTATIONS: Record<
 	},
 	get_credit_balance: {
 		title: 'Check credit balance',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	get_approval: {
+		title: 'Check a proposed change',
 		readOnlyHint: true,
 		idempotentHint: true,
 		openWorldHint: true,
@@ -1123,7 +1150,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		for (const [method, name, , , mutation, description] of PAY_OPERATIONS) {
 			add({
 				name,
-				description: `${description} Requires ${mutation ? 'pay.write' : 'pay.read'} permission.`,
+				description: `${description}${APPROVAL_GATED_PAY.has(method) ? APPROVAL_NOTE : ''} Requires ${mutation ? 'pay.write' : 'pay.read'} permission.`,
 				parameters: paySchemas[method],
 				annotations: {
 					readOnlyHint: !mutation,
@@ -1807,7 +1834,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'The server records which English text each translates, so a later edit marks it outdated; an ' +
 				'empty string removes one. Only the project’s languages are accepted (TRANSLATIONS_INVALID ' +
 				'otherwise). Nothing changes in the English original. privacy_policy needs hosted.write and a ' +
-				'Pro project; license_terms needs pay.write.',
+				'Pro project; license_terms needs pay.write. On the hosted connector, the texts are stored ' +
+				'as a proposal (status pending_approval) and go live only when the owner approves them in Dojo; ' +
+				'get_approval returns the outcome.',
 			parameters: z.object({
 				projectId: z.string().uuid(),
 				document: legalDocument,
@@ -2313,6 +2342,25 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		// developer already configured. Both are FREE: credits pay for catalog
 		// data about other people's extensions, never for your own work.
 		add({
+			name: 'get_approval',
+			description:
+				'Report where a change proposed through the hosted connector stands: pending (waiting for the owner in Dojo), ' +
+				'applying, applied, rejected, failed, expired or superseded, with a one-line summary and, once applied, the outcome. ' +
+				'Takes the approvalId from a pending_approval response. Approving happens only in Dojo, by the owner; ' +
+				'this tool only reads. FREE — spends no credit.',
+			parameters: z.object({
+				approvalId: z.string().uuid().describe('approvalId from a pending_approval response.'),
+			}),
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).getApproval(args), null, 2)
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
+
+		add({
 			name: 'list_my_projects',
 			description:
 				"List the extension projects owned by the signed-in Extenshi account — the developer's own workspaces on " +
@@ -2463,7 +2511,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Without bodyMarkdown it generates the policy from the saved form and manifest (the first ' +
 				'version is produced this way); with bodyMarkdown it publishes that edited (or AI-updated) ' +
 				'draft at the same public URL. Once published, PRIVACY_POLICY_URL in the integration.file ' +
-				'from get_project_state is the hosted URL. Pro only.',
+				'from get_project_state is the hosted URL. Pro only.' +
+				' On the hosted connector the text (generated now when bodyMarkdown is omitted) is stored as a proposal and shown to the owner in Dojo; nothing is published until they approve it, and get_approval returns the outcome.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				bodyMarkdown: z

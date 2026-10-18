@@ -53,6 +53,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_risk_by_store_ids` | Safety scores for **up to 40** extensions in one call, by store id — for auditing a list of installed extensions instead of calling `get_security` per extension | 1 read per call |
 | `market_overview` | Catalog-wide market intelligence with no args (totals, store split, category tree, and the extended breakdown — MV2/MV3, sensitive permissions, risk tiers, trader status, recency, reviews); pass a `query` to scope facets to a search; `facets` selects groups and `top_n` (default 10) trims long lists | 1 read |
 | `get_credit_balance` | Remaining credits across every pool (read / scan / icon / inventory), so an agent can size a batch before running it instead of hitting a mid-batch limit | Free |
+| `get_approval` | Where a change proposed through the hosted connector stands (pending, applied, rejected, failed, expired); read-only, the owner decides in Dojo | Free; identity required |
 | `get_development_guide` | Complete tool inventory for this connection, service directory, GitHub guidance and the ordered development-to-maintenance plan; compact overview by default, full parts via `sections` | Free (no key) |
 | `list_extension_templates` | Extension shapes, minimum permissions and browser-specific manifest requirements | Free (no key) |
 | `connection_diagnostics` | Authentication, scopes, backend workspace contracts and capabilities | Free; identity required |
@@ -89,7 +90,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `update_uninstall_form` | Partial update checked like the Dojo editor; `dryRun` diff, `expectedUpdatedAt`, `idempotencyKey`; URL and responses stay | Requires hosted.write for OAuth |
 | `preview_uninstall_form` | The survey's text in one language and the screen after each answer; counts nothing | Free; identity required |
 | `find_brand_mentions` | Every hosted field holding a name (e.g. an old extension name), with the tool that fixes it | Free; identity required |
-| `set_legal_translations` | Save one language of the privacy policy or license terms translation (edited sections and free-text answers) | Requires hosted.write + Pro (policy) or pay.write (terms) for OAuth |
+| `set_legal_translations` | Save one language of the privacy policy or license terms translation (edited sections and free-text answers). On the hosted connector a translation is a proposal the owner approves in Dojo | Requires hosted.write + Pro (policy) or pay.write (terms) for OAuth |
 | `upload_project_media` | Upload a PNG/JPEG/WebP logo or screenshot to the project's public media store and get a stable URL for `publish_landing_page` (metadata stripped, per-project quota; `filePath` inside the workspace on stdio, `dataBase64` everywhere) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
 | `get_release_readiness` | Explain current, stale and missing release checks by browser and locale. With a linked Pay application, the payment check is derived from Extenshi's payment ledger (source `platform`); a live-mode purchase that reached an installation passes it | Pro project; project read access |
@@ -102,7 +103,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `list_privacy_policy_versions` | Hosted policy version history | Pro project; no read credit |
 | `get_privacy_policy_version` | One hosted policy's markdown and HTML | Pro project; no read credit |
 | `update_privacy_policy_with_ai` | Propose a policy update for the author to review; `aiStep` states whether the AI step ran, otherwise the proposal is a section merge | Pro project; daily update limit applies |
-| `publish_privacy_policy` | Publish a policy at the project's hosted URL | Pro project; changes the live page |
+| `publish_privacy_policy` | Publish a policy at the project's hosted URL. On the hosted connector the text is stored as a proposal the owner approves in Dojo (see below) | Pro project; changes the live page |
 | `search_docs` | Search the Extenshi docs + `@extenshi/cli` reference so the assistant can quote exact commands; returns top `limit` passages capped at `max_chars` each | Free (no key) |
 | `localize_workflow` | Local message translation contract, CLI validation and manual review gates | Free (no key) |
 | `generate_icon_workflow` | Icon design requirements + the local agent-draws-SVG → `npx @extenshi/cli@latest icon preview` → export workflow | Free (no key) |
@@ -182,5 +183,11 @@ These tools require a backend with standalone Pay support. A development project
 | `set_pay_offer_translations` | `pay.write` | Save one language of the offers' translations; a save whose original changed since it was read is refused. Prices and SKUs are not changed. |
 | `set_pay_enabled` | `pay.write` | Explicitly enable or disable new payments. Enabling is a live commerce change: only do so with author authorization and after checking readiness. Backend prerequisites remain enforced. |
 | `rotate_pay_key` | `pay.write` | Generate a new publishable SDK key. Prior keys remain accepted for installed extension builds; this is not secret revocation. Never retry blindly. |
+
+### Owner approval on the hosted connector
+
+On the hosted connector (OAuth sign-in), the changes that move money or publish to the public are proposals, not immediate edits: `set_pay_enabled`, `upsert_pay_offer`, `archive_pay_offer`, `archive_pay_app`, `set_pay_seller_profile`, `publish_privacy_policy` and `set_legal_translations` (the privacy policy and the license terms). Each returns `status: "pending_approval"` with an `approvalId` and an `approvalUrl`. Nothing changes until the owner opens the link in Dojo and approves it; `get_approval` reports the outcome. A proposal expires after 24 hours (72 for a policy), and a newer proposal for the same thing replaces an older one. For a policy or a translation, the text is stored with the proposal, so the owner approves exactly the words that get published; a translation is also refused if its English text changed in between.
+
+A local `ek_` API key from [API keys](https://dojo.extenshi.io/api-keys) acts directly, as before: whoever holds it is the owner's own tooling. No tool deletes a project or an extension.
 
 The author completes legal acceptance and Stripe KYC in the browser. Read `get_pay_readiness` before enabling checkout; enablement, key rotation and offer changes require explicit author authorization. Export pages contain private financial data and must remain in an author-controlled destination. Only the publishable SDK key belongs in an extension, never a developer API key or Stripe secret.

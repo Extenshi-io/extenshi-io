@@ -158,6 +158,7 @@ const READ_TOOLS = [
 	'get_risk_by_store_ids',
 	'market_overview',
 	'get_credit_balance',
+	'get_approval',
 	// The developer's OWN projects: keyed like the catalog reads, but free —
 	// credits pay for data about other people's extensions, not for your own work.
 	'list_my_projects',
@@ -364,6 +365,82 @@ describe('get_credit_balance execute', () => {
 		const out: string = await tools.get_credit_balance.execute({}, {})
 		expect(called).toBe(1)
 		expect(JSON.parse(out)).toEqual(balance)
+	})
+})
+
+describe('get_approval execute', () => {
+	const approvalId = '44444444-4444-4444-8444-444444444444'
+
+	it('reads the outcome of a proposed change by its approvalId and returns it as is', async () => {
+		const view = { approvalId, kind: 'pay.set_enabled', status: 'pending', summary: 'Turn on new payments' }
+		const getApproval = vi.fn(() => Promise.resolve(view))
+		const out: string = await readToolsWith({ getApproval }, 'oauth').get_approval.execute({ approvalId }, {})
+		expect(getApproval).toHaveBeenCalledWith({ approvalId })
+		expect(JSON.parse(out)).toEqual(view)
+	})
+
+	it('takes a uuid, nothing free-form', () => {
+		const schema = readToolsWith({}, 'oauth').get_approval.parameters
+		expect(schema.safeParse({ approvalId }).success).toBe(true)
+		expect(schema.safeParse({ approvalId: 'latest' }).success).toBe(false)
+		expect(schema.safeParse({}).success).toBe(false)
+	})
+
+	it('is read-only: it reports a decision and has no way to make one', () => {
+		const tool = readToolsWith({}, 'oauth').get_approval
+		expect(tool).toBeDefined()
+		expect(Object.keys(tool.parameters.shape)).toEqual(['approvalId'])
+	})
+})
+
+describe('owner approval on the hosted connector', () => {
+	const tools: Array<{ name: string; description?: string }> = []
+	registerTools(
+		{ addTool: (t: { name: string }) => tools.push(t) } as unknown as Parameters<typeof registerTools>[0],
+		depsFor(['read', 'docs', 'scan', 'publish']),
+	)
+	const description = (name: string) => tools.find((t) => t.name === name)?.description ?? ''
+
+	it.each([
+		'set_pay_enabled',
+		'upsert_pay_offer',
+		'archive_pay_app',
+		'archive_pay_offer',
+		'set_pay_seller_profile',
+		'publish_privacy_policy',
+		'set_legal_translations',
+	])('%s says what its hosted-connector response is', (name) => {
+		expect(description(name)).toMatch(/On the hosted connector/)
+		expect(description(name)).toContain('get_approval')
+	})
+
+	it.each([
+		'get_pay_app',
+		'rotate_pay_key',
+		'connect_pay_seller',
+		'update_privacy_policy_with_ai',
+		'create_pay_app',
+	])('%s does not claim an approval step it does not have', (name) => {
+		expect(description(name)).not.toContain('get_approval')
+	})
+
+	// The approval gate is only as strong as the set of things an agent can do. A tool that deleted a
+	// project or an extension would sit outside it, so the registry may not grow one by accident.
+	it('registers no tool that deletes a project or an extension', () => {
+		for (const { name } of tools) {
+			expect(name, name).not.toMatch(/(delete|destroy)/)
+			expect(name, name).not.toMatch(/^(remove|archive|unclaim)_(my_)?(project|extension)/)
+		}
+	})
+
+	it('tells the remote connector about approvals and leaves the stdio package’s text alone', () => {
+		const remote = getServerInstructions(new Set<Capability>(['read', 'docs']), 'oauth')
+		expect(remote).toContain('get_approval')
+		expect(remote).toMatch(/owner approves them in Dojo/)
+		// An `ek_` key acts directly, so the same sentence there would be false.
+		expect(getServerInstructions(new Set<Capability>(['read', 'docs']), 'api-key')).not.toContain(
+			'get_approval',
+		)
 	})
 })
 
