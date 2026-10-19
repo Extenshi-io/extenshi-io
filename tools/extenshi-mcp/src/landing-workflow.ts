@@ -115,7 +115,7 @@ export function landingNextSteps(homepageUrl?: string): string[] {
 			? `Confirm the page loads at ${homepageUrl} (the canonical/og:url tags already point there).`
 			: 'Once the final URL is known, regenerate with homepageUrl set to it so the canonical, og:url and JSON-LD url tags are filled in, and re-upload.',
 		'Register the URL on the project: upsert_hosted_page {projectId, kind: "homepage", url} (needs identity and hosted.write; the server fetches the public page and hashes it, so it has to be publicly reachable). CLI equivalent: npx @extenshi/cli@latest page register --project <id> --url <https-url>.',
-		'get_project_state now returns a regenerated integration.file (the content for integration.path) that carries the new HOMEPAGE_URL; updating the repository with it is the author’s choice.',
+		'get_project_state now returns a regenerated integration.file (the content for integration.path) that carries the new HOMEPAGE_URL, and manifests whose homepage_url is the same URL; updating the repository with them is the author’s choice.',
 		'After later edits to the hosted page, verify_hosted_artifact {projectId, kind: "homepage"} reports whether the live page still matches the registered hash.',
 	]
 }
@@ -190,7 +190,7 @@ export function hostedLandingNextSteps(result: Record<string, unknown>): string[
 	steps.push(
 		homepage.registered
 			? reachable
-				? 'It is now the project homepage. get_project_state returns an integration.file (the content for integration.path) that uses it as HOMEPAGE_URL; the repository is updated with it only when the author wants that.'
+				? 'It is now the project homepage. get_project_state returns an integration.file (the content for integration.path) that uses it as HOMEPAGE_URL, and manifests that use it as homepage_url; the repository is updated with them only when the author wants that.'
 				: 'It is registered as the project homepage, but until the URL serves the page HOMEPAGE_URL would send users to an error; get_project_state returns an integration.file that carries that URL.'
 			: 'The homepage registration was left unchanged (registerAsHomepage: false).',
 	)
