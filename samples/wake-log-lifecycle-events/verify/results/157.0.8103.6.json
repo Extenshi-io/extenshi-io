@@ -1,0 +1,269 @@
+{
+  "chromeVersion": "157.0.8103.6",
+  "ranAt": "2026-10-22T12:08:12.004Z",
+  "headless": true,
+  "scenarios": [
+    {
+      "name": "install",
+      "entries": [
+        {
+          "at": 1792670867879,
+          "chromeVersion": "157",
+          "event": "worker-start",
+          "has": {
+            "onEnabled": true,
+            "onExtensionLoaded": true
+          },
+          "version": "1.0"
+        },
+        {
+          "at": 1792670867880,
+          "chromeVersion": "157",
+          "event": "onInstalled",
+          "reason": "install",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670867880,
+          "chromeVersion": "157",
+          "event": "onExtensionLoaded",
+          "reason": "install",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670867880,
+          "chromeVersion": "157",
+          "event": "bringUp",
+          "reason": "install",
+          "version": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "toggle",
+      "entries": [
+        {
+          "at": 1792670871186,
+          "chromeVersion": "157",
+          "event": "worker-start",
+          "has": {
+            "onEnabled": true,
+            "onExtensionLoaded": true
+          },
+          "version": "1.0"
+        },
+        {
+          "at": 1792670871206,
+          "chromeVersion": "157",
+          "event": "onEnabled",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670871206,
+          "chromeVersion": "157",
+          "event": "onExtensionLoaded",
+          "reason": "enable",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670871206,
+          "chromeVersion": "157",
+          "event": "bringUp",
+          "reason": "enable",
+          "version": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "reload",
+      "entries": [
+        {
+          "at": 1792670874217,
+          "chromeVersion": "157",
+          "event": "worker-start",
+          "has": {
+            "onEnabled": true,
+            "onExtensionLoaded": true
+          },
+          "version": "1.0"
+        },
+        {
+          "at": 1792670874217,
+          "chromeVersion": "157",
+          "event": "onInstalled",
+          "previousVersion": "1.0",
+          "reason": "update",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670874218,
+          "chromeVersion": "157",
+          "event": "onExtensionLoaded",
+          "previousVersion": "1.0",
+          "reason": "update",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670874218,
+          "chromeVersion": "157",
+          "event": "bringUp",
+          "reason": "update",
+          "version": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "runtime.reload",
+      "entries": [
+        {
+          "at": 1792670877543,
+          "chromeVersion": "157",
+          "event": "worker-start",
+          "has": {
+            "onEnabled": true,
+            "onExtensionLoaded": true
+          },
+          "version": "1.0"
+        },
+        {
+          "at": 1792670877544,
+          "chromeVersion": "157",
+          "event": "onInstalled",
+          "previousVersion": "1.0",
+          "reason": "update",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670877544,
+          "chromeVersion": "157",
+          "event": "onExtensionLoaded",
+          "previousVersion": "1.0",
+          "reason": "update",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670877544,
+          "chromeVersion": "157",
+          "event": "bringUp",
+          "reason": "update",
+          "version": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "restart",
+      "entries": [
+        {
+          "at": 1792670881714,
+          "chromeVersion": "157",
+          "event": "worker-start",
+          "has": {
+            "onEnabled": true,
+            "onExtensionLoaded": true
+          },
+          "version": "1.0"
+        },
+        {
+          "at": 1792670881722,
+          "chromeVersion": "157",
+          "event": "onStartup",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670881722,
+          "chromeVersion": "157",
+          "event": "onExtensionLoaded",
+          "reason": "startup",
+          "version": "1.0"
+        },
+        {
+          "at": 1792670881722,
+          "chromeVersion": "157",
+          "event": "bringUp",
+          "reason": "startup",
+          "version": "1.0"
+        }
+      ]
+    },
+    {
+      "name": "update",
+      "entries": [
+        {
+          "at": 1792670884077,
+          "chromeVersion": "157",
+          "event": "worker-start",
+          "has": {
+            "onEnabled": true,
+            "onExtensionLoaded": true
+          },
+          "version": "1.1"
+        },
+        {
+          "at": 1792670884077,
+          "chromeVersion": "157",
+          "event": "onInstalled",
+          "previousVersion": "1.0",
+          "reason": "update",
+          "version": "1.1"
+        },
+        {
+          "at": 1792670884077,
+          "chromeVersion": "157",
+          "event": "onExtensionLoaded",
+          "previousVersion": "1.0",
+          "reason": "update",
+          "version": "1.1"
+        },
+        {
+          "at": 1792670884077,
+          "chromeVersion": "157",
+          "event": "bringUp",
+          "reason": "update",
+          "version": "1.1"
+        }
+      ]
+    },
+    {
+      "name": "update-disabled",
+      "whileDisabled": {
+        "enabled": false,
+        "version": "1.2"
+      },
+      "entries": [
+        {
+          "at": 1792670888930,
+          "chromeVersion": "157",
+          "event": "worker-start",
+          "has": {
+            "onEnabled": true,
+            "onExtensionLoaded": true
+          },
+          "version": "1.2"
+        },
+        {
+          "at": 1792670888933,
+          "chromeVersion": "157",
+          "event": "onInstalled",
+          "previousVersion": "1.1",
+          "reason": "update",
+          "version": "1.2"
+        },
+        {
+          "at": 1792670888933,
+          "chromeVersion": "157",
+          "event": "onExtensionLoaded",
+          "previousVersion": "1.1",
+          "reason": "update",
+          "version": "1.2"
+        },
+        {
+          "at": 1792670888933,
+          "chromeVersion": "157",
+          "event": "bringUp",
+          "reason": "update",
+          "version": "1.2"
+        }
+      ]
+    }
+  ]
+}

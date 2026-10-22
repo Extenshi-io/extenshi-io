@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Wake Log",
+  "version": "1.0",
+  "description": "Logs every lifecycle event Chrome sends this extension: onInstalled, onStartup, onEnabled and onExtensionLoaded.",
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "Wake Log",
+    "default_popup": "popup.html"
+  }
+}
