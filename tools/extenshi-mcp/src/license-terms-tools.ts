@@ -134,7 +134,8 @@ export function registerLicenseTermsTools(
 			'where they see the text against the live version; get_approval returns the outcome (result ' +
 			"{versionNumber, url, sellerTermsDecided}). With alsoDecideSellerTerms (default true) the owner's " +
 			'approval also decides seller.terms as the published URL. Refused straight away when the draft ' +
-			'changed or has open questions. Requires pay.write.',
+			'changed or has open questions. `followUps` names the sections and answers this version would leave ' +
+			'untranslated in the project languages (set_legal_translations, after approval). Requires pay.write.',
 		parameters: z.object({ projectId, draftHash, alsoDecideSellerTerms: z.boolean().optional() }),
 		annotations: {
 			title: 'Ask the owner to publish the license terms',
@@ -160,7 +161,8 @@ export function registerLicenseTermsTools(
 				'an approval step. Needs an API key with the separate pay.legal.publish permission (granted at ' +
 				'dojo.extenshi.io/api-keys); otherwise PAY_LEGAL_PUBLISH_REQUIRED, and ' +
 				'request_license_terms_publication asks the owner instead. Returns {versionNumber, url, versionUrl, ' +
-				'contentHash, sellerTerms}; seller.terms is proposed as the URL for the owner to decide. Changes ' +
+				'contentHash, sellerTerms, followUps}; seller.terms is proposed as the URL for the owner to decide; ' +
+				'followUps names what to translate next with set_legal_translations. Changes ' +
 				'the page buyers read before they pay. Requires pay.write and pay.legal.publish.',
 			parameters: z.object({ projectId, draftHash }),
 			annotations: {

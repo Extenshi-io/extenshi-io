@@ -132,7 +132,8 @@ export function registerUninstallFormTools(
 			'warnings} and writes nothing. A write needs expectedUpdatedAt (from get_uninstall_form) and an ' +
 			'idempotencyKey (UUID): a survey saved since you read it is refused (CONFLICT FORM_CHANGED); a retry ' +
 			'with the same key returns the first result (replayed: true). Translations whose original changed ' +
-			'are kept and listed as stale: re-translate them with set_page_translations. Turning askContact on ' +
+			'are kept and listed as stale: re-translate them with set_page_translations; `followUps` (also on a dry ' +
+			'run) names that tool with the count of missing and outdated fields per language. Turning askContact on ' +
 			'needs confirmPrivacyChange: true, since the privacy policy then has to cover email collection. The public ' +
 			'URL and the collected responses stay as they are. The change is listed for the owner in Dojo with ' +
 			'proposedBy. Requires hosted.write.',

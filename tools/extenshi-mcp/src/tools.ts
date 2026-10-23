@@ -1285,7 +1285,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					'payment ledger proves (checkout, license, installation activation, recovery, refund). A live-mode purchase through ' +
 					"those stages passes the check with source 'platform'; test-mode purchases are listed without passing it. Clients cannot " +
 					"record source 'platform'. `warnings` lists what does not block but needs action before upload, such as a " +
-					'decided license that is not an AMO slug and needs customLicense in the AMO listing.',
+					'decided license that is not an AMO slug and needs customLicense in the AMO listing, and TRANSLATIONS_INCOMPLETE: ' +
+					'server-side text (Pay offers, license terms, privacy policy, hosted pages, landing page) still missing or outdated ' +
+					'in the project languages, each surface with its fixWith tools — the same counts as get_project_state `localization`.',
 				'getReleaseReadiness',
 			],
 		] as const
@@ -1442,7 +1444,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'may also be an inline SVG or a raster data: URL. After publishing, the server fetches the public URL: ' +
 				'live.status is verified (it serves these bytes), changed or unreachable (with live.detail, e.g. HTTP 404) — ' +
 				'only verified means visitors see the page. Returns JSON {url, publicCode, ' +
-				'versionNumber, contentHash, bytes, warnings, homepage, live, nextSteps}. Requires hosted.write. ' +
+				'versionNumber, contentHash, bytes, warnings, homepage, live, nextSteps, followUps}; followUps names project languages ' +
+				'the form has no locales.<tag> page for. Requires hosted.write. ' +
 				`API reference: ${HOSTED_PAGES_DOCS}`,
 			parameters: z.object({
 				projectId: z.string().uuid(),
@@ -1701,7 +1704,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'INSTRUCTIONS_INVALID and its field errors). Store URLs are the https listing links on ' +
 				'chromewebstore.google.com, addons.mozilla.org and microsoftedge.microsoft.com; browsers without one ' +
 				'are hidden unless none is set. The install steps are translated by Extenshi; `features` are ' +
-				'translated with set_page_translations (surface instructions). Returns {publicCode, url}. Free. ' +
+				'translated with set_page_translations (surface instructions). Returns {publicCode, url, followUps}; ' +
+				'followUps names the languages whose features translation is missing or outdated. Free. ' +
 				'Requires hosted.write.',
 			parameters: z.object({
 				projectId: z.string().uuid(),
@@ -2402,6 +2406,11 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'at most 20, each with the tool that fixes it; `total`, `truncated`) and a `warning` sentence — ' +
 				'find_brand_mentions with those names returns them all. License terms and Pay offers are ' +
 				'searched only with pay.read (otherwise listed in `skipped`). ' +
+				'`localization` is every server-side translation the project still lacks: {defaultLocale, locales, complete, ' +
+				'missing, outdated, next, surfaces [{kind (pay_offers | license_terms | privacy_policy | hosted_page | ' +
+				'landing_page), name, missing, outdated, locales [{locale, total, missing, outdated}], fixWith {read, write, args}}]}; ' +
+				'`next` is one sentence naming the largest gap and its tools. Pay surfaces need pay.read (otherwise `skipped`); ' +
+				"the extension's own _locales files are not part of it (localize_workflow covers those). " +
 				'FREE — spends no credit. Type definitions are in list_extension_templates.',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
@@ -2512,7 +2521,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'version is produced this way); with bodyMarkdown it publishes that edited (or AI-updated) ' +
 				'draft at the same public URL. Once published, PRIVACY_POLICY_URL in the integration.file ' +
 				'from get_project_state is the hosted URL. Pro only.' +
-				' On the hosted connector the text (generated now when bodyMarkdown is omitted) is stored as a proposal and shown to the owner in Dojo; nothing is published until they approve it, and get_approval returns the outcome.',
+				' On the hosted connector the text (generated now when bodyMarkdown is omitted) is stored as a proposal and shown to the owner in Dojo; nothing is published until they approve it, and get_approval returns the outcome.' +
+				' `followUps` [{tool, readFirst, args, reason}] names the translations the new version leaves missing or outdated (set_legal_translations).',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
 				bodyMarkdown: z
@@ -2643,7 +2653,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'_locales messages, translate with your own coding agent, apply validated translations ' +
 				'and check placeholders, protected terms and listing risks. Returns commands and the ' +
 				'JSON handoff contract. Static guidance only: no API key, network or Extenshi credits; ' +
-				'translation uses your agent provider. Includes release availability and human review gates.',
+				'translation uses your agent provider. Includes release availability and human review gates. ' +
+				'Covers only the local _locales files: text stored on Extenshi (Pay offers, license terms, ' +
+				'privacy policy, hosted pages, landing page) is listed in get_project_state `localization`.',
 			parameters: z.object({}),
 			execute: async () => renderLocalizeWorkflow(),
 		})

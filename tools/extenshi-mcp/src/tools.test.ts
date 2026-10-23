@@ -399,6 +399,68 @@ describe('get_approval execute', () => {
 	})
 })
 
+describe('server-side translation gaps are visible without knowing the per-surface tool', () => {
+	const tools: Array<{ name: string; description?: string }> = []
+	registerTools(
+		{ addTool: (t: { name: string }) => tools.push(t) } as unknown as Parameters<typeof registerTools>[0],
+		depsFor(['read', 'docs', 'scan', 'publish']),
+	)
+	const description = (name: string) => tools.find((t) => t.name === name)?.description ?? ''
+
+	it('get_project_state documents the aggregated `localization` block and its fix tools', () => {
+		expect(description('get_project_state')).toContain('`localization`')
+		expect(description('get_project_state')).toContain('fixWith {read, write, args}')
+		expect(description('get_project_state')).toContain('localize_workflow covers those')
+	})
+
+	it('the readiness tools name their non-blocking translation warning', () => {
+		expect(description('get_release_readiness')).toContain('TRANSLATIONS_INCOMPLETE')
+		expect(description('get_pay_readiness')).toContain('offer_translations')
+		expect(description('get_pay_readiness')).toContain('set_pay_offer_translations')
+	})
+
+	it.each([
+		'upsert_pay_offer',
+		'publish_privacy_policy',
+		'publish_landing_page',
+		'publish_install_instructions',
+		'update_uninstall_form',
+		'request_license_terms_publication',
+	])('%s documents its followUps', (name) => {
+		expect(description(name)).toContain('followUps')
+	})
+
+	it('offer feature keys are documented as entitlement keys that are never translated', () => {
+		expect(description('upsert_pay_offer')).toContain('entitlement keys')
+		expect(description('get_pay_offer_translations')).toContain('notTranslated')
+		expect(description('set_pay_offer_translations')).toContain('`<sku>/feature:<n>` key is refused')
+	})
+
+	it('localize_workflow says it covers only the local _locales files', () => {
+		expect(description('localize_workflow')).toContain('Covers only the local _locales files')
+	})
+
+	it('get_project_state and get_pay_readiness pass the signal through unchanged', async () => {
+		const localization = {
+			complete: false,
+			missing: 6,
+			surfaces: [{ kind: 'pay_offers', fixWith: { write: 'set_pay_offer_translations' } }],
+		}
+		const warnings = [{ code: 'offer_translations', missing: 6 }]
+		const read = readToolsWith({
+			getMyProjectState: async () => ({ project: { id: 'p' }, localization }),
+			getPayReadiness: async () => ({ ready: true, warnings }),
+		} as never)
+		expect(JSON.parse(await read.get_project_state.execute({ projectId: 'p' }, {})).localization).toEqual(
+			localization,
+		)
+		expect(
+			JSON.parse(await read.get_pay_readiness.execute({ appId: '00000000-0000-4000-8000-000000000001' }, {}))
+				.warnings,
+		).toEqual(warnings)
+	})
+})
+
 describe('owner approval on the hosted connector', () => {
 	const tools: Array<{ name: string; description?: string }> = []
 	registerTools(

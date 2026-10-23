@@ -96,10 +96,20 @@ export const DEVELOPMENT_SERVICES = [
 	},
 	{
 		id: 'localization',
-		purpose: 'Local translation of extension messages and validation of the resulting locales.',
-		tools: ['localize_workflow'],
+		purpose:
+			'Translation of the extension’s own messages (local _locales files) and of the text stored on Extenshi: Pay offers, license terms, privacy policy, hosted pages and the landing page.',
+		tools: [
+			'localize_workflow',
+			'get_project_state',
+			'get_pay_offer_translations',
+			'set_pay_offer_translations',
+			'get_legal_translations',
+			'set_legal_translations',
+			'get_page_translations',
+			'set_page_translations',
+		],
 		access:
-			"Free static reference; local CLI validation requires no key or Extenshi credits. Translation uses the developer's own provider. CLI release availability is part of the reference.",
+			"localize_workflow is a free static reference for the local _locales files only; local CLI validation requires no key or Extenshi credits, and translation uses the developer's own provider. Text stored on Extenshi is listed in get_project_state `localization`: every surface with missing and outdated counts per language and fixWith (its read and write tool); Pay surfaces need pay.read. Offer `features` are entitlement keys and stay untranslated.",
 		urls: [docs('localization')],
 	},
 	{
@@ -348,9 +358,30 @@ const WORKFLOW = [
 			'Assets show the real product; hosted links load and match actual data practices; installation/uninstallation flows work.',
 	},
 	{
+		id: 'localization',
+		actions:
+			"Stage 7 — Server-side localization: text stored on Extenshi is translated into the project's languages (manifest translations plus the targetLocales decision): Pay offer titles and descriptions, license terms, privacy policy, hosted uninstall surveys, welcome pages and install instructions, and the landing page's locale pages. get_project_state `localization` lists each surface with missing and outdated counts per language and fixWith, the read and write tool that close the gap; `next` names the largest one. get_release_readiness reports the same as the non-blocking TRANSLATIONS_INCOMPLETE warning, get_pay_readiness as offer_translations, and every write that changes source text returns followUps. Offer `features` are entitlement keys the SDK checks and stay untranslated; localized paywall bullets come from the extension's own _locales through showPaywall({ features }). localize_workflow covers only the local _locales files.",
+		relatedTools: [
+			'get_project_state',
+			'get_pay_offer_translations',
+			'set_pay_offer_translations',
+			'get_legal_translations',
+			'set_legal_translations',
+			'get_page_translations',
+			'set_page_translations',
+			'get_landing_page',
+			'publish_landing_page',
+			'get_pay_readiness',
+			'get_release_readiness',
+			'localize_workflow',
+		],
+		doneWhen:
+			'get_project_state `localization.complete` is true, or each remaining gap is recorded as deliberately left in the original language.',
+	},
+	{
 		id: 'quality-and-listing',
 		actions:
-			'Stage 7 — Quality and listing: each browser package is built reproducibly (CLI package), and that exact zip is installed and smoke-tested per browser (CLI test smoke); unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing --store chrome|edge|firefox, which draft CHROMEWEBSTORE.md / EDGE.md / AMO.md — the same listing draft review-risk --listing reads back regardless of which one). A Firefox build with minified/bundled code additionally needs extenshi amo-source (source archive + BUILD.md) and a clean `web-ext lint`. With --evidence, scan, review-risk, generate-listing, test smoke and screenshots record their release evidence for the bound project; the final package is scanned. Exact commands: the CLI docs. CI runs the scaffolded extenshi-verify workflow.',
+			'Stage 8 — Quality and listing: each browser package is built reproducibly (CLI package), and that exact zip is installed and smoke-tested per browser (CLI test smoke); unit/integration checks and manual browser scenarios run. Disclosures, permission justifications, listing copy and screenshots are reviewed against the build (CLI review-risk and generate-listing --store chrome|edge|firefox, which draft CHROMEWEBSTORE.md / EDGE.md / AMO.md — the same listing draft review-risk --listing reads back regardless of which one). A Firefox build with minified/bundled code additionally needs extenshi amo-source (source archive + BUILD.md) and a clean `web-ext lint`. With --evidence, scan, review-risk, generate-listing, test smoke and screenshots record their release evidence for the bound project; the final package is scanned. Exact commands: the CLI docs. CI runs the scaffolded extenshi-verify workflow.',
 		relatedTools: ['search_docs', 'scan_extension', 'get_release_readiness'],
 		doneWhen:
 			'The exact versioned artifact has passing checks, retained scan/review reports and truthful store materials; unresolved findings have a disposition.',
@@ -358,7 +389,7 @@ const WORKFLOW = [
 	{
 		id: 'release',
 		actions:
-			"Stage 8 — Release: store accounts, credentials and submission access are verified; a validate-only run precedes submission where available. The tested artifact is submitted within the user's publishing authorization through local MCP, CLI or the store console. Upload, submission, approval and public-listing status are recorded separately.",
+			"Stage 9 — Release: store accounts, credentials and submission access are verified; a validate-only run precedes submission where available. The tested artifact is submitted within the user's publishing authorization through local MCP, CLI or the store console. Upload, submission, approval and public-listing status are recorded separately.",
 		relatedTools: ['publish_extension'],
 		doneWhen:
 			'Store status and installed version are verified; pending store review is reported as pending, with artifact and source commit recorded.',
@@ -366,7 +397,7 @@ const WORKFLOW = [
 	{
 		id: 'operate',
 		actions:
-			'Stage 9 — Operate: catalog listing claim, declarations and security badge, findings and uninstall feedback, optional purchase/license flow checks, and planned updates. Later versions repeat the build, review, scan, policy and release checks.',
+			'Stage 10 — Operate: catalog listing claim, declarations and security badge, findings and uninstall feedback, optional purchase/license flow checks, and planned updates. Later versions repeat the build, review, scan, policy and release checks.',
 		relatedTools: ['get_reviews', 'get_security', 'get_project_state'],
 		doneWhen:
 			'A handoff records repository/commit, artifacts, URLs, checks, remaining blockers, support owner and follow-up work.',
@@ -565,7 +596,7 @@ export function buildDevelopmentGuide(
 	return {
 		...base,
 		overview:
-			'Extenshi development lifecycle reference: idea and research, project and repository, scaffold, implementation, assets and hosted pages, quality and listing, store release, maintenance.',
+			'Extenshi development lifecycle reference: idea and research, project and repository, scaffold, implementation, assets and hosted pages, server-side localization, quality and listing, store release, maintenance.',
 		toolNames: registeredTools.map((tool) => tool.name),
 		workflowStages: WORKFLOW.map(({ id, doneWhen }) => ({ id, doneWhen })),
 		contents: GUIDE_SECTIONS.map((id) => ({

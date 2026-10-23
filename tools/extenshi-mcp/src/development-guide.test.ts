@@ -170,6 +170,27 @@ describe('development guide discovery contract', () => {
 		for (const service of result.services) expect(service.access).not.toMatch(/\b(you|your)\b/i)
 	})
 
+	it('has a server-side localization stage naming the aggregated signal and every fix tool', async () => {
+		const { tools } = register(['read', 'docs'])
+		const result = await readGuide(tools)
+		const stage = result.workflow.find((s: { id: string }) => s.id === 'localization')
+		expect(stage.actions).toContain('get_project_state `localization`')
+		expect(stage.actions).toContain('localize_workflow covers only the local _locales files')
+		expect(stage.relatedTools).toEqual(
+			expect.arrayContaining([
+				'get_pay_offer_translations',
+				'set_pay_offer_translations',
+				'get_legal_translations',
+				'set_legal_translations',
+				'get_page_translations',
+				'set_page_translations',
+				'publish_landing_page',
+			]),
+		)
+		const ids = result.workflow.map((s: { id: string }) => s.id)
+		expect(ids.indexOf('localization')).toBe(ids.indexOf('assets-and-hosted-pages') + 1)
+	})
+
 	it('initialize guidance distinguishes hosted operations from local artifact actions', () => {
 		const remote = getServerInstructions(new Set(['read', 'docs']))
 		const local = getServerInstructions(new Set(['read', 'docs', 'scan', 'publish']))

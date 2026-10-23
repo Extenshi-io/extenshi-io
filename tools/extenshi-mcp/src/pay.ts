@@ -104,7 +104,7 @@ export const PAY_OPERATIONS = [
 		'readiness',
 		'payApp.readiness',
 		false,
-		'Check current checkout and launch prerequisites. A passing checkout check does not prove a live external purchase or SDK publication.',
+		"Check current checkout and launch prerequisites. A passing checkout check does not prove a live external purchase or SDK publication. `warnings` are non-blocking (`ready` ignores them): offer_translations lists offer text not yet translated into the project's languages, with counts per language and fixWith (get_pay_offer_translations → set_pay_offer_translations).",
 	],
 	[
 		'getPayPaymentEvidence',
@@ -184,7 +184,7 @@ export const PAY_OPERATIONS = [
 		'offer-upsert',
 		'paySeller.upsertOffer',
 		true,
-		'Create or update an offer keyed by a stable SKU. Price is in minor currency units. Subscriptions keep the given billing interval; one-time and lifetime offers store no interval. Price and features are stored as provided.',
+		'Create or update an offer keyed by a stable SKU. Price is in minor currency units. Subscriptions keep the given billing interval; one-time and lifetime offers store no interval. Price and features are stored as provided. `features` are entitlement keys (e.g. `full`): the SDK checks them with hasFeature and extensions match offers by them, so they stay untranslated; localized paywall bullets come from the extension, via showPaywall({ features }) with text from its _locales. `followUps` names the translations a changed title or description left missing or outdated (set_pay_offer_translations).',
 	],
 	[
 		'archivePayOffer',
@@ -200,7 +200,7 @@ export const PAY_OPERATIONS = [
 		'offer-translations',
 		'paySeller.getOfferTranslations',
 		false,
-		"Read the translatable text of the application's active offers (title, description, features) keyed `<sku>/<field>`, with the project's languages and each language's translated, missing and outdated fields. The paywall shows an offer in the buyer's browser language when the project ships it; the SDK's own buttons and labels are already translated.",
+		"Read the translatable text of the application's active offers (title, description) keyed `<sku>/<field>`, with the project's languages and each language's translated, missing and outdated fields. Feature keys are entitlement keys, listed under `notTranslated` and not counted as missing. The paywall shows an offer in the buyer's browser language when the project ships it; the SDK's own buttons and labels are already translated. get_project_state `localization` summarizes this with every other translated surface.",
 	],
 	[
 		'setPayOfferTranslations',
@@ -208,7 +208,7 @@ export const PAY_OPERATIONS = [
 		'offer-translate',
 		'paySeller.setOfferTranslations',
 		true,
-		"Save one language of the offers' translations: `translations` maps `<sku>/<field>` keys from get_pay_offer_translations to text; `sources` (optional) carries the original each was translated from, and a save whose original has changed since is refused. An empty string removes a translation. Prices, SKUs and plans are not changed.",
+		"Save one language of the offers' translations: `translations` maps `<sku>/<field>` keys from get_pay_offer_translations to text; `sources` (optional) carries the original each was translated from, and a save whose original has changed since is refused. An empty string removes a translation; a `<sku>/feature:<n>` key is refused (TRANSLATIONS_INVALID: features are entitlement keys). Prices, SKUs, plans and feature keys are not changed.",
 	],
 	[
 		'setPayEnabled',
