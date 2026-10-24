@@ -159,6 +159,22 @@ describe('development guide discovery contract', () => {
 		expect(storeMedia.screenshots.evidence).toContain('release prepare --listing')
 	})
 
+	it('verification names test run and the scenario commands, and stage 8 runs browser scenarios', async () => {
+		const { tools } = register(['read', 'docs'])
+		const result = await readGuide(tools)
+		const verification = result.services.find((s: { id: string }) => s.id === 'verification-and-ci')
+		for (const text of [
+			'extenshi test run',
+			'test scenarios draft',
+			'test scenarios prompt',
+			'Not checked and why',
+		])
+			expect(verification.access).toContain(text)
+		const stage = result.workflow.find((s: { id: string }) => s.id === 'quality-and-listing')
+		expect(stage.actions).toContain('test run')
+		expect(stage.actions).not.toContain('manual browser scenarios')
+	})
+
 	it('describes the workflow as reference material, with related tools as data', async () => {
 		const { tools } = register(['read', 'docs', 'scan', 'publish'])
 		const result = await readGuide(tools)
