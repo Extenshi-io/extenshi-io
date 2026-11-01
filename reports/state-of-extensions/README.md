@@ -7,29 +7,29 @@ Firefox Add-ons, and Microsoft Edge Add-ons stores.
 All figures are **aggregate and anonymized** — counts and distributions across
 the public catalog, never per-user data.
 
-> **Snapshot:** 2026-10-01 · **Catalog size:** 392,811 extensions
+> **Snapshot:** 2026-11-01 · **Catalog size:** 418,267 extensions
 
 ## Headline numbers
 
 | Metric | Value |
 |---|---:|
-| Extensions tracked (Chrome + Firefox + Edge) | **392,811** |
-| On the current Manifest V3 format | 323,899 (82.5%) |
-| Still on legacy Manifest V2 | 68,035 (17.3%) |
-| Updated in the last year | 225,269 (57.3%) |
+| Extensions tracked (Chrome + Firefox + Edge) | **418,267** |
+| On the current Manifest V3 format | 349,429 (83.5%) |
+| Still on legacy Manifest V2 | 67,949 (16.2%) |
+| Updated in the last year | 242,352 (57.9%) |
 
 ## Store distribution
 
 | Store | Extensions | Share |
 |---|---:|---:|
-| Chrome Web Store | 263,598 | 67.1% |
-| Firefox Add-ons | 105,789 | 26.9% |
-| Edge Add-ons | 23,424 | 6.0% |
+| Chrome Web Store | 285,418 | 68.2% |
+| Firefox Add-ons | 106,481 | 25.5% |
+| Edge Add-ons | 26,368 | 6.3% |
 
 ```
-Chrome   ███████████████████████████░░░░░░░░░░░░░  67.1%
-Firefox  ███████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  26.9%
-Edge     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  6.0%
+Chrome   ███████████████████████████░░░░░░░░░░░░░  68.2%
+Firefox  ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  25.5%
+Edge     ███░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  6.3%
 ```
 
 Raw data: [`data/store-distribution.csv`](./data/store-distribution.csv)
