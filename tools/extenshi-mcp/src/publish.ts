@@ -2,9 +2,10 @@
  * Multi-store publishing for the MCP `publish_extension` tool.
  *
  * Thin wrapper over @extenshi/publisher: credentials come from the MCP
- * client's environment (same env vars as `extenshi publish`), the upload
- * goes straight from this machine to the store APIs. FREE — no Extenshi
- * API key, nothing passes through Extenshi servers.
+ * client's environment (same env vars as `extenshi publish`, defined once in
+ * the publisher's STORE_ENV), the upload goes straight from this machine to
+ * the store APIs. FREE — no Extenshi API key, nothing passes through Extenshi
+ * servers. Chrome takes the author's own service account key.
  */
 
 import * as fs from 'node:fs'
@@ -12,25 +13,22 @@ import path from 'node:path'
 import { isPlaceholderGeckoId, isValidGeckoId } from '@extenshi/contracts'
 import {
 	ChromeAPI,
+	configuredStores,
 	EdgeAPI,
+	type EnvStoreCredentials,
 	FirefoxAPI,
 	publishToStores,
+	readStoreCredentialsFromEnv,
+	retiredStoreCredentials,
+	STORE_ENV,
 	type StoreType,
 	type UniversalPublishResult,
 } from '@extenshi/publisher'
 import { assertValidArtifact } from './validate-artifact.js'
 
-export interface StoreCredentials {
-	chrome?: { appId: string; clientId: string; clientSecret: string; refreshToken: string }
-	firefox?: { addonGuid: string; jwtIssuer: string; jwtSecret: string }
-	edge?: { productId: string; clientId: string; clientSecret: string; tenantId: string }
-}
+export type StoreCredentials = EnvStoreCredentials
 
-export const ENV_DOCS: Record<StoreType, string[]> = {
-	chrome: ['CHROME_APP_ID', 'CHROME_CLIENT_ID', 'CHROME_CLIENT_SECRET', 'CHROME_REFRESH_TOKEN'],
-	firefox: ['FIREFOX_ADDON_GUID', 'FIREFOX_JWT_ISSUER', 'FIREFOX_JWT_SECRET'],
-	edge: ['EDGE_PRODUCT_ID', 'EDGE_CLIENT_ID', 'EDGE_CLIENT_SECRET', 'EDGE_TENANT_ID'],
-}
+export const ENV_DOCS = STORE_ENV
 
 /**
  * Store credentials, with an explicitly stated AMO add-on id filling
@@ -40,46 +38,37 @@ export const ENV_DOCS: Record<StoreType, string[]> = {
 export function storeCredentialsFor(
 	addonId?: string,
 	env: NodeJS.ProcessEnv = process.env,
+	stores?: StoreType[],
 ): StoreCredentials {
+	return readStoreCredentials(credentialsEnv(addonId, env), stores)
+}
+
+/** The environment with an explicitly stated AMO add-on id filled in. */
+function credentialsEnv(addonId?: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
 	if (addonId && env.FIREFOX_ADDON_GUID && env.FIREFOX_ADDON_GUID !== addonId)
 		throw new PublishSetupError(
 			`addon_id (${addonId}) differs from FIREFOX_ADDON_GUID (${env.FIREFOX_ADDON_GUID}); state one add-on id.`,
 		)
-	return readStoreCredentials(
-		addonId && !env.FIREFOX_ADDON_GUID ? { ...env, FIREFOX_ADDON_GUID: addonId } : env,
-	)
+	return addonId && !env.FIREFOX_ADDON_GUID ? { ...env, FIREFOX_ADDON_GUID: addonId } : env
 }
 
-export function readStoreCredentials(env: NodeJS.ProcessEnv = process.env): StoreCredentials {
-	const creds: StoreCredentials = {}
-	if (env.CHROME_APP_ID && env.CHROME_CLIENT_ID && env.CHROME_CLIENT_SECRET && env.CHROME_REFRESH_TOKEN) {
-		creds.chrome = {
-			appId: env.CHROME_APP_ID,
-			clientId: env.CHROME_CLIENT_ID,
-			clientSecret: env.CHROME_CLIENT_SECRET,
-			refreshToken: env.CHROME_REFRESH_TOKEN,
-		}
+/** Credentials for `stores` (all stores when empty); key files are read only for those. */
+export function readStoreCredentials(
+	env: NodeJS.ProcessEnv = process.env,
+	stores?: StoreType[],
+): StoreCredentials {
+	try {
+		return readStoreCredentialsFromEnv(env, stores?.length ? stores : undefined)
+	} catch (err) {
+		throw new PublishSetupError(err instanceof Error ? err.message : String(err))
 	}
-	if (env.FIREFOX_ADDON_GUID && env.FIREFOX_JWT_ISSUER && env.FIREFOX_JWT_SECRET) {
-		creds.firefox = {
-			addonGuid: env.FIREFOX_ADDON_GUID,
-			jwtIssuer: env.FIREFOX_JWT_ISSUER,
-			jwtSecret: env.FIREFOX_JWT_SECRET,
-		}
-	}
-	if (env.EDGE_PRODUCT_ID && env.EDGE_CLIENT_ID && env.EDGE_CLIENT_SECRET && env.EDGE_TENANT_ID) {
-		creds.edge = {
-			productId: env.EDGE_PRODUCT_ID,
-			clientId: env.EDGE_CLIENT_ID,
-			clientSecret: env.EDGE_CLIENT_SECRET,
-			tenantId: env.EDGE_TENANT_ID,
-		}
-	}
-	return creds
 }
 
-export function credentialsHelp(stores: StoreType[]): string {
-	return stores.map((s) => `  ${s}: ${ENV_DOCS[s].join(', ')}`).join('\n')
+export function credentialsHelp(stores: StoreType[], env: NodeJS.ProcessEnv = process.env): string {
+	const retired = retiredStoreCredentials(env) as Partial<Record<StoreType, string>>
+	return stores
+		.map((s) => `  ${s}: ${ENV_DOCS[s].join(', ')}${retired[s] ? `\n    ${retired[s]}` : ''}`)
+		.join('\n')
 }
 
 export interface PublishArgs {
@@ -200,9 +189,11 @@ export async function publishArtifact(args: PublishArgs): Promise<UniversalPubli
 		throw new PublishSetupError(err instanceof Error ? err.message : String(err))
 	}
 
-	const creds = storeCredentialsFor(args.addonId)
-	const configured = (['chrome', 'firefox', 'edge'] as StoreType[]).filter((s) => creds[s])
-	const stores = args.stores?.length ? args.stores : configured
+	const env = credentialsEnv(args.addonId)
+	const stores = args.stores?.length ? args.stores : configuredStores(env)
+	// Only the selected stores: an unrelated broken Chrome key path must not
+	// stop a Firefox- or Edge-only publish.
+	const creds = readStoreCredentials(env, stores)
 
 	if (!stores.length) {
 		throw new PublishSetupError(
@@ -242,16 +233,14 @@ export async function publishArtifact(args: PublishArgs): Promise<UniversalPubli
 export async function validateStoreCredentials(
 	stores?: StoreType[],
 ): Promise<Array<{ store: StoreType; configured: boolean; valid: boolean }>> {
-	const creds = readStoreCredentials()
 	const targets = stores?.length ? stores : (['chrome', 'firefox', 'edge'] as StoreType[])
+	const creds = readStoreCredentials(process.env, targets)
 	return Promise.all(
 		targets.map(async (store) => {
 			if (store === 'chrome' && creds.chrome) {
-				const valid = await ChromeAPI.validateCredentials(
-					creds.chrome.clientId,
-					creds.chrome.clientSecret,
-					creds.chrome.refreshToken,
-				)
+				// The item id proves the service account is added to the publisher
+				// and the item belongs to it, not only that the key signs.
+				const valid = await ChromeAPI.validateCredentials(creds.chrome, creds.chrome.appId)
 				return { store, configured: true, valid }
 			}
 			if (store === 'firefox' && creds.firefox) {
@@ -259,11 +248,7 @@ export async function validateStoreCredentials(
 				return { store, configured: true, valid }
 			}
 			if (store === 'edge' && creds.edge) {
-				const valid = await EdgeAPI.validateCredentials(
-					creds.edge.clientId,
-					creds.edge.clientSecret,
-					creds.edge.tenantId,
-				)
+				const valid = await EdgeAPI.validateCredentials(creds.edge, creds.edge.productId)
 				return { store, configured: true, valid }
 			}
 			return { store, configured: false, valid: false }

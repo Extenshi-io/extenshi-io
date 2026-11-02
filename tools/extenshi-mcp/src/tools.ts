@@ -2851,9 +2851,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Publish an extension artifact (.zip/.crx/.xpi) to Chrome Web Store, Firefox AMO, and/or Edge Add-ons: ' +
 				'uploads and submits a new version to each selected store. ' +
 				'FREE and fully local: the upload goes from this machine straight to the store APIs using store ' +
-				'credentials from the MCP server environment (CHROME_APP_ID/CHROME_CLIENT_ID/CHROME_CLIENT_SECRET/' +
-				'CHROME_REFRESH_TOKEN, FIREFOX_ADDON_GUID/FIREFOX_JWT_ISSUER/FIREFOX_JWT_SECRET, ' +
-				'EDGE_PRODUCT_ID/EDGE_CLIENT_ID/EDGE_CLIENT_SECRET/EDGE_TENANT_ID). The upload itself is local, but ' +
+				'credentials from the MCP server environment (CHROME_APP_ID/CHROME_PUBLISHER_ID/CHROME_SERVICE_ACCOUNT_KEY, ' +
+				'FIREFOX_ADDON_GUID/FIREFOX_JWT_ISSUER/FIREFOX_JWT_SECRET, EDGE_PRODUCT_ID/EDGE_CLIENT_ID/EDGE_API_KEY). ' +
+				"Chrome uses the author's own service account (Chrome Web Store API V2), which updates existing items only. " +
+				'The upload itself is local, but ' +
 				'publishing is in an active testing phase: a quick Extenshi access check runs first (it identifies your ' +
 				'account by EXTENSHI_API_KEY). Edge submissions are polled to a terminal status. For Firefox, ' +
 				'listing_path turns the upload into a listed AMO submission with metadata: first-time add-on creation ' +
@@ -2942,7 +2943,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					// preflight evaluates the `publish-access` PostHog flag for this developer
 					// / extension. Fails open on any transport error — only a definitive
 					// server "no" blocks here (see checkPublishAccess).
-					const creds = storeCredentialsFor(args.addon_id)
+					const creds = storeCredentialsFor(args.addon_id, process.env, args.stores)
 					const storeIds: Partial<Record<'chrome' | 'firefox' | 'edge', string>> = {}
 					if (creds.chrome) storeIds.chrome = creds.chrome.appId
 					if (creds.firefox) storeIds.firefox = creds.firefox.addonGuid
