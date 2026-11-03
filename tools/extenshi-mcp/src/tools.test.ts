@@ -462,14 +462,26 @@ describe('server-side translation gaps are visible without knowing the per-surfa
 })
 
 describe('owner approval on the hosted connector', () => {
-	const tools: Array<{ name: string; description?: string }> = []
-	registerTools(
-		{ addTool: (t: { name: string }) => tools.push(t) } as unknown as Parameters<typeof registerTools>[0],
-		depsFor(['read', 'docs', 'scan', 'publish']),
-	)
+	const registered = (auth: McpAuth) => {
+		const tools: Array<{ name: string; description?: string }> = []
+		registerTools(
+			{ addTool: (t: { name: string }) => tools.push(t) } as unknown as Parameters<typeof registerTools>[0],
+			auth === 'oauth'
+				? { ...depsFor(['read', 'docs']), auth }
+				: { ...depsFor(['read', 'docs', 'scan', 'publish']), auth },
+		)
+		return tools
+	}
+	const tools = registered('api-key')
+	const connectorTools = registered('oauth')
 	const description = (name: string) => tools.find((t) => t.name === name)?.description ?? ''
+	const connectorDescription = (name: string) =>
+		connectorTools.find((t) => t.name === name)?.description ?? ''
 
-	it.each([
+	// The BFF proposes these only for the connector's OAuth token (`isRemoteAgent`); an `ek_` key applies them
+	// at once. On 2026-11-03 an agent on an API key read the connector's sentence as its own and published a live
+	// policy expecting a proposal, so each transport may carry only the sentence that is true for it.
+	const GATED_ON_CONNECTOR = [
 		'set_pay_enabled',
 		'upsert_pay_offer',
 		'archive_pay_app',
@@ -477,9 +489,23 @@ describe('owner approval on the hosted connector', () => {
 		'set_pay_seller_profile',
 		'publish_privacy_policy',
 		'set_legal_translations',
-	])('%s says what its hosted-connector response is', (name) => {
-		expect(description(name)).toMatch(/On the hosted connector/)
-		expect(description(name)).toContain('get_approval')
+	]
+
+	it.each(GATED_ON_CONNECTOR)('%s says on the connector that it returns a proposal', (name) => {
+		expect(connectorDescription(name)).toContain('pending_approval')
+		expect(connectorDescription(name)).toContain('get_approval')
+		expect(connectorDescription(name)).not.toMatch(/at once/)
+	})
+
+	it.each(GATED_ON_CONNECTOR)('%s says with an API key that it applies at once', (name) => {
+		expect(description(name)).toMatch(/API key .*(applies|goes live) at once/)
+		expect(description(name)).not.toContain('pending_approval')
+		expect(description(name)).not.toContain('get_approval')
+	})
+
+	it('points an API-key agent with a policy file at the CLI command that checks the stored text', () => {
+		expect(description('publish_privacy_policy')).toContain('extenshi privacy publish <file.md>')
+		expect(connectorDescription('publish_privacy_policy')).not.toContain('extenshi privacy publish')
 	})
 
 	it.each([
@@ -501,14 +527,15 @@ describe('owner approval on the hosted connector', () => {
 		}
 	})
 
-	it('tells the remote connector about approvals and leaves the stdio package’s text alone', () => {
+	it('tells the remote connector about approvals and the stdio package that its key acts at once', () => {
 		const remote = getServerInstructions(new Set<Capability>(['read', 'docs']), 'oauth')
 		expect(remote).toContain('get_approval')
 		expect(remote).toMatch(/owner approves them in Dojo/)
-		// An `ek_` key acts directly, so the same sentence there would be false.
-		expect(getServerInstructions(new Set<Capability>(['read', 'docs']), 'api-key')).not.toContain(
-			'get_approval',
-		)
+		expect(remote).not.toMatch(/apply at once/)
+		// An `ek_` key acts directly, so the connector's sentence there would be false.
+		const stdio = getServerInstructions(new Set<Capability>(['read', 'docs']), 'api-key')
+		expect(stdio).not.toContain('get_approval')
+		expect(stdio).toMatch(/With an API key, .* apply at once/)
 	})
 })
 

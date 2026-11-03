@@ -186,9 +186,24 @@ export const SERVER_INSTRUCTIONS =
 const CONNECTOR_APPROVAL_FACT =
 	'Through this connector, payment, policy-publish and legal-translation changes are proposals; the owner approves them in Dojo, and get_approval returns the outcome.'
 
-/** Appended to the descriptions of the tools whose connector call is a proposal, never an immediate change. */
-const APPROVAL_NOTE =
-	' On the hosted connector the response is status pending_approval with an approvalId and approvalUrl, and nothing changes until the owner approves it in Dojo; get_approval returns the outcome.'
+/**
+ * The same changes made with an `ek_` key: the BFF applies them at once, because the owner handed out the key and
+ * its scopes (internal-docs/plans/2026-10-12-mcp-pending-approvals.md, Q2). Said on the API-key transport too,
+ * because both transports register these tools: on 2026-11-03 an agent on an API key read the connector's proposal
+ * wording as its own behaviour, expected a proposal, and published a live policy.
+ */
+const API_KEY_DIRECT_FACT =
+	'With an API key, payment, policy-publish and legal-translation changes apply at once; the hosted connector proposes them instead.'
+
+/**
+ * Appended to the descriptions of the tools whose connector call is a proposal. Each transport gets only the
+ * sentence that is true for it: a proposal through OAuth, an immediate change with an `ek_` key.
+ */
+function approvalNote(oauth: boolean): string {
+	return oauth
+		? ' Through this connection the response is status pending_approval with an approvalId and approvalUrl, and nothing changes until the owner approves it in Dojo; get_approval returns the outcome.'
+		: ' With this connection’s API key the change applies at once, without the owner’s approval; only the hosted connector (OAuth) turns it into a proposal.'
+}
 
 /** Pay tools whose hosted-connector call is proposed to the owner instead of applied. */
 const APPROVAL_GATED_PAY = new Set<string>([
@@ -213,7 +228,7 @@ export function getServerInstructions(
 		(local.length
 			? ` This connection exposes ${local.join(' and ')} for local artifacts; they need valid credentials and publishing access.`
 			: ' This connection has no local artifact scan or store-publishing tool; the local stdio server and the CLI provide those stages.') +
-		(auth === 'api-key' ? ` API keys for the local package: ${KEY_PAGE}.` : '') +
+		(auth === 'api-key' ? ` ${API_KEY_DIRECT_FACT} API keys for the local package: ${KEY_PAGE}.` : '') +
 		(auth === 'oauth' ? ` ${CONNECTOR_APPROVAL_FACT}` : '')
 	)
 }
@@ -1150,7 +1165,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		for (const [method, name, , , mutation, description] of PAY_OPERATIONS) {
 			add({
 				name,
-				description: `${description}${APPROVAL_GATED_PAY.has(method) ? APPROVAL_NOTE : ''} Requires ${mutation ? 'pay.write' : 'pay.read'} permission.`,
+				description: `${description}${APPROVAL_GATED_PAY.has(method) ? approvalNote(oauth) : ''} Requires ${mutation ? 'pay.write' : 'pay.read'} permission.`,
 				parameters: paySchemas[method],
 				annotations: {
 					readOnlyHint: !mutation,
@@ -1838,9 +1853,12 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'The server records which English text each translates, so a later edit marks it outdated; an ' +
 				'empty string removes one. Only the project’s languages are accepted (TRANSLATIONS_INVALID ' +
 				'otherwise). Nothing changes in the English original. privacy_policy needs hosted.write and a ' +
-				'Pro project; license_terms needs pay.write. On the hosted connector, the texts are stored ' +
-				'as a proposal (status pending_approval) and go live only when the owner approves them in Dojo; ' +
-				'get_approval returns the outcome.',
+				'Pro project; license_terms needs pay.write.' +
+				(oauth
+					? ' Through this connection the texts are stored as a proposal (status pending_approval) and go ' +
+						'live only when the owner approves them in Dojo; get_approval returns the outcome.'
+					: ' With this connection’s API key a save goes live at once on the translated page, without the ' +
+						'owner’s approval; only the hosted connector (OAuth) stores it as a proposal.'),
 			parameters: z.object({
 				projectId: z.string().uuid(),
 				document: legalDocument,
@@ -2348,7 +2366,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'get_approval',
 			description:
-				'Report where a change proposed through the hosted connector stands: pending (waiting for the owner in Dojo), ' +
+				'Report where a proposed change stands (any pending_approval response: the hosted connector’s proposals, ' +
+				'and request_license_terms_publication on any connection): pending (waiting for the owner in Dojo), ' +
 				'applying, applied, rejected, failed, expired or superseded, with a one-line summary and, once applied, the outcome. ' +
 				'Takes the approvalId from a pending_approval response. Approving happens only in Dojo, by the owner; ' +
 				'this tool only reads. FREE — spends no credit.',
@@ -2521,7 +2540,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'version is produced this way); with bodyMarkdown it publishes that edited (or AI-updated) ' +
 				'draft at the same public URL. Once published, PRIVACY_POLICY_URL in the integration.file ' +
 				'from get_project_state is the hosted URL. Pro only.' +
-				' On the hosted connector the text (generated now when bodyMarkdown is omitted) is stored as a proposal and shown to the owner in Dojo; nothing is published until they approve it, and get_approval returns the outcome.' +
+				(oauth
+					? ' Through this connection the text (generated now when bodyMarkdown is omitted) is stored as a proposal (status pending_approval) and shown to the owner in Dojo; nothing is published until they approve it, and get_approval returns the outcome.'
+					: ' With this connection’s API key the new version goes live at once, without the owner’s approval; only the hosted connector (OAuth) stores it as a proposal. ' +
+						'The CLI command `extenshi privacy publish <file.md>` sends a file’s exact bytes and checks the stored text against it.') +
 				' `followUps` [{tool, readFirst, args, reason}] names the translations the new version leaves missing or outdated (set_legal_translations).',
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),

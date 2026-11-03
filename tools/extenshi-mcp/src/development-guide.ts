@@ -34,7 +34,7 @@ export const DEVELOPMENT_SERVICES = [
 	{
 		id: 'account',
 		purpose:
-			'Sign-in, API keys for local tools, credit-pool balances ahead of paid work and where a change proposed through the hosted connector stands.',
+			'Sign-in, API keys for local tools, credit-pool balances ahead of paid work and where a proposed change (a pending_approval response) stands.',
 		tools: ['get_credit_balance', 'connection_diagnostics', 'get_approval'],
 		access:
 			'Balance lookup and get_approval are free and require identity; get_approval reads only the signed-in account’s own proposals. Catalog reads and scans use credit pools.',
