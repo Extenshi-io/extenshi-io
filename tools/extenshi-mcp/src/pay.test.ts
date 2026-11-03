@@ -41,6 +41,23 @@ it('forbids secrets and legal acceptance in Pay inputs', () => {
 	})
 	expect(payWireInput('getPaySeller', { appId })).toEqual({ projectId: appId })
 })
+it('lets an offer edit send only the text, so the server keeps price, features and order', () => {
+	const edit = { appId, sku: 'pro-yearly', description: 'New text' }
+	// No defaults: a filled-in sortOrder 0 or features [] would overwrite the stored offer.
+	expect(paySchemas.upsertPayOffer.parse(edit)).toEqual(edit)
+	expect(payWireInput('upsertPayOffer', edit)).toEqual({
+		projectId: appId,
+		sku: 'pro-yearly',
+		description: 'New text',
+	})
+	expect(paySchemas.upsertPayOffer.parse({ ...edit, description: null }).description).toBeNull()
+})
+it('asks a translation save for the saved language only unless every language is requested', () => {
+	const save = { appId, locale: 'de', translations: { 'pro/title': 'Pro' } }
+	expect(paySchemas.setPayOfferTranslations.parse(save).view).toBe('saved_locale')
+	expect(paySchemas.setPayOfferTranslations.parse({ ...save, view: 'all_locales' }).view).toBe('all_locales')
+	expect(() => paySchemas.setPayOfferTranslations.parse({ ...save, view: 'everything' })).toThrow()
+})
 it('registers Pay operations with correct mutation annotations and permission descriptions', async () => {
 	const tools: any[] = []
 	const method = vi.fn(async () => ({ id: appId }))
