@@ -95,6 +95,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_uninstall_form` | One survey in full, its `updatedAt`, the heading and its source, translation status | Free; identity required |
 | `update_uninstall_form` | Partial update checked like the Dojo editor; `dryRun` diff, `expectedUpdatedAt`, `idempotencyKey`; URL and responses stay | Requires hosted.write for OAuth |
 | `preview_uninstall_form` | The survey's text in one language and the screen after each answer; counts nothing | Free; identity required |
+| `list_uninstall_responses` | A survey's answers, newest first, filtered by version and date, with counts by reason and version; emails only for an API key | Free; identity required |
 | `find_brand_mentions` | Every hosted field holding a name (e.g. an old extension name), with the tool that fixes it | Free; identity required |
 | `set_legal_translations` | Save one language of the privacy policy or license terms translation (edited sections and free-text answers). On the hosted connector a translation is a proposal the owner approves in Dojo; with an API key it goes live at once | Requires hosted.write + Pro (policy) or pay.write (terms) for OAuth |
 | `upload_project_media` | Upload a PNG/JPEG/WebP logo or screenshot to the project's public media store and get a stable URL for `publish_landing_page` (metadata stripped, per-project quota; `filePath` inside the workspace on stdio, `dataBase64` everywhere) | Requires hosted.write for OAuth |

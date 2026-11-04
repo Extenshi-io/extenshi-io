@@ -152,10 +152,11 @@ export const DEVELOPMENT_SERVICES = [
 			'get_uninstall_form',
 			'update_uninstall_form',
 			'preview_uninstall_form',
+			'list_uninstall_responses',
 			'find_brand_mentions',
 		],
 		access:
-			'Free welcome-page specification. Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state, and publishes the install instructions page (free; hosted.write) — the uninstall form is created and the welcome page is edited in the cabinet. An existing uninstall survey is read, previewed and changed over MCP (list/get/preview_uninstall_form; update_uninstall_form with dryRun, expectedUpdatedAt and an idempotencyKey; hosted.write), keeping its URL and responses; each change is listed for the owner in Dojo. After a rename, find_brand_mentions lists every hosted field still holding the old name and the tool that fixes it; get_project_state reports the same on its own in `staleNames`: the project keeps every name it took (Dojo settings, import_manifest), so earlier names are searched without being asked for. The hosted uninstall form, welcome page and install instructions open in the user’s browser language (the generated snippets pass chrome.i18n.getUILanguage() as `hl`) when the project offers it, otherwise in the project’s own language: built-in text is translated by Extenshi (en + 10 languages); the developer’s own text is translated per field with get_page_translations / set_page_translations (identity; hosted.write to save).',
+			'Free welcome-page specification. Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state, and publishes the install instructions page (free; hosted.write) — the uninstall form is created and the welcome page is edited in the cabinet. An existing uninstall survey is read, previewed and changed over MCP (list/get/preview_uninstall_form; update_uninstall_form with dryRun, expectedUpdatedAt and an idempotencyKey; hosted.write), keeping its URL and responses; each change is listed for the owner in Dojo. Its answers are read with list_uninstall_responses (project.read): newest first, filtered by version and date, with counts by reason and version and the uninstalls that reached the page; the email a person left is returned to an API key only. After a rename, find_brand_mentions lists every hosted field still holding the old name and the tool that fixes it; get_project_state reports the same on its own in `staleNames`: the project keeps every name it took (Dojo settings, import_manifest), so earlier names are searched without being asked for. The hosted uninstall form, welcome page and install instructions open in the user’s browser language (the generated snippets pass chrome.i18n.getUILanguage() as `hl`) when the project offers it, otherwise in the project’s own language: built-in text is translated by Extenshi (en + 10 languages); the developer’s own text is translated per field with get_page_translations / set_page_translations (identity; hosted.write to save).',
 		urls: [
 			DEVELOPMENT_GUIDE_URL,
 			docs('pin-guide'),
@@ -229,7 +230,7 @@ export const DEVELOPMENT_SERVICES = [
 		id: 'maintenance',
 		purpose:
 			'Listing claims, finding responses, reviews and uninstall feedback, policy updates and ongoing releases.',
-		tools: ['get_reviews', 'get_security', 'get_project_state'],
+		tools: ['get_reviews', 'get_security', 'get_project_state', 'list_uninstall_responses'],
 		access:
 			'Catalog reads are metered. Ownership, declarations, responses, badges and feedback management live in the cabinet and depend on account access.',
 		urls: [

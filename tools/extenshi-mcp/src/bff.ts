@@ -208,6 +208,16 @@ export interface Bff extends PayBff {
 	}): Promise<unknown>
 	/** The page and after-submit screens in one language; records nothing. */
 	previewUninstallForm(input: { projectId: string; formId: string; locale?: string }): Promise<unknown>
+	/** Survey answers, newest first, with reason/version breakdowns (uninstallFeedback.agentListResponses). */
+	listUninstallResponses(input: {
+		projectId: string
+		formId: string
+		version?: string
+		since?: string
+		until?: string
+		cursor?: string
+		take?: number
+	}): Promise<unknown>
 	/** Where a name appears across the project's hosted text, with the tool that fixes each field. */
 	findBrandMentions(input: { projectId: string; terms: string[] }): Promise<unknown>
 	/**
@@ -361,6 +371,7 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		getUninstallForm: (input) => client.uninstallFeedback.agentGetForm.query(input),
 		updateUninstallForm: (input) => client.uninstallFeedback.agentUpdateForm.mutate(input),
 		previewUninstallForm: (input) => client.uninstallFeedback.agentPreviewForm.query(input),
+		listUninstallResponses: (input) => client.uninstallFeedback.agentListResponses.query(input),
 		findBrandMentions: (input) => client.devProject.agentFindBrandMentions.query(input),
 		getPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentGetTranslations.query(input),
 		setPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentSetTranslations.mutate(input),

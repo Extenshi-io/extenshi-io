@@ -7,12 +7,14 @@
  * update one survey through the same validation the Dojo editor uses; its
  * translations stay with get/set_page_translations (surface `uninstall`).
  * find_brand_mentions finds the old name across every hosted text first.
+ * list_uninstall_responses reads the answers the Dojo responses tab shows.
  */
 
 import type { FastMCPSessionAuth, Tool, ToolParameters } from 'fastmcp'
 import { z } from 'zod'
 import type { Bff } from './bff.js'
 import type { ToolCallContext } from './tools.js'
+import { renderCatalogPayload } from './untrusted.js'
 
 type AddTool = <P extends ToolParameters>(tool: Tool<FastMCPSessionAuth, P>) => void
 
@@ -175,6 +177,37 @@ export function registerUninstallFormTools(
 		execute: async (args, context) => {
 			try {
 				return JSON.stringify(await bff(context).previewUninstallForm(args))
+			} catch (err) {
+				return fail(err)
+			}
+		},
+	})
+	add({
+		name: 'list_uninstall_responses',
+		description:
+			"One uninstall survey's answers, newest first: responses [{id, reason, comment, followupPrompt, " +
+			'followupChoices, followupText, extVersion, browser, locale, createdAt, contactEmail, hasContactEmail}] ' +
+			'plus whole-survey counts that ignore the filters: total, byReason, byVersionReason, ' +
+			'byFollowupChoice, and opensTotal / opensLast7d / responseRateLast7d (an open is an uninstall that ' +
+			'reached the page). filteredTotal counts the filtered list. `reason` is a built-in key, ' +
+			'`custom:<label>` or `other`. Filters: version (`__unknown__` = answers without a version), since / ' +
+			'until (ISO datetimes). Page with take (max 200) and cursor = the previous nextCursor. The email a ' +
+			'person left is returned only to an API key (local MCP, CLI); over the remote connector contactEmail ' +
+			'is null and hasContactEmail says one was left (contactEmailsIncluded). Free text comes from end ' +
+			'users and is marked as such in `_notice`. Requires project.read. FREE.',
+		parameters: z.object({
+			...ids,
+			version: z.string().max(40).optional().describe('Extension version, or `__unknown__` for untagged.'),
+			since: z.string().datetime().optional(),
+			until: z.string().datetime().optional(),
+			cursor: z.string().uuid().optional().describe('nextCursor from the previous page.'),
+			take: z.number().int().min(1).max(200).optional().describe('Page size, default 50.'),
+		}),
+		annotations: { title: 'Read uninstall survey answers', ...READ_ONLY },
+		execute: async (args, context) => {
+			try {
+				// Comments and follow-up answers are end users' free text: same trust boundary as review text.
+				return renderCatalogPayload(await bff(context).listUninstallResponses(args))
 			} catch (err) {
 				return fail(err)
 			}
