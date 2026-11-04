@@ -108,6 +108,7 @@ const READ_TOOLS = [
 	'get_pay_offer_translations',
 	'set_pay_offer_translations',
 	'set_pay_enabled',
+	'set_pay_trial',
 	'rotate_pay_key',
 
 	'import_manifest',
@@ -495,6 +496,7 @@ describe('owner approval on the hosted connector', () => {
 		'archive_pay_app',
 		'archive_pay_offer',
 		'set_pay_seller_profile',
+		'set_pay_trial',
 		'publish_privacy_policy',
 		'set_legal_translations',
 	]
@@ -809,6 +811,7 @@ describe('directory tool annotations', () => {
 			'archive_pay_offer',
 			'set_pay_offer_translations',
 			'set_pay_enabled',
+			'set_pay_trial',
 			'rotate_pay_key',
 
 			'import_manifest',

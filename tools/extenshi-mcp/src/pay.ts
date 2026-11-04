@@ -3,6 +3,8 @@ import { z } from 'zod'
 
 const app = z.object({ appId: z.string().uuid() }).strict()
 const sku = z.string().regex(/^[a-z0-9][a-z0-9_-]{1,39}$/)
+// Free days per installation; null is no trial (PAY_TRIAL_MAX_DAYS in shared-types).
+const trialDays = z.number().int().min(0).max(365).nullable()
 const publicUrl = z
 	.string()
 	.trim()
@@ -21,7 +23,11 @@ export const paySchemas = {
 		})
 		.strict(),
 	createPayApp: z
-		.object({ name: z.string().trim().min(1).max(120), linkedProjectId: z.string().uuid().optional() })
+		.object({
+			name: z.string().trim().min(1).max(120),
+			linkedProjectId: z.string().uuid().optional(),
+			trialDays: trialDays.optional(),
+		})
 		.strict(),
 	getPayApp: app,
 	getPayReadiness: app,
@@ -71,6 +77,7 @@ export const paySchemas = {
 		view: z.enum(['saved_locale', 'all_locales']).default('saved_locale'),
 	}),
 	setPayEnabled: app.extend({ enabled: z.boolean() }),
+	setPayTrial: app.extend({ trialDays }),
 	rotatePayKey: app,
 } as const
 export type PayMethod = keyof typeof paySchemas
@@ -90,7 +97,7 @@ export const PAY_OPERATIONS = [
 		'create',
 		'payApp.create',
 		true,
-		'Create an independent Pay application; linking a development project is optional. Not idempotent: each call creates a new application, including a call repeated after a timeout.',
+		'Create an independent Pay application; linking a development project is optional. `trialDays` (0–365, optional) sets a free trial at once, since a new application has no buyers yet; set_pay_trial changes it later. Not idempotent: each call creates a new application, including a call repeated after a timeout.',
 	],
 	[
 		'getPayApp',
@@ -98,7 +105,7 @@ export const PAY_OPERATIONS = [
 		'get',
 		'payApp.get',
 		false,
-		'Read your Pay application and optional project link.',
+		'Read your Pay application, its optional project link and its free trial (`trialDays`, null when there is none).',
 	],
 	[
 		'getPayReadiness',
@@ -219,6 +226,14 @@ export const PAY_OPERATIONS = [
 		'paySeller.setEnabled',
 		true,
 		'Enable or disable new payments for the application; requires a connected payment provider. Enabling re-reads the seller status from the provider (charges and payouts). It does not verify the public profile, agreement or offer sync: buyers can check out only when every readiness check reported by get_pay_readiness passes. Enabling is a live commerce change.',
+	],
+	[
+		'setPayTrial',
+		'set_pay_trial',
+		'trial',
+		'payApp.setTrial',
+		true,
+		"Set the application's free trial: `trialDays` (0–365) free days for every installation, counted on Extenshi's server from the first time the SDK reads that installation's license; null turns the trial off. One clock per installation per application, so switching offers does not restart it, and an installation restored through purchase recovery keeps the earliest start. The end is derived from the stored start, so a new length also moves trials already running. The SDK reads it with getTrial() and the trial:ending / trial:ended events; the extension does not store a start date itself.",
 	],
 	[
 		'rotatePayKey',

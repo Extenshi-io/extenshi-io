@@ -278,6 +278,7 @@ export const DEVELOPMENT_SERVICES = [
 			'get_pay_offer_translations',
 			'set_pay_offer_translations',
 			'set_pay_enabled',
+			'set_pay_trial',
 			'rotate_pay_key',
 			'get_license_terms_questionnaire',
 			'draft_license_terms',

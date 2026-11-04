@@ -58,6 +58,40 @@ it('asks a translation save for the saved language only unless every language is
 	expect(paySchemas.setPayOfferTranslations.parse({ ...save, view: 'all_locales' }).view).toBe('all_locales')
 	expect(() => paySchemas.setPayOfferTranslations.parse({ ...save, view: 'everything' })).toThrow()
 })
+it('sets the free trial per application: whole days 0..365, null turns it off', () => {
+	expect(paySchemas.setPayTrial.parse({ appId, trialDays: 7 })).toEqual({ appId, trialDays: 7 })
+	expect(paySchemas.setPayTrial.parse({ appId, trialDays: 0 }).trialDays).toBe(0)
+	expect(paySchemas.setPayTrial.parse({ appId, trialDays: null }).trialDays).toBeNull()
+	// Required: an omitted length must not read as "turn the trial off".
+	expect(() => paySchemas.setPayTrial.parse({ appId })).toThrow()
+	for (const bad of [-1, 366, 2.5, '7'])
+		expect(() => paySchemas.setPayTrial.parse({ appId, trialDays: bad })).toThrow()
+	expect(() => paySchemas.setPayTrial.parse({ appId, trialDays: 7, offerSku: 'pro' })).toThrow()
+	// An application-level setting: the wire keeps appId, as payApp.* expects.
+	expect(payWireInput('setPayTrial', { appId, trialDays: 7 })).toEqual({ appId, trialDays: 7 })
+	expect(PAY_OPERATIONS.find(([method]) => method === 'setPayTrial')?.[3]).toBe('payApp.setTrial')
+	// Optional on create: an older call without it stays valid.
+	expect(paySchemas.createPayApp.parse({ name: 'Standalone', trialDays: 7 })).toEqual({
+		name: 'Standalone',
+		trialDays: 7,
+	})
+	expect(() => paySchemas.createPayApp.parse({ name: 'Standalone', trialDays: 400 })).toThrow()
+})
+it('describes the trial on each transport as what it is: a proposal on the connector, at once with a key', () => {
+	const register = (auth: 'oauth' | 'api-key') => {
+		const tools: Array<{ name: string; description?: string }> = []
+		registerTools({ addTool: (tool: { name: string; description?: string }) => tools.push(tool) } as never, {
+			cfg: { bffUrl: 'https://bff.test', scanUrl: 'https://scan.test', docsUrl: 'https://docs.test' },
+			capabilities: new Set(['read']),
+			getBff: () => ({}) as never,
+			auth,
+		})
+		return tools.find((tool) => tool.name === 'set_pay_trial')?.description ?? ''
+	}
+	expect(register('oauth')).toContain('pending_approval')
+	expect(register('api-key')).toMatch(/applies at once/)
+	expect(register('api-key')).toContain('pay.write')
+})
 it('registers Pay operations with correct mutation annotations and permission descriptions', async () => {
 	const tools: any[] = []
 	const method = vi.fn(async () => ({ id: appId }))
@@ -96,14 +130,17 @@ it('sends Pay requests to the correct tRPC paths with authenticated headers and 
 		await bff.createPayApp({ name: 'Standalone' })
 		await bff.getPaySeller({ appId })
 		await bff.exportPayData({ appId, resource: 'payments', limit: 10 })
+		await bff.setPayTrial({ appId, trialDays: 7 })
 		expect(calls.map((call) => call.url)).toEqual([
 			'/api/trpc/payApp.create',
 			'/api/trpc/paySeller.get',
 			'/api/trpc/payApp.export',
+			'/api/trpc/payApp.setTrial',
 		])
 		expect(calls[0].input).toEqual({ '0': { name: 'Standalone' } })
 		expect(calls[1].input).toEqual({ '0': { projectId: appId } })
 		expect(calls[2].input).toEqual({ '0': { appId, resource: 'payments', limit: 10 } })
+		expect(calls[3].input).toEqual({ '0': { appId, trialDays: 7 } })
 		expect(calls.every((call) => call.authorization === 'Bearer ek_test_secret')).toBe(true)
 	} finally {
 		server.closeAllConnections()

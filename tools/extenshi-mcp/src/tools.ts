@@ -219,6 +219,7 @@ const APPROVAL_GATED_PAY = new Set<string>([
 	'archivePayApp',
 	'archivePayOffer',
 	'setPaySellerProfile',
+	'setPayTrial',
 ])
 
 /** Match initialize instructions to the same capabilities used for registration. */
