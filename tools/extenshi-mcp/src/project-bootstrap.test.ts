@@ -2,7 +2,7 @@ import * as contracts from '@extenshi/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bff } from './bff.js'
 import { amoCreateAllowed, publishArtifact, storeCredentialsFor } from './publish.js'
-import { type Capability, registerTools } from './tools.js'
+import { BUILD_MAP_READ_MS, type Capability, registerTools } from './tools.js'
 
 vi.mock('./telemetry.js', async (importOriginal) => ({
 	...(await importOriginal<typeof import('./telemetry.js')>()),
@@ -42,6 +42,99 @@ describe('create_project', () => {
 		expect(JSON.parse(await tool.execute(input, {}))).toMatchObject({ projectId })
 		expect(createProject).toHaveBeenCalledWith({ name: 'Reader', browsers: ['firefox'], idempotencyKey: key })
 		expect(tool.annotations).toMatchObject({ readOnlyHint: false, idempotentHint: true })
+	})
+})
+
+describe('buildMap in project answers (local server only)', () => {
+	const summary = {
+		running: true,
+		url: 'http://127.0.0.1:4321/',
+		offered: true,
+		declined: false,
+		offers: 1,
+		home: '/repo/ext',
+	}
+	function localTools(bff: Partial<Bff>, readBuildMap: (projectDir?: string) => Promise<typeof summary>) {
+		const tools: Record<string, any> = {}
+		const addTool = (t: { name: string }) => {
+			tools[t.name] = t
+		}
+		registerTools({ addTool } as never, {
+			cfg: { bffUrl: 'https://bff.test', scanUrl: 'https://scan.test', docsUrl: 'https://docs.test' },
+			capabilities: new Set<Capability>(['read']),
+			getBff: () => bff as Bff,
+			readBuildMap,
+		})
+		return tools
+	}
+
+	it('create_project adds buildMap for projectDir and keeps projectDir away from the service', async () => {
+		const createProject = vi.fn(async () => ({ projectId, created: true, nextSteps: [] }))
+		const readBuildMap = vi.fn(async () => summary)
+		const tool = localTools({ createProject }, readBuildMap).create_project
+		const input = tool.parameters.parse({ name: 'Reader', idempotencyKey: key, projectDir: 'ext' })
+		expect(JSON.parse(await tool.execute(input, {}))).toEqual({
+			projectId,
+			created: true,
+			nextSteps: [],
+			buildMap: summary,
+		})
+		expect(createProject).toHaveBeenCalledWith({ name: 'Reader', browsers: [], idempotencyKey: key })
+		expect(readBuildMap).toHaveBeenCalledWith('ext')
+		expect(tool.description).toContain('`buildMap`')
+	})
+
+	it('get_project_state adds buildMap, defaulting to the working directory', async () => {
+		const getMyProjectState = vi.fn(async () => ({ schemaVersion: 5 }))
+		const readBuildMap = vi.fn(async () => summary)
+		const tool = localTools({ getMyProjectState }, readBuildMap).get_project_state
+		expect(JSON.parse(await tool.execute(tool.parameters.parse({ projectId }), {}))).toEqual({
+			schemaVersion: 5,
+			buildMap: summary,
+		})
+		expect(readBuildMap).toHaveBeenCalledWith(undefined)
+		expect(getMyProjectState).toHaveBeenCalledWith({
+			projectId,
+			includeToolStates: undefined,
+			manifests: 'summary',
+		})
+	})
+
+	it('a map that cannot be read leaves the answer as it was', async () => {
+		const getMyProjectState = vi.fn(async () => ({ schemaVersion: 5 }))
+		const tool = localTools({ getMyProjectState }, async () => {
+			throw new Error('ENOENT')
+		}).get_project_state
+		expect(JSON.parse(await tool.execute({ projectId, projectDir: '/missing' }, {}))).toEqual({
+			schemaVersion: 5,
+		})
+	})
+
+	it('a map read that hangs does not hold up the answer', async () => {
+		vi.useFakeTimers()
+		try {
+			const getMyProjectState = vi.fn(async () => ({ schemaVersion: 5 }))
+			const tool = localTools({ getMyProjectState }, () => new Promise(() => {})).get_project_state
+			const pending = tool.execute({ projectId }, {})
+			await vi.advanceTimersByTimeAsync(BUILD_MAP_READ_MS)
+			expect(JSON.parse(await pending)).toEqual({ schemaVersion: 5 })
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	it('without local files (the hosted connector) there is no projectDir and no buildMap', async () => {
+		const createProject = vi.fn(async () => ({ projectId }))
+		const getMyProjectState = vi.fn(async () => ({ schemaVersion: 5 }))
+		const tools = toolsWith({ createProject, getMyProjectState })
+		expect(
+			tools.create_project.parameters.safeParse({ name: 'R', idempotencyKey: key, projectDir: '.' }).success,
+		).toBe(false)
+		expect(tools.get_project_state.parameters.parse({ projectId, projectDir: '.' })).not.toHaveProperty(
+			'projectDir',
+		)
+		expect(tools.get_project_state.description).not.toContain('buildMap')
+		expect(JSON.parse(await tools.get_project_state.execute({ projectId }, {}))).toEqual({ schemaVersion: 5 })
 	})
 })
 

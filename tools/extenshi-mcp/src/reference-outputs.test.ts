@@ -12,6 +12,7 @@ import type { Bff } from './bff.js'
 import { clearDocsCache } from './docs.js'
 import { renderIconWorkflow } from './icon-workflow.js'
 import { renderLocalizeWorkflow } from './localize-workflow.js'
+import { renderPinGuide } from './pin-guide-tool.js'
 import { renderExtensionTemplates } from './templates.js'
 import { type Capability, registerTools } from './tools.js'
 import { renderWelcomeWorkflow } from './welcome-workflow.js'
@@ -63,6 +64,7 @@ const STATIC_OUTPUTS: Array<[string, () => string]> = [
 		'generate_welcome_page_workflow (custom)',
 		() => renderWelcomeWorkflow({ extensionName: 'X', goal: 'CUSTOM' }),
 	],
+	['generate_pin_guide (overview)', () => renderPinGuide({ extensionName: 'Tab Keeper' })],
 	['list_extension_templates', () => renderExtensionTemplates()],
 ]
 

@@ -185,7 +185,7 @@ export interface Bff extends PayBff {
 	/** Save one language of one page (text by field path; the server records the source text). */
 	setPageTranslations(input: {
 		projectId: string
-		surface: 'uninstall' | 'welcome' | 'instructions'
+		surface: 'uninstall' | 'welcome' | 'instructions' | 'feedback'
 		publicCode: string
 		locale: string
 		translations: Record<string, string>
@@ -212,6 +212,35 @@ export interface Bff extends PayBff {
 	listUninstallResponses(input: {
 		projectId: string
 		formId: string
+		version?: string
+		since?: string
+		until?: string
+		cursor?: string
+		take?: number
+	}): Promise<unknown>
+	/** The project's feedback forms: id, URL, enabled, primary, responses (feedbackForm.agentListForms). */
+	listFeedbackForms(input: { projectId: string }): Promise<unknown>
+	/** One feedback form: config, `updatedAt`, heading + its source, translation status. */
+	getFeedbackForm(input: { projectId: string; formId: string }): Promise<unknown>
+	/** Partial update with dryRun / expectedUpdatedAt / idempotencyKey. Requires hosted.write. */
+	updateFeedbackForm(input: {
+		projectId: string
+		formId: string
+		patch: Record<string, unknown>
+		expectedUpdatedAt?: string
+		dryRun?: boolean
+		idempotencyKey?: string
+		confirmPrivacyChange?: boolean
+		proposedBy?: string
+	}): Promise<unknown>
+	/** The page and thank-you screens in one language; records nothing. */
+	previewFeedbackForm(input: { projectId: string; formId: string; locale?: string }): Promise<unknown>
+	/** Answers, newest first, with category / source / version breakdowns (feedbackForm.agentListResponses). */
+	listFeedbackResponses(input: {
+		projectId: string
+		formId: string
+		category?: string
+		source?: string
 		version?: string
 		since?: string
 		until?: string
@@ -372,6 +401,11 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		updateUninstallForm: (input) => client.uninstallFeedback.agentUpdateForm.mutate(input),
 		previewUninstallForm: (input) => client.uninstallFeedback.agentPreviewForm.query(input),
 		listUninstallResponses: (input) => client.uninstallFeedback.agentListResponses.query(input),
+		listFeedbackForms: (input) => client.feedbackForm.agentListForms.query(input),
+		getFeedbackForm: (input) => client.feedbackForm.agentGetForm.query(input),
+		updateFeedbackForm: (input) => client.feedbackForm.agentUpdateForm.mutate(input),
+		previewFeedbackForm: (input) => client.feedbackForm.agentPreviewForm.query(input),
+		listFeedbackResponses: (input) => client.feedbackForm.agentListResponses.query(input),
 		findBrandMentions: (input) => client.devProject.agentFindBrandMentions.query(input),
 		getPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentGetTranslations.query(input),
 		setPrivacyPolicyTranslations: (input) => client.privacyPolicy.agentSetTranslations.mutate(input),

@@ -26,7 +26,8 @@
  *               list_my_projects, get_project_state, get_project_scaffold,
  *               list/get/publish/update privacy policy (hosted; Pro)
  *   'docs'    → get_development_guide, search_docs, list_extension_templates, generate_icon_workflow,
- *               generate_welcome_page_workflow, generate_landing_page, localize_workflow (free; no key)
+ *               generate_welcome_page_workflow, generate_pin_guide, generate_landing_page,
+ *               localize_workflow (free; no key)
  *   'scan'    → scan_extension             (local artifact; stdio only)
  *   'publish' → publish_extension          (local creds; stdio only)
  *
@@ -34,6 +35,7 @@
  */
 
 import {
+	type AgentCreateProject,
 	agentCreateProjectSchema,
 	agentEvidenceSchema,
 	importManifestSchema,
@@ -44,6 +46,7 @@ import { type FastMCP, type FastMCPSessionAuth, type Tool, type ToolParameters, 
 import { z } from 'zod'
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import type { Bff } from './bff.js'
+import type { BuildMapSummary } from './build-map-summary.js'
 import { buildDevelopmentGuide, GUIDE_SECTIONS, type GuideTool } from './development-guide.js'
 import {
 	DEFAULT_EXCERPT_CHARS,
@@ -53,6 +56,7 @@ import {
 	MIN_EXCERPT_CHARS,
 	searchDocs,
 } from './docs.js'
+import { registerFeedbackFormTools } from './feedback-form-tools.js'
 import { renderIconWorkflow } from './icon-workflow.js'
 import { LANDING_LIMITS } from './landing-page.js'
 import { LANDING_READ_SHAPE, shapeLandingRead } from './landing-read.js'
@@ -66,6 +70,8 @@ import { hostedLandingNextSteps, landingFormFromArgs, renderGenerateLandingPage 
 import { registerLicenseTermsTools } from './license-terms-tools.js'
 import { renderLocalizeWorkflow } from './localize-workflow.js'
 import { PAY_OPERATIONS, paySchemas } from './pay.js'
+import { PinGuideKitError } from './pin-guide-kit.js'
+import { PIN_GUIDE_PARTS, renderPinGuide } from './pin-guide-tool.js'
 import { describePrivacyAiUpdate } from './privacy-ai-outcome.js'
 import {
 	checkInlineImage,
@@ -168,16 +174,17 @@ export type McpAuth = 'api-key' | 'oauth'
 export const SERVER_INSTRUCTIONS =
 	"Extenshi covers browser-extension development and operations: catalog and security data on other people's extensions, " +
 	"and the signed-in developer's own projects, hosted pages, Pay applications and privacy policy. " +
-	'get_development_guide (free) returns the end-to-end workflow, the tools on this connection, the service directory and documentation links; ' +
-	'search_docs (free) returns current product documentation and exact CLI flags. ' +
-	'get_credit_balance reports the remaining read, scan, icon and inventory credits; get_risk_by_store_ids covers up to 40 store IDs for one read, and get_security costs three reads. ' +
-	"list_my_projects returns the developer's own projects (create_project adds one); get_project_state returns a project's configuration, including integration.file " +
+	"get_development_guide (free) returns the workflow, this connection's tools, services and documentation links; " +
+	'search_docs (free) returns current documentation and exact CLI flags. ' +
+	'get_credit_balance reports the remaining credits; get_risk_by_store_ids covers 40 store IDs per read, and get_security costs three reads. ' +
+	"list_my_projects returns the developer's projects (create_project adds one); get_project_state returns a project's configuration, including integration.file " +
 	'(the content for integration.path that links a repository to the project) and integration.unwired. ' +
-	'get_decisions lists the owner decisions (AMO add-on id, license, seller identity, pricing); propose_decision proposes a value and the owner decides it in Dojo. ' +
-	'Pay applications are independent of projects (list_pay_apps, create_pay_app, get_pay_readiness) and need the pay.read / pay.write scopes; ' +
-	'agreement acceptance and KYC take place in the browser, and only the publishable SDK key and the public verification key belong in extension code. ' +
-	'Hosted privacy-policy tools need a Pro project: publish_privacy_policy puts a policy on the live public page, update_privacy_policy_with_ai returns a proposal only. ' +
-	'Registered tools are not proof of account entitlements or a completed release.'
+	'The build map (npx @extenshi/cli map) is one local page per project and its worktrees, where the author follows progress and makes choices. ' +
+	'get_decisions lists owner decisions (AMO add-on id, license, seller, pricing); propose_decision proposes a value, and the owner decides it in Dojo. ' +
+	'Pay applications are separate from projects (list_pay_apps, create_pay_app, get_pay_readiness) and need the pay.read / pay.write scopes; ' +
+	'agreement and KYC happen in the browser, and only the publishable SDK key and the public verification key belong in extension code. ' +
+	'Hosted privacy-policy tools need a Pro project: publish_privacy_policy updates the live public page; update_privacy_policy_with_ai only proposes. ' +
+	'Registered tools prove neither account entitlements nor a completed release.'
 
 /**
  * What happens to a payments or live-policy change made through the hosted connector (the owner approves it in
@@ -226,7 +233,7 @@ export function getServerInstructions(
 	return (
 		SERVER_INSTRUCTIONS +
 		(local.length
-			? ` This connection exposes ${local.join(' and ')} for local artifacts; they need valid credentials and publishing access.`
+			? ` This connection exposes ${local.join(' and ')} for local artifacts; they need credentials and publishing access.`
 			: ' This connection has no local artifact scan or store-publishing tool; the local stdio server and the CLI provide those stages.') +
 		(auth === 'api-key' ? ` ${API_KEY_DIRECT_FACT} API keys for the local package: ${KEY_PAGE}.` : '') +
 		(auth === 'oauth' ? ` ${CONNECTOR_APPROVAL_FACT}` : '')
@@ -283,6 +290,22 @@ export interface ToolDeps {
 	auth?: McpAuth
 	/** Optional override of the missing-key message (defaults to the one for `auth`). */
 	missingKeyMessage?: string
+	/**
+	 * The author's build map for a project directory on THIS machine (plan
+	 * 2026-11-03-extension-build-map §6.7). Only the local stdio server has the
+	 * author's files: it passes this, and create_project / get_project_state then
+	 * take `projectDir` and answer with `buildMap`. The hosted connector omits it.
+	 */
+	readBuildMap?: (projectDir?: string) => Promise<BuildMapSummary>
+}
+
+/** How long a project answer waits for the build map (a slow `git`, a hung server) before going without it. */
+export const BUILD_MAP_READ_MS = 3_000
+
+/** Add `buildMap` to a JSON object answer; anything else, or no map, passes through unchanged. */
+function withBuildMap(result: unknown, buildMap: BuildMapSummary | undefined): unknown {
+	if (!buildMap || !result || typeof result !== 'object' || Array.isArray(result)) return result
+	return { ...result, buildMap }
 }
 
 // ── Internal helpers (ported from index.ts, now deps-parametrized) ───────────
@@ -730,6 +753,12 @@ const TOOL_ANNOTATIONS: Record<
 		idempotentHint: true,
 		openWorldHint: false,
 	},
+	generate_pin_guide: {
+		title: 'Pin guide illustrations',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
 	generate_landing_page: {
 		title: 'Generate a static landing page',
 		readOnlyHint: true,
@@ -866,13 +895,13 @@ const TOOL_ANNOTATIONS: Record<
 		openWorldHint: true,
 	},
 	get_page_translations: {
-		title: 'Read uninstall / welcome page translations',
+		title: 'Read uninstall / feedback / welcome page translations',
 		readOnlyHint: true,
 		idempotentHint: true,
 		openWorldHint: true,
 	},
 	set_page_translations: {
-		title: 'Save translations of an uninstall / welcome page',
+		title: 'Save translations of an uninstall / feedback / welcome page',
 		readOnlyHint: false,
 		idempotentHint: true,
 		destructiveHint: false,
@@ -1159,6 +1188,31 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		if (!deps.requireApiKey) throw new UserError(missingKeyMessage)
 		return deps.requireApiKey(ctx)
 	}
+	// The build map is read next to the BFF call and never fails or holds up a project answer.
+	const readBuildMap = deps.readBuildMap
+	const buildMapOf = (projectDir?: string): Promise<BuildMapSummary | undefined> =>
+		readBuildMap
+			? Promise.race([
+					readBuildMap(projectDir).catch(() => undefined),
+					new Promise<undefined>((resolve) => {
+						setTimeout(() => resolve(undefined), BUILD_MAP_READ_MS).unref()
+					}),
+				])
+			: Promise.resolve(undefined)
+	const projectDirParam = z
+		.string()
+		.min(1)
+		.optional()
+		.describe(
+			"The extension project's directory on this machine, absolute or relative to this server's working directory " +
+				'(default: the working directory). In a linked git worktree, buildMap describes the map of the main checkout, ' +
+				'which every agent and worktree of the project shares.',
+		)
+	const buildMapNote = readBuildMap
+		? ' On this local server the answer also carries `buildMap` {running, url (while running), offered, declined, offers, home} ' +
+			'for projectDir: the author’s build map (npx @extenshi/cli map), one per project for every agent and git worktree; ' +
+			'absent when the directory cannot be read.'
+		: ''
 
 	// ── Read tools (free; key/identity required) ───────────────────────────────
 	if (caps.has('read')) {
@@ -1229,11 +1283,19 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'the Dojo project wizard uses, with the same ownership and limits. Returns JSON {projectId, dojoUrl, ' +
 				'project, pendingDecisions, nextSteps}: the next steps cover binding the repository and the starter ' +
 				'files. Idempotent: a repeated request with the same idempotencyKey returns the project it already ' +
-				'created (replayed: true); the same key with different input is rejected. Requires project.write.',
-			parameters: agentCreateProjectSchema,
+				'created (replayed: true); the same key with different input is rejected. Requires project.write.' +
+				buildMapNote,
+			parameters: readBuildMap
+				? agentCreateProjectSchema.extend({ projectDir: projectDirParam })
+				: agentCreateProjectSchema,
 			execute: async (args, context) => {
+				const { projectDir, ...input } = args as AgentCreateProject & { projectDir?: string }
 				try {
-					return JSON.stringify(await bff(context).createProject(args), null, 2)
+					const [created, buildMap] = await Promise.all([
+						bff(context).createProject(input),
+						buildMapOf(projectDir),
+					])
+					return JSON.stringify(withBuildMap(created, buildMap), null, 2)
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -1767,8 +1829,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'get_page_translations',
 			description:
-				"The developer-written text on the project's hosted uninstall forms, welcome pages and install " +
-				'instructions (the features list), for ' +
+				"The developer-written text on the project's hosted uninstall forms, feedback forms, welcome pages " +
+				'and install instructions (the features list), for ' +
 				'translation: per page {surface, publicCode, name, defaultLocale, locales, fields [{path, source, ' +
 				'label, max, multiline}], status per language [{locale, translated, missing, outdated}], ' +
 				'translations}. Languages are the project’s (manifest translations + the targetLocales decision); ' +
@@ -1776,7 +1838,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'Built-in text (buttons, reasons, footers) is translated by Extenshi into en, es, pt-BR, fr, de, ' +
 				'it, ru, ja, ko, zh-CN and ar and is not listed. A page is shown in the user’s browser language ' +
 				'when the project offers it, otherwise in defaultLocale; an untranslated or outdated field shows ' +
-				'its original. Uninstall survey text itself is changed with update_uninstall_form. Requires project.read.',
+				'its original. Uninstall survey and feedback form text itself is changed with update_uninstall_form / ' +
+				'update_feedback_form. Requires project.read.',
 			parameters: z.object({ projectId: z.string().uuid() }),
 			execute: async (args, context) => {
 				try {
@@ -1789,7 +1852,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'set_page_translations',
 			description:
-				'Save one language of one uninstall form, welcome page or install instructions page: `translations` ' +
+				'Save one language of one uninstall form, feedback form, welcome page or install instructions page: ' +
+				'`translations` ' +
 				'maps field paths (from ' +
 				'get_page_translations) to translated text; the server records which original each translates, so ' +
 				'a later edit of the original marks it outdated. An empty string removes a translation. Unknown ' +
@@ -1798,7 +1862,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'hosted.write.',
 			parameters: z.object({
 				projectId: z.string().uuid(),
-				surface: z.enum(['uninstall', 'welcome', 'instructions']),
+				surface: z.enum(['uninstall', 'welcome', 'instructions', 'feedback']),
 				publicCode: z.string().max(40).describe('The page code, from get_page_translations.'),
 				locale: z.string().max(35).describe('BCP 47 tag or the _locales spelling (de, pt-BR, pt_BR).'),
 				translations: z.record(z.string().max(80), z.string().max(2000)),
@@ -1888,6 +1952,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		registerLicenseTermsTools(add, bff, (err) => readError(err, missingKeyMessage), { oauth })
 		// list/get/update/preview_uninstall_form + find_brand_mentions (project.read / hosted.write).
 		registerUninstallFormTools(add, bff, (err) => readError(err, missingKeyMessage))
+		// list/get/update/preview_feedback_form + list_feedback_responses (project.read / hosted.write).
+		registerFeedbackFormTools(add, bff, (err) => readError(err, missingKeyMessage))
 		// A local filesystem exists only where local artifacts do (stdio).
 		const localFiles = caps.has('scan')
 		add({
@@ -2430,9 +2496,11 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'landing_page), name, missing, outdated, locales [{locale, total, missing, outdated}], fixWith {read, write, args}}]}; ' +
 				'`next` is one sentence naming the largest gap and its tools. Pay surfaces need pay.read (otherwise `skipped`); ' +
 				"the extension's own _locales files are not part of it (localize_workflow covers those). " +
-				'FREE — spends no credit. Type definitions are in list_extension_templates.',
+				'FREE — spends no credit. Type definitions are in list_extension_templates.' +
+				buildMapNote,
 			parameters: z.object({
 				projectId: z.string().describe('Project id from list_my_projects.'),
+				...(readBuildMap ? { projectDir: projectDirParam } : {}),
 				includeToolStates: z
 					.array(z.string())
 					.optional()
@@ -2448,12 +2516,15 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			}),
 			execute: async (args, context) => {
 				try {
-					const state = await bff(context).getMyProjectState({
-						projectId: args.projectId,
-						includeToolStates: args.includeToolStates,
-						manifests: args.manifests ?? 'summary',
-					})
-					return JSON.stringify(state)
+					const [state, buildMap] = await Promise.all([
+						bff(context).getMyProjectState({
+							projectId: args.projectId,
+							includeToolStates: args.includeToolStates,
+							manifests: args.manifests ?? 'summary',
+						}),
+						buildMapOf((args as { projectDir?: string }).projectDir),
+					])
+					return JSON.stringify(withBuildMap(state, buildMap))
 				} catch (err) {
 					return readError(err, missingKeyMessage)
 				}
@@ -2760,6 +2831,77 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					existingSteps: args.existing_steps,
 					accentColor: args.accent_color,
 				}),
+		})
+
+		add({
+			name: 'generate_pin_guide',
+			description:
+				'Get the illustrated "pin the extension to the toolbar" steps for Chrome, Edge and Firefox as an ' +
+				'offline kit for a welcome page bundled INSIDE the extension: SVGs with the extension icon and ' +
+				'numbered markers drawn in, an HTML fragment that passes the extension CSP, captions in 11 ' +
+				"languages as chrome.i18n messages, and an ES module that picks the user's browser and reads " +
+				'whether the icon is already pinned (action.getUserSettings().isOnToolbar). The default `part` ' +
+				'is a short overview with sizes; `html`, `messages`, `script` and `css` return the parts, ' +
+				'narrowed by `browsers` / `locales`. `npx @extenshi/cli pin-guide` writes the same kit to ' +
+				'disk. Static content: no API key, no network, no credits.',
+			parameters: z.object({
+				extension_name: z.string().max(120).describe('Extension display name, drawn into the menu rows.'),
+				part: z
+					.enum(PIN_GUIDE_PARTS)
+					.optional()
+					.describe('overview (default), html, messages, script or css.'),
+				browsers: z
+					.array(z.enum(['chrome', 'edge', 'firefox']))
+					.max(3)
+					.optional()
+					.describe('Default: all three.'),
+				locales: z
+					.array(z.string().max(35))
+					.max(11)
+					.optional()
+					.describe(
+						'BCP 47 tags: en, es, pt-BR, fr, de, it, ru, ja, ko, zh-CN, ar. Default: all. English is ' +
+							'added to any selection — it is the fallback text inside the HTML.',
+					),
+				theme: z
+					.enum(['light', 'dark', 'auto'])
+					.optional()
+					.describe('light (default), dark, or auto — a light and a dark copy switched by CSS.'),
+				icon_href: z
+					.string()
+					.max(200_000)
+					.optional()
+					.describe(
+						'The icon as the page will load it: a path inside the extension package relative to the ' +
+							'page (e.g. ../icons/icon-48.png), or a data:image/png|jpeg|webp|svg+xml;base64 URI. ' +
+							'Remote URLs are refused — the page has to work offline.',
+					),
+				accent_color: z.string().max(9).optional().describe('Marker and highlight colour as hex.'),
+				key_prefix: z
+					.string()
+					.max(40)
+					.optional()
+					.describe('Prefix of the chrome.i18n message names (default pinGuide).'),
+			}),
+			execute: async (args) => {
+				try {
+					return renderPinGuide({
+						extensionName: args.extension_name,
+						part: args.part,
+						browsers: args.browsers,
+						locales: args.locales,
+						theme: args.theme,
+						iconHref: args.icon_href,
+						accentColor: args.accent_color,
+						keyPrefix: args.key_prefix,
+					})
+				} catch (err) {
+					// Authored input errors (unknown language, unsafe icon href) are
+					// expected; anything else keeps its cause for error tracking.
+					if (err instanceof PinGuideKitError) throw new UserError(err.message)
+					throw userErrorFrom('Could not build the pin guide.', err)
+				}
+			},
 		})
 
 		add({

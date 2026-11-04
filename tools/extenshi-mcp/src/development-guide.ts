@@ -139,9 +139,10 @@ export const DEVELOPMENT_SERVICES = [
 	{
 		id: 'onboarding',
 		purpose:
-			'Welcome page, pin guide, install instructions and uninstall survey, with verified URLs wired into the extension.',
+			'Welcome page, pin guide, install instructions, feedback form and uninstall survey, with verified URLs wired into the extension.',
 		tools: [
 			'generate_welcome_page_workflow',
+			'generate_pin_guide',
 			'get_project_state',
 			'get_install_instructions',
 			'publish_install_instructions',
@@ -153,15 +154,21 @@ export const DEVELOPMENT_SERVICES = [
 			'update_uninstall_form',
 			'preview_uninstall_form',
 			'list_uninstall_responses',
+			'list_feedback_forms',
+			'get_feedback_form',
+			'update_feedback_form',
+			'preview_feedback_form',
+			'list_feedback_responses',
 			'find_brand_mentions',
 		],
 		access:
-			'Free welcome-page specification. Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state, and publishes the install instructions page (free; hosted.write) — the uninstall form is created and the welcome page is edited in the cabinet. An existing uninstall survey is read, previewed and changed over MCP (list/get/preview_uninstall_form; update_uninstall_form with dryRun, expectedUpdatedAt and an idempotencyKey; hosted.write), keeping its URL and responses; each change is listed for the owner in Dojo. Its answers are read with list_uninstall_responses (project.read): newest first, filtered by version and date, with counts by reason and version and the uninstalls that reached the page; the email a person left is returned to an API key only. After a rename, find_brand_mentions lists every hosted field still holding the old name and the tool that fixes it; get_project_state reports the same on its own in `staleNames`: the project keeps every name it took (Dojo settings, import_manifest), so earlier names are searched without being asked for. The hosted uninstall form, welcome page and install instructions open in the user’s browser language (the generated snippets pass chrome.i18n.getUILanguage() as `hl`) when the project offers it, otherwise in the project’s own language: built-in text is translated by Extenshi (en + 10 languages); the developer’s own text is translated per field with get_page_translations / set_page_translations (identity; hosted.write to save).',
+			'Free welcome-page specification and pin guide kit (generate_pin_guide: offline SVG, CSP-safe HTML and chrome.i18n captions in 11 languages for a welcome page bundled in the extension). Editing, hosting and responses live in the cabinet where enabled; account/project limits apply. MCP returns specifications and saved state, and publishes the install instructions page (free; hosted.write) — the uninstall form is created and the welcome page is edited in the cabinet. An existing uninstall survey is read, previewed and changed over MCP (list/get/preview_uninstall_form; update_uninstall_form with dryRun, expectedUpdatedAt and an idempotencyKey; hosted.write), keeping its URL and responses; each change is listed for the owner in Dojo. Its answers are read with list_uninstall_responses (project.read): newest first, filtered by version and date, with counts by reason and version and the uninstalls that reached the page; the email a person left is returned to an API key only. The feedback form (feedback.extenshi.io) is the same engine for users who still have the extension: it is created in the cabinet, opened from Options, the popup ("Doesn’t work on this site?" with `cat=site_not_working&site=<hostname>`), the trial-ended screen or a rating nudge, reads only the parameters v, src, cat, browser, lang and site, and is read, previewed, changed (update_feedback_form, hosted.write) and its answers listed (list_feedback_responses, filters by category, source, version and date) over MCP; its link is FEEDBACK_FORM_URL in the integration config, and REVIEW_URLS holds the review pages of the published store listings. After a rename, find_brand_mentions lists every hosted field still holding the old name and the tool that fixes it; get_project_state reports the same on its own in `staleNames`: the project keeps every name it took (Dojo settings, import_manifest), so earlier names are searched without being asked for. The hosted uninstall form, welcome page and install instructions open in the user’s browser language (the generated snippets pass chrome.i18n.getUILanguage() as `hl`) when the project offers it, otherwise in the project’s own language: built-in text is translated by Extenshi (en + 10 languages); the developer’s own text is translated per field with get_page_translations / set_page_translations (identity; hosted.write to save).',
 		urls: [
 			DEVELOPMENT_GUIDE_URL,
 			docs('pin-guide'),
 			docs('install-instructions'),
 			docs('uninstall-feedback'),
+			docs('feedback-form'),
 			toolPage('onboarding-page'),
 			toolPage('instruction-generator'),
 			toolPage('install-instructions'),
@@ -231,7 +238,13 @@ export const DEVELOPMENT_SERVICES = [
 		id: 'maintenance',
 		purpose:
 			'Listing claims, finding responses, reviews and uninstall feedback, policy updates and ongoing releases.',
-		tools: ['get_reviews', 'get_security', 'get_project_state', 'list_uninstall_responses'],
+		tools: [
+			'get_reviews',
+			'get_security',
+			'get_project_state',
+			'list_uninstall_responses',
+			'list_feedback_responses',
+		],
 		access:
 			'Catalog reads are metered. Ownership, declarations, responses, badges and feedback management live in the cabinet and depend on account access.',
 		urls: [
@@ -342,6 +355,7 @@ const WORKFLOW = [
 		relatedTools: [
 			'generate_icon_workflow',
 			'generate_welcome_page_workflow',
+			'generate_pin_guide',
 			'generate_landing_page',
 			'draft_landing_page',
 			'preview_landing_page',
@@ -406,6 +420,37 @@ const WORKFLOW = [
 	},
 ] as const
 
+/**
+ * The Extension Build Map (internal-docs/plans/2026-11-03-extension-build-map.md
+ * §6, §6.7), described as a process like the workflow. The CLI is the
+ * implementation (tools/extenshi-cli/src/build-map*.ts); `localServerField` is
+ * build-map-summary.ts.
+ */
+const BUILD_MAP = {
+	what: 'A local page served by @extenshi/cli on 127.0.0.1: the build steps of the extension, from the idea to the live store listing, with the dependencies between them. Each step is done, in progress, waiting on the author, blocked by an unfinished step, or not needed for this extension. Steps waiting on the author (icon choice, approval of listing copy and screenshots, store accounts, submission) are counted in the header and open from there.',
+	forTheAuthor:
+		'One page shows what is done, what an agent is working on and where a decision is needed, instead of a long chat; visual choices such as the icon are compared there side by side. The page runs on the author’s machine, reads the project locally and works without an account.',
+	commands: {
+		open: 'npx @extenshi/cli@latest map: starts the map server of the project when none runs and opens the page; with the page already open in a tab, no second tab opens.',
+		status:
+			'npx @extenshi/cli@latest map status --json: progress, steps waiting on the author, steps in progress and steps that can start now; starts nothing.',
+		decline: 'npx @extenshi/cli@latest map decline: records that the author declined the map.',
+		stop: 'npx @extenshi/cli@latest map stop: stops the server; the next start reuses its port, so open tabs and links keep working.',
+		stepLink: '<map url>#node=<step id> opens one step, for example #node=iconConcepts.',
+	},
+	oneMapPerProject:
+		'A project has exactly one map and one map server, however many agents work on it. The map lives in the main checkout: from a linked git worktree the CLI resolves the same directory in the main working tree, so every agent and every worktree reads the same .extenshi/build-map.json and reaches the same server. Running `map` again, from any terminal, agent or worktree, returns the server already running; simultaneous starts end with one server.',
+	progress:
+		'Statuses are derived on every read, not stored: from the project files in the main checkout (manifest and the files it names, icons, builds, packages, the store folder, CI workflows); from the Dojo project the directory is bound to (owner decisions, and release evidence and readiness gates while the map server runs with an API key, refreshed every minute); and from .extenshi/build-map.json, which holds per-step progress, open reviews, the offer record and a log. Work on an agent branch appears once it is in the main checkout. The CLI writes the state file under .extenshi/build-map.lock; per-step progress reports from agents arrive with a later CLI version.',
+	offer:
+		'The map is an offer to the author, not a required step. It is offered once, after the extension idea is clear and before the first step that needs the author, in the author’s language and with a plain yes or no; the server starts only after a yes. After a no, the map comes up once more at the first visual choice (usually the icon), and after a second no it is not offered again. The answer is recorded in .extenshi/build-map.json (offer: count, acceptedAt, declinedAt): `map` records a yes and `map decline` a no, so a later agent session reads the answer instead of asking again.',
+	withoutTheMap:
+		'Everything also works in chat: previews are linked there and the author answers there. The state file is kept either way, so a map opened later shows the whole history.',
+	localServerField:
+		'On the local stdio server, create_project and get_project_state carry buildMap {running, url (while running), offered, declined, offers, home} for projectDir (default: the server’s working directory). The hosted connector has no access to the author’s files and returns no buildMap; there the map opens from a terminal on the author’s machine.',
+	docs: `${docs('cli')}#extenshi-map`,
+} as const
+
 /** Top-level sections of the full guide, selectable via the `sections` parameter. */
 export const GUIDE_SECTIONS = [
 	'tools',
@@ -413,6 +458,7 @@ export const GUIDE_SECTIONS = [
 	'services',
 	'repository',
 	'workflow',
+	'buildMap',
 	'handoff',
 	'storeMedia',
 ] as const
@@ -424,6 +470,8 @@ const SECTION_SUMMARIES: Record<GuideSection, string> = {
 	services: 'Service directory: purpose, related tools, access requirements and URLs per lifecycle area.',
 	repository: 'Git repository recommendation, setup, layout and secret-handling practice.',
 	workflow: 'The nine lifecycle stages with descriptions, related tools and exit criteria.',
+	buildMap:
+		'The build map (npx @extenshi/cli map): one local progress page per project shared by every agent and git worktree, how progress reaches it, and how it is offered to the author.',
 	handoff: 'Items a completed handoff records.',
 	storeMedia:
 		'Store screenshots per locale (CLI screenshots + scenes.json format), listing artwork sizes per store (CLI icon store-assets) and the public project media store.',
@@ -554,6 +602,7 @@ function buildSections(registeredTools: readonly GuideTool[]) {
 			],
 		},
 		workflow: WORKFLOW,
+		buildMap: BUILD_MAP,
 		storeMedia: STORE_MEDIA,
 		handoff: [
 			'scope and acceptance criteria',

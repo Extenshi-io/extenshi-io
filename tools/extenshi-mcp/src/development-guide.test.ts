@@ -207,6 +207,22 @@ describe('development guide discovery contract', () => {
 		expect(ids.indexOf('localization')).toBe(ids.indexOf('assets-and-hosted-pages') + 1)
 	})
 
+	it('describes the build map: the command, one map per project across worktrees, the offer and buildMap', async () => {
+		const { tools } = register(['read', 'docs'])
+		const { buildMap } = JSON.parse(await callGuide(tools, { sections: ['buildMap'] }))
+		expect(buildMap.commands.open).toContain('npx @extenshi/cli@latest map')
+		expect(buildMap.commands.decline).toContain('map decline')
+		expect(buildMap.oneMapPerProject).toContain('exactly one map and one map server')
+		expect(buildMap.oneMapPerProject).toContain('worktree')
+		expect(buildMap.offer).toContain('only after a yes')
+		expect(buildMap.offer).toContain('not offered again')
+		expect(buildMap.localServerField).toContain('buildMap {running')
+		expect(buildMap.docs).toContain('docs.extenshi.io/developers/cli')
+		// Reference material, like the workflow stages.
+		for (const text of Object.values(buildMap).filter((v) => typeof v === 'string'))
+			expect(text).not.toMatch(/\b(you|your)\b/i)
+	})
+
 	it('initialize guidance distinguishes hosted operations from local artifact actions', () => {
 		const remote = getServerInstructions(new Set(['read', 'docs']))
 		const local = getServerInstructions(new Set(['read', 'docs', 'scan', 'publish']))

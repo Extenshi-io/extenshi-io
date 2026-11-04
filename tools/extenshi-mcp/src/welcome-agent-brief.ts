@@ -225,6 +225,27 @@ export function buildWelcomeAgentBrief(input: WelcomeAgentBriefInput): string {
 	}
 	out.push('')
 
+	if (input.goal === 'PIN_EXTENSION') {
+		out.push('### Ready-made pin illustrations')
+		out.push('')
+		out.push(
+			'The pin steps are identical for every extension, so they are generated rather than drawn',
+			'or captured: `generate_pin_guide` (Extenshi MCP) and `npx @extenshi/cli pin-guide` produce',
+			'them for Chrome, Edge and Firefox — browser chrome modelled on the real toolbar, this',
+			"extension's icon and name in the picture, numbered markers in place, captions in 11",
+			'languages. For a page hosted on Extenshi the constructor inserts the same guide as blocks;',
+			'for a welcome page bundled inside the extension they come as offline SVG, an HTML fragment',
+			'and `chrome.i18n` messages.',
+			'',
+			'Whether the icon is already pinned is readable from the extension:',
+			'`chrome.action.getUserSettings()` resolves to `{ isOnToolbar }` (Chrome and Edge 91+,',
+			'Firefox 116+; feature-detected, since older browsers and MV2 `browserAction` may lack it).',
+			'A bundled page that re-checks on `focus` and `visibilitychange` can collapse the pin step to',
+			'a confirmation once the user has pinned.',
+			'',
+		)
+	}
+
 	out.push('### Image sources, in order of preference')
 	out.push('')
 	out.push(

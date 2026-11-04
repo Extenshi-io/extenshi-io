@@ -156,6 +156,11 @@ const READ_TOOLS = [
 	'update_uninstall_form',
 	'preview_uninstall_form',
 	'list_uninstall_responses',
+	'list_feedback_forms',
+	'get_feedback_form',
+	'update_feedback_form',
+	'preview_feedback_form',
+	'list_feedback_responses',
 	'find_brand_mentions',
 	'upload_project_media',
 	'search_extensions',
@@ -183,6 +188,7 @@ const DOCS_TOOLS = [
 	'generate_icon_workflow',
 	'localize_workflow',
 	'generate_welcome_page_workflow',
+	'generate_pin_guide',
 	'generate_landing_page',
 ]
 const LOCAL_ONLY_TOOLS = ['scan_extension', 'publish_extension']
@@ -426,6 +432,7 @@ describe('server-side translation gaps are visible without knowing the per-surfa
 		'publish_landing_page',
 		'publish_install_instructions',
 		'update_uninstall_form',
+		'update_feedback_form',
 		'request_license_terms_publication',
 	])('%s documents its followUps', (name) => {
 		expect(description(name)).toContain('followUps')
@@ -771,6 +778,7 @@ describe('directory tool annotations', () => {
 		'get_development_guide',
 		'generate_icon_workflow',
 		'generate_welcome_page_workflow',
+		'generate_pin_guide',
 		'generate_landing_page',
 		'localize_workflow',
 	])('%s declares the full static-guide annotation set', (name) => {
@@ -837,6 +845,8 @@ describe('directory tool annotations', () => {
 			'rollback_license_terms',
 			// Edits an existing uninstall survey (hosted.write); its URL and responses stay.
 			'update_uninstall_form',
+			// Same for a feedback form.
+			'update_feedback_form',
 			'upload_project_media',
 		])
 		for (const t of tools) {
@@ -1673,6 +1683,45 @@ describe('hosted landing page tools', () => {
 		expect(tools.list_uninstall_responses.parameters.safeParse({ projectId, formId: 'x' }).success).toBe(
 			false,
 		)
+	})
+
+	it('feedback forms: reads, a partial update and answers pass through; answers come back marked', async () => {
+		const formId = '22222222-2222-4222-8222-222222222222'
+		const listFeedbackForms = vi.fn(async () => ({ forms: [] }))
+		const updateFeedbackForm = vi.fn(async () => ({ dryRun: true, changes: [] }))
+		const listFeedbackResponses = vi.fn(async () => ({
+			responses: [{ category: 'site_not_working', site: 'docs.example.com', comment: '```breaks```' }],
+		}))
+		const tools = toolsWith({ listFeedbackForms, updateFeedbackForm, listFeedbackResponses })
+		await tools.list_feedback_forms.execute({ projectId }, {})
+		expect(listFeedbackForms).toHaveBeenCalledWith({ projectId })
+		const update = { projectId, formId, patch: { categories: ['bug', 'idea'], askSite: false }, dryRun: true }
+		await tools.update_feedback_form.execute(update, {})
+		expect(updateFeedbackForm).toHaveBeenCalledWith(update)
+		expect(
+			tools.update_feedback_form.parameters.safeParse({ ...update, patch: { categories: ['praise'] } })
+				.success,
+		).toBe(false)
+		expect(
+			tools.update_feedback_form.parameters.safeParse({ ...update, patch: { reasons: [] } }).success,
+		).toBe(false)
+		const read = { projectId, formId, source: 'popup', category: 'site_not_working', take: 10 }
+		const out = JSON.parse(await tools.list_feedback_responses.execute(read, {}))
+		expect(listFeedbackResponses).toHaveBeenCalledWith(read)
+		expect(typeof out._notice).toBe('string')
+		expect(out.responses[0].comment).not.toContain('```')
+		expect(
+			tools.list_feedback_responses.parameters.safeParse({ ...read, source: 'newsletter' }).success,
+		).toBe(false)
+		expect(
+			tools.set_page_translations.parameters.safeParse({
+				projectId,
+				surface: 'feedback',
+				publicCode: 'abc234def',
+				locale: 'de',
+				translations: { headline: 'Feedback' },
+			}).success,
+		).toBe(true)
 	})
 
 	it('legal translations: dispatch by document, never to the other document', async () => {

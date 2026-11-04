@@ -80,8 +80,8 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `get_install_instructions` | Hosted install instructions page (code, URL, published form) and the saved draft | Free; identity required |
 | `publish_install_instructions` | Host the install instructions at dojo.extenshi.io/instructions/{code}, steps in 11 languages | Requires hosted.write for OAuth |
 | `unpublish_install_instructions` | Take the hosted install instructions offline (same URL on the next publish) | Requires hosted.write for OAuth |
-| `get_page_translations` | Developer-written text on uninstall forms / welcome pages / install instructions with per-language translation status | Free; identity required |
-| `set_page_translations` | Save one language of one uninstall form / welcome page / install instructions page | Requires hosted.write for OAuth |
+| `get_page_translations` | Developer-written text on uninstall forms / feedback forms / welcome pages / install instructions with per-language translation status | Free; identity required |
+| `set_page_translations` | Save one language of one uninstall form / feedback form / welcome page / install instructions page | Requires hosted.write for OAuth |
 | `get_legal_translations` | Translated copies of the published privacy policy or license terms (the English version binds): what is left to translate, per language | Free; identity required (license terms: pay.read) |
 | `get_license_terms_questionnaire` | The license terms & refunds questions as data (types, choices, limits, when each is required); no saved answers | Free; identity required (no pay.read) |
 | `draft_license_terms` | License terms text from answers sent in the call, with the gaps that block publishing; saves nothing | Free; identity required (no pay.read) |
@@ -96,16 +96,21 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `update_uninstall_form` | Partial update checked like the Dojo editor; `dryRun` diff, `expectedUpdatedAt`, `idempotencyKey`; URL and responses stay | Requires hosted.write for OAuth |
 | `preview_uninstall_form` | The survey's text in one language and the screen after each answer; counts nothing | Free; identity required |
 | `list_uninstall_responses` | A survey's answers, newest first, filtered by version and date, with counts by reason and version; emails only for an API key | Free; identity required |
+| `list_feedback_forms` | The project's feedback forms (feedback.extenshi.io): URL, enabled, primary, responses | Free; identity required |
+| `get_feedback_form` | One feedback form in full, its `updatedAt`, the heading and its source, translation status | Free; identity required |
+| `update_feedback_form` | Partial update checked like the Dojo editor; `dryRun` diff, `expectedUpdatedAt`, `idempotencyKey`; URL and answers stay | Requires hosted.write for OAuth |
+| `preview_feedback_form` | The form's text in one language and the thank-you screen per category; records nothing | Free; identity required |
+| `list_feedback_responses` | A form's answers, newest first, filtered by category, source, version and date; emails only for an API key | Free; identity required |
 | `find_brand_mentions` | Every hosted field holding a name (e.g. an old extension name), with the tool that fixes it | Free; identity required |
 | `set_legal_translations` | Save one language of the privacy policy or license terms translation (edited sections and free-text answers). On the hosted connector a translation is a proposal the owner approves in Dojo; with an API key it goes live at once | Requires hosted.write + Pro (policy) or pay.write (terms) for OAuth |
 | `upload_project_media` | Upload a PNG/JPEG/WebP logo or screenshot to the project's public media store and get a stable URL for `publish_landing_page` (metadata stripped, per-project quota; `filePath` inside the workspace on stdio, `dataBase64` everywhere) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
 | `get_release_readiness` | Explain current, stale and missing release checks by browser and locale. With a linked Pay application, the payment check is derived from Extenshi's payment ledger (source `platform`); a live-mode purchase that reached an installation passes it | Pro project; project read access |
 | `list_my_projects` | Your projects, repository bindings and claimed listings | Free; identity required |
-| `create_project` | Create a project through the Dojo wizard's service; idempotent per key; returns id, next steps and open owner decisions | Requires project.write for OAuth |
+| `create_project` | Create a project through the Dojo wizard's service; idempotent per key; returns id, next steps and open owner decisions; the local server adds `buildMap` | Requires project.write for OAuth |
 | `get_decisions` | Owner decisions (AMO add-on id, license, seller identity, pricing, targets): status, suggested default, what each blocks | Free; identity required |
 | `propose_decision` | Propose a decision value with rationale; the owner decides in Dojo, and decided keys are refused | Requires project.write for OAuth |
-| `get_project_state` | Manifest summaries (imported or generated, digest, keys that differ from the imported files), selected types, saved-state index, hosted URLs and exact integration file; `manifests: "full"` returns the manifest bodies | Free; identity required |
+| `get_project_state` | Manifest summaries (imported or generated, digest, keys that differ from the imported files), selected types, saved-state index, hosted URLs and exact integration file; `manifests: "full"` returns the manifest bodies; the local server adds `buildMap` (whether the build map is open, its address, and whether the author declined it) | Free; identity required |
 | `get_project_scaffold` | Starter files for one project and target browser | Free; identity required |
 | `list_privacy_policy_versions` | Hosted policy version history | Pro project; no read credit |
 | `get_privacy_policy_version` | One hosted policy's markdown and HTML | Pro project; no read credit |
@@ -115,6 +120,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `localize_workflow` | Local message translation contract, CLI validation and manual review gates | Free (no key) |
 | `generate_icon_workflow` | Icon design requirements + the local agent-draws-SVG → `npx @extenshi/cli@latest icon preview` → export workflow | Free (no key) |
 | `generate_welcome_page_workflow` | Design brief for the post-install welcome page: the one action it must drive, which illustrations to produce, where to place click markers, and the block JSON to return | Free (no key) |
+| `generate_pin_guide` | Pin-to-toolbar steps for Chrome, Edge and Firefox as an offline kit for a welcome page bundled in the extension: SVGs with the icon and markers drawn in, CSP-safe HTML, captions in 11 languages as `chrome.i18n` messages, and a script reading `action.getUserSettings().isOnToolbar`. Overview by default; `part` returns `html` / `messages` / `script` / `css` | Free (no key) |
 | `generate_landing_page` | Static landing-page (homepage) HTML with no JavaScript — same generator as the cabinet Page generator; returns `{html, bytes, warnings, nextSteps}`. Host it on any HTTPS origin and register the URL with `upsert_hosted_page` (feeds `HOMEPAGE_URL`) | Free (no key) |
 | `scan_extension` | Pre-publish security scan of a local artifact (.zip/.crx/.xpi), with live progress | 1 scan |
 | `publish_extension` | Publish to Chrome/Firefox/Edge with your own store credentials (fully local) | Free |

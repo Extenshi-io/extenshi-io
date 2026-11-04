@@ -21,8 +21,10 @@
  */
 
 import { createRequire } from 'node:module'
+import path from 'node:path'
 import { FastMCP, UserError } from 'fastmcp'
 import { type Bff, makeBff } from './bff.js'
+import { readBuildMapSummary } from './build-map-summary.js'
 import { loadConfig } from './config.js'
 import { instrumentMcpAnalytics } from './mcp-analytics.js'
 import { reportServerStarted } from './startup.js'
@@ -72,6 +74,8 @@ const stdioDeps: ToolDeps = {
 	getBff: () => bff(),
 	requireApiKey: () => requireKey(),
 	getApiKey: () => cfg.apiKey ?? undefined,
+	// The client starts this server in the project it works on; the map of that project is the author's.
+	readBuildMap: (projectDir) => readBuildMapSummary(path.resolve(process.cwd(), projectDir ?? '.')),
 }
 
 registerTools(server, stdioDeps)
