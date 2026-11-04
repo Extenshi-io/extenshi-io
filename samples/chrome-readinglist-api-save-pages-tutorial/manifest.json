@@ -1,0 +1,15 @@
+{
+	"name": "Park It",
+	"description": "Save the current page — or any link you right-click — into Chrome's own Reading List.",
+	"version": "1.0",
+	"manifest_version": 3,
+	"minimum_chrome_version": "120",
+	"background": {
+		"service_worker": "sw.js"
+	},
+	"permissions": ["readingList", "contextMenus", "activeTab"],
+	"action": {
+		"default_popup": "popup.html",
+		"default_title": "Park It"
+	}
+}
