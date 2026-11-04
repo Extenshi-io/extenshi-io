@@ -166,6 +166,7 @@ export const DEVELOPMENT_SERVICES = [
 			toolPage('instruction-generator'),
 			toolPage('install-instructions'),
 			toolPage('uninstall-feedback'),
+			toolPage('feedback-form'),
 		],
 	},
 	{
