@@ -15,6 +15,7 @@ how to prepare an extension for store review.
 | `extension-market-research` skill | For developers: sizes a niche, finds incumbents and gaps, reads what users complain about and writes a short competitor brief. |
 | `extension-store-readiness` skill | For developers: trims manifest permissions, predicts Chrome Web Store rejections and slow reviews locally, and drafts permission justifications and listing text. |
 | `extension-icon-design` skill | Designs an extension icon that stays readable at 16 px in real Chrome, Firefox and Edge toolbars, checks it locally and exports the store-ready PNG set. |
+| `extension-build` skill | For developers building with Claude: offers a local build map once, a page that shows which build steps are done, which Claude is working on and which wait on you, keeps it current and hands you the decisions that are yours. One map per project, shared by every agent and git worktree. |
 
 ## Install
 
@@ -47,6 +48,11 @@ opens a sign-in page for your Extenshi account.
     signed in, so are the verdict, the rule-set version and a SHA-256 hash of the
     package file. The package, its contents and the findings are not sent.
   - `risk` sends the store ids you list to the same catalog API.
+  - `map` (build skill) serves the build map on `127.0.0.1` and reads your
+    project files locally; nothing from them is uploaded. For a project bound
+    with `extenshi project bind` and an API key, it reads that project's
+    decisions and release readiness from the same API once a minute while it
+    runs. It starts only after you say yes, and `map decline` records a no.
   - `scan`, an optional step in the store-readiness skill, **uploads the built
     package** to the Extenshi scan service and needs an Extenshi account. Skip it
     if you do not want the package to leave your machine.
