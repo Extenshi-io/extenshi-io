@@ -293,6 +293,15 @@ export const DEVELOPMENT_SERVICES = [
 			'Pay applications work independently of development projects. Explicit pay.read/pay.write permission is required; older connections and API keys have no Pay grant. The exceptions are get_license_terms_questionnaire and draft_license_terms: they need only project read access because they return the questions and an unsaved draft built from the answers in the call, not saved answers or Pay state. The saved terms are read with get_license_terms (pay.read) and saved with save_license_terms_draft (pay.write); the seller identity answers stay the owner’s. Publication goes through the owner: request_license_terms_publication returns an approval link, and the owner’s approval can also decide seller.terms. Only a developer key with the separate pay.legal.publish permission publishes directly (publish_license_terms, not on the hosted connector). verify_license_terms_live checks the page, the paywall links and the seller.terms decision; rollback_license_terms brings an earlier version back the same two ways. Readiness (get_pay_readiness) and the actual SDK distribution determine whether integration is possible. The author completes the seller agreement and Stripe KYC in the browser. Checkout is enabled only after offers and profile are configured, and only with explicit authorization. Registration does not prove production deployment or npm publication.',
 		urls: [docs('pay-sdk'), 'https://dojo.extenshi.io/payments'],
 	},
+	{
+		id: 'settings-storage',
+		purpose:
+			'Optional settings storage: @extenshi/storage keeps one record per key in chrome.storage on the device. Buyers of a license sold through Extenshi Pay can also turn on a cloud backup that restores their settings after a reinstall or in another browser.',
+		tools: [],
+		access:
+			'An npm package with no MCP tools; local storage needs no account. Cloud backup ships in @extenshi/storage 0.2.0 with @extenshi/pay 0.11.0, so check `npm view @extenshi/storage version` before offering it. It also needs a Pay application whose owner turned backup on in Dojo.',
+		urls: [docs('storage-sdk')],
+	},
 ] as const
 
 /**
@@ -344,7 +353,7 @@ const WORKFLOW = [
 	{
 		id: 'implementation',
 		actions:
-			'Stage 5 — Implementation: the MVP, accessible popup/options, storage and error handling, tested on the actual target sites and across the extension lifecycle, including service-worker restart and permission denial. Localization covers message translation, structural validation and manual language/RTL review. Payments or user accounts depend on a verified supported integration with its prerequisites complete.',
+			'Stage 5 — Implementation: the MVP, accessible popup/options, settings storage (@extenshi/storage) and error handling, tested on the actual target sites and across the extension lifecycle, including service-worker restart and permission denial. Localization covers message translation, structural validation and manual language/RTL review. Payments or user accounts depend on a verified supported integration with its prerequisites complete.',
 		relatedTools: ['localize_workflow'],
 		doneWhen:
 			'Acceptance criteria pass on real target surfaces; optional integrations have end-to-end evidence or remain explicit blockers.',
