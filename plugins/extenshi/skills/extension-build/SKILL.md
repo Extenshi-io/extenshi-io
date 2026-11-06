@@ -134,6 +134,11 @@ reach one:
    pricing and other money matters) go through Dojo: owner decisions and owner
    approvals. Give the author the Dojo link and never decide these yourself.
 4. Without the map, send the preview links in chat and take the answer there.
+5. Store accounts (`cwsAccount`, `amoAccount`, `edgeAccount`) and creating the
+   feedback form in Dojo happen outside extenshi, and nothing in the project
+   shows them. The author marks them on the map with **Mark as done** (and can
+   undo it); never mark them yourself. Once marked, `extenshi map status` lists
+   the step as done for every agent and worktree.
 
 **The feedback form** is on by default (module `feedback`): a hosted page where
 people who still have the extension report a bug, a site it breaks on or an
