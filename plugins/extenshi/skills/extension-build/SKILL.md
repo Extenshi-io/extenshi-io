@@ -127,7 +127,8 @@ reach one:
    for example `http://127.0.0.1:<port>/#node=iconConcepts`: "Four icon concepts
    are ready, pick one." Common step ids: `idea`, `surfaces`, `browsers`,
    `features`, `iconConcepts`, `listing`, `screenshots`, `pricing`,
-   `declarations`, `feedbackForm`, `accounts`, `cws`, `amo`, `edge`.
+   `declarations`, `feedbackForm`, `cwsAccount`, `amoAccount`, `edgeAccount`,
+   `cws`, `amo`, `edge`.
 3. Taste decisions (icon, screenshots, listing copy) are made on the map or in
    chat. Decisions the server checks (store submission, data declarations,
    pricing and other money matters) go through Dojo: owner decisions and owner
