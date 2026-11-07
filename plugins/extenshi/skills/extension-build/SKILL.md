@@ -133,6 +133,23 @@ to), or skip a step. In `map status --json`:
   store themselves, go through it with them: each is done in the store
   dashboard instead.
 
+**Steps that spend credits** (`scan`, `selfCheck`, `fix`, `research`,
+`iconConcepts`, `listing`). `account` in `map status --json` says whether the
+author is signed in and what is left per pool (`scan`, `read`, `icon`). Every
+account gets free credits once.
+
+- Not signed in, or a command says there is no API key: do not ask the author
+  to paste a key. Link the step, for example
+  `http://127.0.0.1:<port>/#node=scan`: "Sign in on the map for the free
+  scans." The map runs the browser sign-in and saves the key where every
+  extenshi command finds it.
+- Run scans from the project directory. `extenshi scan` then leaves
+  `.extenshi/scan.json`, and the map counts the scan while that package is
+  unchanged; rebuild, and the scan step opens again.
+- Out of credits: say so in one line with `account.billingUrl`. The author can
+  also mark the step done themselves (that opens once the free credits of its
+  pool are spent) or skip it. Never mark it for them.
+
 ## Handing steps to the author
 
 Some steps belong to the author: what the extension is and for whom, target
@@ -179,8 +196,9 @@ skips the step on the map.
   locally; nothing from them is uploaded.
 - With a project bound through `extenshi project bind` and an API key, the
   server reads that project's decisions and release readiness from the Extenshi
-  API (`bff.extenshi.io`) once a minute while it runs. `map status --no-live`
-  skips that read.
+  API (`bff.extenshi.io`) once a minute while it runs. With an API key it also
+  reads the author's credit balance there, and signing in from the map talks to
+  the same host. `map status --no-live` skips both reads.
 - `npx` downloads the CLI from the npm registry. The CLI's optional usage
   reports are described in the plugin README.
 
