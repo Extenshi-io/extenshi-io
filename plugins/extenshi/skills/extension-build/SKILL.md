@@ -118,6 +118,21 @@ is done while the map shows it otherwise. Before a store submission, name the
 steps that rest only on the author's word (`basis: author`) so they can check
 them once more.
 
+**Steps the author did themselves or skipped.** On the map the author can give
+their own result where the tool behind a step is Extenshi's (a privacy policy,
+uninstall survey or feedback form link; permission reasons; the stores to ship
+to), or skip a step. In `map status --json`:
+
+- `wire` lists the links the author gave that belong in the integration config,
+  as `{ node, key, value }`. Write each one into `src/extenshi.config.js` under
+  its key (create the file if the project has none), then the map finds it in
+  the files. Change nothing else on the author's behalf.
+- A skipped step has `route: "skip"`; a step that only uses its result has
+  `skippedBy`. Both are inactive: do not work on them.
+- `byHand` lists skipped steps a store asks for. When the author uploads to a
+  store themselves, go through it with them: each is done in the store
+  dashboard instead.
+
 ## Handing steps to the author
 
 Some steps belong to the author: what the extension is and for whom, target
@@ -143,6 +158,9 @@ reach one:
    shows them. The author marks them on the map with **Mark as done** (and can
    undo it); never mark them yourself. Once marked, `extenshi map status` lists
    the step as done for every agent and worktree.
+6. When the author uploads to a store themselves, the store step on the map
+   shows the package on disk, the values to paste and the dashboard; the author
+   presses **I submitted it for review** there. Do not mark it yourself.
 
 **The feedback form** is on by default (module `feedback`): a hosted page where
 people who still have the extension report a bug, a site it breaks on or an
@@ -151,7 +169,9 @@ Say in one line what the form is for and link
 `https://dojo.extenshi.io/tools/feedback-form`. Once it exists, the generated
 config carries `FEEDBACK_FORM_URL` and `get_feedback_form` returns
 `openSnippet`; wiring that into Options and the popup is `feedbackLinks`, your
-step. If the author does not want a form, switch the module off on the map.
+step. An author with a form of their own (Google Forms, Tally) gives its link on
+the step, and you wire it as `FEEDBACK_FORM_URL`; an author who wants no form
+skips the step on the map.
 
 ## What leaves the machine
 
