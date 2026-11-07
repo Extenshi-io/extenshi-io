@@ -110,9 +110,13 @@ whole history.
 **Where things stand.** `npx @extenshi/cli@latest map status --json` reads the
 map without starting anything: `progress`, `needsYou` (steps waiting on the
 author), `running`, `next` (steps whose inputs are all done and that can run in
-parallel) and every step's status with the fact behind it. Use `next` to choose
-what to work on, and never tell the author a step is done while the map shows it
-otherwise.
+parallel) and every step's status with the fact behind it. Each done step has a
+`basis`: `project` or `dojo` (a file or a Dojo record proves it, with `where`),
+`author` (the author marked it) or `agent`; `evidence` holds each step's
+history. Use `next` to choose what to work on, and never tell the author a step
+is done while the map shows it otherwise. Before a store submission, name the
+steps that rest only on the author's word (`basis: author`) so they can check
+them once more.
 
 ## Handing steps to the author
 
