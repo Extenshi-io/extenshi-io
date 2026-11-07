@@ -42,7 +42,7 @@ const STATE_LOCK = 'build-map.lock'
 const SERVER_LOCK = 'build-map.server.lock'
 
 /** Bumped when the page/server protocol changes: a newer CLI replaces an older server instead of reusing it. */
-export const MAP_PROTOCOL = 4
+export const MAP_PROTOCOL = 5
 
 export type MapHome = {
 	/** Where the map's files live: this project directory in the main checkout. */
