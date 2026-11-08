@@ -104,8 +104,14 @@ whole history.
   (`scan`, `review-risk`, `generate-listing`, `test smoke`, `screenshots`) and
   `extenshi release prepare` feed it;
 - reports agents write into the state file. If `npx @extenshi/cli@latest map
-  --help` lists a `step` command, report each finished task with it. If it does
-  not, the facts above are what the map shows.
+  --help` lists a `step` command, report your work with it:
+  `map step <step> start --agent "<your label>"` when you begin,
+  `map step <step> done --agent "<label>" --file <proof>` for each finished
+  task (the file is hashed into the step's evidence), `map step <step> stop`
+  when you hand a step back. On the local MCP server the same is
+  `report_build_step`. A refusal names its reason in brackets: `(locked)` means
+  an input of the step is not done yet, so work on that first. If there is no
+  `step` command, the facts above are what the map shows.
 
 **Where things stand.** `npx @extenshi/cli@latest map status --json` reads the
 map without starting anything: `progress`, `needsYou` (steps waiting on the
@@ -159,23 +165,37 @@ feedback form and store accounts, and approving each store submission. When you
 reach one:
 
 1. Do the agent part first: prepare the options, the drafts, the preview pages.
-2. Write one line in chat with a direct link to the step and what is needed,
-   for example `http://127.0.0.1:<port>/#node=iconConcepts`: "Four icon concepts
-   are ready, pick one." Common step ids: `idea`, `surfaces`, `browsers`,
-   `features`, `iconConcepts`, `listing`, `screenshots`, `pricing`,
-   `declarations`, `feedbackForm`, `cwsAccount`, `amoAccount`, `edgeAccount`,
-   `cws`, `amo`, `edge`.
-3. Taste decisions (icon, screenshots, listing copy) are made on the map or in
-   chat. Decisions the server checks (store submission, data declarations,
-   pricing and other money matters) go through Dojo: owner decisions and owner
+   For icons, `npx @extenshi/cli@latest icon preview <concept.svg> --no-open
+   --output <file>.html` makes a preview page per concept. Keep preview files
+   inside the project (any git worktree of it works).
+2. Taste decisions (`iconConcepts`, `screenshots`, `listing`) are made on the
+   map. If `map --help` lists `review`, offer the variants with it:
+   `map review iconConcepts --variant "Ruler=concepts/ruler.html" --image
+   "Ruler=concepts/ruler.svg" --variant …` (1–8 variants; on the local MCP
+   server, `request_build_review`). It prints the link to the step.
+3. Write one line in chat with that link and what is needed, for example
+   `http://127.0.0.1:<port>/#node=iconConcepts`: "Three icon concepts are
+   ready, pick one." Then run `map wait iconConcepts` (it returns when the
+   author picks one or asks for another round; `--timeout` caps it) or read
+   `reviews` in `map status --json` (`get_build_map`). For another round, make
+   new variants from the author's words and offer them with `map review` again.
+   Common step ids: `idea`, `surfaces`, `browsers`, `features`,
+   `iconConcepts`, `listing`, `screenshots`, `pricing`, `declarations`,
+   `feedbackForm`, `cwsAccount`, `amoAccount`, `edgeAccount`, `cws`, `amo`,
+   `edge`.
+4. Decisions the server checks (store submission, data declarations, pricing
+   and other money matters) go through Dojo: owner decisions and owner
    approvals. Give the author the Dojo link and never decide these yourself.
-4. Without the map, send the preview links in chat and take the answer there.
-5. Store accounts (`cwsAccount`, `amoAccount`, `edgeAccount`) and creating the
+5. Without the map, send the preview links in chat and take the answer there.
+   Record what the author said with `map choose <step> <variant number>` or
+   `map choose <step> --redo "<their words>"` (`report_build_step` with
+   `choice` or `redo`). Never pick for the author.
+6. Store accounts (`cwsAccount`, `amoAccount`, `edgeAccount`) and creating the
    feedback form in Dojo happen outside extenshi, and nothing in the project
    shows them. The author marks them on the map with **Mark as done** (and can
    undo it); never mark them yourself. Once marked, `extenshi map status` lists
    the step as done for every agent and worktree.
-6. When the author uploads to a store themselves, the store step on the map
+7. When the author uploads to a store themselves, the store step on the map
    shows the package on disk, the values to paste and the dashboard; the author
    presses **I submitted it for review** there. Do not mark it yourself.
 
@@ -208,4 +228,5 @@ skips the step on the map.
 - Start a second map, copy the state file, or edit it by hand.
 - Stop the map unless the author asks.
 - Decide an owner decision or approve a submission for the author.
-- Report a step as done that the map does not show as done.
+- Pick a variant for the author, or record a pick they did not make.
+- Tell the author a step is done when the map does not show it as done.
