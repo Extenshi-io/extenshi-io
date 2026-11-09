@@ -90,6 +90,14 @@ and do not repeat the offer at every step.
 extension project directory (a worktree is fine). It starts the server, records
 the yes and opens the page in the browser. Share the address it prints.
 
+**The map in the conversation.** When the local MCP server lists
+`show_build_map` and your client shows MCP Apps (Claude does), the author can
+see the same map right in the chat. After a yes, run
+`npx @extenshi/cli@latest map --no-open` (the server reads the project files;
+the browser tab is optional) and call `show_build_map` whenever the author
+should look. The map in the chat writes the author's answers to the same state
+file as the browser map.
+
 **If the author says no,** run `npx @extenshi/cli@latest map decline` (it only
 writes the answer to the local state file) and carry on in chat. At the first
 visual choice, mention the map once more in one sentence. After a second no, run
@@ -182,7 +190,9 @@ reach one:
    server, `request_build_review`). It prints the link to the step.
 3. Write one line in chat with that link and what is needed, for example
    `http://127.0.0.1:<port>/#node=iconConcepts`: "Three icon concepts are
-   ready, pick one." Then run `map wait iconConcepts` (it returns when the
+   ready, pick one." Where `show_build_map` draws the map in the conversation,
+   call it with `step` instead of only sending the link. Then run
+   `map wait iconConcepts` (it returns when the
    author picks one or asks for another round; `--timeout` caps it) or read
    `reviews` in `map status --json` (`get_build_map`). For another round, make
    new variants from the author's words and offer them with `map review` again.
@@ -232,6 +242,7 @@ skips the step on the map.
 ## What this skill must not do
 
 - Start the map before the author says yes, or offer it more than twice.
+- Show the map in the conversation to an author who declined it.
 - Start a second map, copy the state file, or edit it by hand.
 - Stop the map unless the author asks.
 - Decide an owner decision or approve a submission for the author.

@@ -1,7 +1,7 @@
 {
   "name": "extenshi",
   "displayName": "Extenshi",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Research browser extensions across Chrome, Firefox and Edge with the Extenshi catalog, and get help building and shipping your own: icons, manifests, store-readiness checks.",
   "author": {
     "name": "extenshi.io",
