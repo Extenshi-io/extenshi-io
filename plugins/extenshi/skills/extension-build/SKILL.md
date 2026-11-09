@@ -36,6 +36,13 @@ agents work on it and from whichever git worktree:
   progress file next to it.
 - `map stop` stops the map for every agent and the author. Run it only when the
   author asks.
+- A running map keeps the release it started with. When `map status`,
+  `map step` or `get_build_map` says the map draws an older set of steps than
+  you know, run `npx @extenshi/cli@latest map update` at a quiet moment: not
+  while a review waits on the author or they are signing in on the map. The
+  page reloads by itself and the progress stays. If it says your own tool is
+  older than the map, switch to the latest CLI or MCP server instead. The author
+  can also press **Update** on the map whenever a newer release is out.
 - When you split work across subagents, only the agent talking to the author
   offers the map and links to it. Subagents never offer it or start it.
 
