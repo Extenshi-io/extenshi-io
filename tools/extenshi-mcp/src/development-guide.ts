@@ -77,9 +77,13 @@ export const DEVELOPMENT_SERVICES = [
 			'remove_hosted_page',
 			'list_hosted_pages',
 			'get_release_readiness',
+			'get_build_map',
+			'show_build_map',
+			'report_build_step',
+			'request_build_review',
 		],
 		access:
-			'Own-project MCP reads are free and require identity. Projects are created in the cabinet or with create_project (idempotent, project.write). Owner decisions (AMO add-on id, license, seller identity, pricing, targets) are proposed by agents and decided only by the owner in the cabinet; release readiness reports undecided ones as blockers. Repository metadata, source/built manifests and scope synchronize through typed revisioned patches. project.write, evidence.write and hosted.write require explicit OAuth consent. Repository metadata does not grant GitHub access. CI evidence (source=ci) is written only by the verified ingest endpoint, which authenticates with a secret from create_ci_ingest_secret. Automated release-readiness access requires a Pro project.',
+			'The build map tools (get_build_map, show_build_map, report_build_step, request_build_review) exist on the local stdio server only, are free and need no key: they read and write .extenshi/build-map.json of the project directory (guide section buildMap). Own-project MCP reads are free and require identity. Projects are created in the cabinet or with create_project (idempotent, project.write). Owner decisions (AMO add-on id, license, seller identity, pricing, targets) are proposed by agents and decided only by the owner in the cabinet; release readiness reports undecided ones as blockers. Repository metadata, source/built manifests and scope synchronize through typed revisioned patches. project.write, evidence.write and hosted.write require explicit OAuth consent. Repository metadata does not grant GitHub access. CI evidence (source=ci) is written only by the verified ingest endpoint, which authenticates with a secret from create_ci_ingest_secret. Automated release-readiness access requires a Pro project.',
 		urls: [
 			DEVELOPMENT_GUIDE_URL,
 			'https://dojo.extenshi.io/projects',
@@ -447,17 +451,29 @@ const BUILD_MAP = {
 		decline: 'npx @extenshi/cli@latest map decline: records that the author declined the map.',
 		stop: 'npx @extenshi/cli@latest map stop: stops the server; the next start reuses its port, so open tabs and links keep working.',
 		stepLink: '<map url>#node=<step id> opens one step, for example #node=iconConcepts.',
+		step: 'npx @extenshi/cli@latest map step <step> start|progress|done|stop --agent <label>: an agent reports on a step; `done` closes the current task, and --file proof is hashed into the evidence journal. Refused while the inputs of the step are not done.',
+		review:
+			'npx @extenshi/cli@latest map review <step> --variant "<label>=<preview file>" (1–8, --image for thumbnails): offers the author variants to choose from on the map (iconConcepts, screenshots, listing) and prints the link to the step.',
+		wait: 'npx @extenshi/cli@latest map wait <step>: waits until the author picks a variant or asks for another round, then prints the answer (--json, --timeout).',
+		update:
+			'npx @extenshi/cli@latest map update: restarts the running map on that release when it is newer (newer steps or a later version); the page reloads by itself and the progress stays.',
+		choose:
+			'npx @extenshi/cli@latest map choose <step> <variant> | --redo "<what to change>": records the author’s answer given in the chat.',
 	},
 	oneMapPerProject:
 		'A project has exactly one map and one map server, however many agents work on it. The map lives in the main checkout: from a linked git worktree the CLI resolves the same directory in the main working tree, so every agent and every worktree reads the same .extenshi/build-map.json and reaches the same server. Running `map` again, from any terminal, agent or worktree, returns the server already running; simultaneous starts end with one server.',
 	progress:
-		'Statuses are derived on every read, not stored: from the project files in the main checkout (manifest and the files it names, icons, builds, packages, the store folder, CI workflows); from the Dojo project the directory is bound to (owner decisions, and release evidence and readiness gates while the map server runs with an API key, refreshed every minute); and from .extenshi/build-map.json, which holds per-step progress, open reviews, the offer record and a log. Work on an agent branch appears once it is in the main checkout. The CLI writes the state file under .extenshi/build-map.lock; per-step progress reports from agents arrive with a later CLI version.',
+		'Statuses are derived on every read, not stored: from the project files in the main checkout (manifest and the files it names, icons, builds, packages, the store folder, CI workflows); from the Dojo project the directory is bound to (owner decisions, and release evidence and readiness gates while the map server runs with an API key, refreshed every minute); and from .extenshi/build-map.json, which holds per-step progress, reviews, the offer record, the evidence journal and a log. Work on an agent branch appears once it is in the main checkout. Agents report on steps with `map step` (local stdio server: report_build_step), and the state file is written under .extenshi/build-map.lock.',
+	reviews:
+		'Visual choices (iconConcepts, screenshots, listing) are made on the map: the agent offers 1–8 variants, each a preview page or image inside the project or an https address (an `npx @extenshi/cli icon preview` page fits icons), with `map review` (request_build_review). The step then waits on the author, who opens each preview, picks one, or says what to change for another round. `map wait` returns the answer; get_build_map shows it under reviews. A pick that differs from an earlier one sends the steps built from the old pick back to run again. An agent never makes the pick for the author.',
 	offer:
 		'The map is an offer to the author, not a required step. It is offered once, after the extension idea is clear and before the first step that needs the author, in the author’s language and with a plain yes or no; the server starts only after a yes. After a no, the map comes up once more at the first visual choice (usually the icon), and after a second no it is not offered again. The answer is recorded in .extenshi/build-map.json (offer: count, acceptedAt, declinedAt): `map` records a yes and `map decline` a no, so a later agent session reads the answer instead of asking again.',
+	versions:
+		'A running map keeps the @extenshi/cli release it started with. It asks npm for a newer one every few minutes, and every CLI or MCP call tells it the steps revision that program knows; while a newer release is out, the page shows an Update button. get_build_map carries map {version, graph} and, when the map and the agent differ or a newer release is out, update: one sentence on what to do. The switch is best made when no choice waits on the author; the new server takes the same port, the page reloads and the progress in .extenshi/build-map.json stays.',
 	withoutTheMap:
-		'Everything also works in chat: previews are linked there and the author answers there. The state file is kept either way, so a map opened later shows the whole history.',
+		'Everything also works in chat: previews are linked there, the author answers there, and the agent records the answer with `map choose` (report_build_step with choice or redo). The state file is kept either way, so a map opened later shows the whole history.',
 	localServerField:
-		'On the local stdio server, create_project and get_project_state carry buildMap {running, url (while running), offered, declined, offers, home} for projectDir (default: the server’s working directory). The hosted connector has no access to the author’s files and returns no buildMap; there the map opens from a terminal on the author’s machine.',
+		'On the local stdio server, create_project and get_project_state carry buildMap {running, url (while running), offered, declined, offers, home} for projectDir (default: the server’s working directory), and get_build_map, report_build_step and request_build_review read and write the map. show_build_map draws it in the conversation of a client that shows MCP Apps (Claude), where the author answers too. The hosted connector has no access to the author’s files and has none of these; there the map opens from a terminal on the author’s machine.',
 	docs: `${docs('cli')}#extenshi-map`,
 } as const
 

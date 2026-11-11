@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildMapAgent } from './build-map-tools.js'
 import {
 	DEVELOPMENT_SERVICES,
 	GUIDE_SECTIONS,
@@ -34,6 +35,8 @@ function register(capabilities: Capability[]) {
 			capabilities: new Set(capabilities),
 			getBff,
 			requireApiKey,
+			// The local stdio server (the one with `scan`) also has the author's files, as in index.ts.
+			...(capabilities.includes('scan') ? { buildMap: buildMapAgent() } : {}),
 		},
 	)
 	return { tools, getBff, requireApiKey }

@@ -32,7 +32,12 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { type BuildMapState, emptyBuildMapState, normalizeBuildMapState } from '@extenshi/contracts'
+import {
+	BUILD_GRAPH_REVISION,
+	type BuildMapState,
+	emptyBuildMapState,
+	normalizeBuildMapState,
+} from '@extenshi/contracts'
 
 export const MAP_DIR = '.extenshi'
 export const MAP_STATE_FILE = 'build-map.json'
@@ -42,7 +47,69 @@ const STATE_LOCK = 'build-map.lock'
 const SERVER_LOCK = 'build-map.server.lock'
 
 /** Bumped when the page/server protocol changes: a newer CLI replaces an older server instead of reusing it. */
-export const MAP_PROTOCOL = 5
+export const MAP_PROTOCOL = 7
+
+/** The record token, from the owner-only record file: authorizes /api/shutdown and a client's hello. */
+export const MAP_TOKEN_HEADER = 'x-extenshi-map-token'
+/** Who asks: `cli/<version> graph=<revision>` or `mcp/<version> graph=<revision>` (see mapClientHeader). */
+export const MAP_CLIENT_HEADER = 'x-extenshi-map-client'
+
+/**
+ * A program that talks to the map server on an agent's behalf: the CLI or the
+ * stdio MCP server, its package version, and the graph revision it was built
+ * with (BUILD_GRAPH_REVISION of its @extenshi/contracts).
+ */
+export type MapClient = { kind: 'cli' | 'mcp'; version: string; graph: number }
+
+/** This program as a map client: the graph revision is the one it was built with. */
+export const mapClient = (kind: MapClient['kind'], version: string): MapClient => ({
+	kind,
+	version,
+	graph: BUILD_GRAPH_REVISION,
+})
+
+export const mapClientHeader = (client: MapClient) => `${client.kind}/${client.version} graph=${client.graph}`
+
+export function parseMapClient(value: unknown): MapClient | undefined {
+	if (typeof value !== 'string' || value.length > 80) return undefined
+	const match = /^(cli|mcp)\/([0-9A-Za-z.+-]{1,40}) graph=(\d{1,6})$/.exec(value)
+	if (!match) return undefined
+	return { kind: match[1] as MapClient['kind'], version: match[2], graph: Number(match[3]) }
+}
+
+/** Order of two `x.y.z` versions (a pre-release sorts before its release); undefined when either is not one. */
+export function compareVersions(a: string, b: string): number | undefined {
+	const parse = (v: string) => /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(v)
+	const x = parse(a)
+	const y = parse(b)
+	if (!x || !y) return undefined
+	for (let i = 1; i <= 3; i++) {
+		const d = Number(x[i]) - Number(y[i])
+		if (d) return Math.sign(d)
+	}
+	if (x[4] === y[4]) return 0
+	if (!x[4]) return 1
+	if (!y[4]) return -1
+	return x[4] < y[4] ? -1 : 1
+}
+
+/**
+ * How the running map and a client differ. `map_older`: the map draws an older
+ * graph than the client knows, or — for the CLI, the program that serves the
+ * map — it runs an older CLI release; `client_older`: the client knows an older
+ * graph than the map draws. A server from before graph revisions counts as
+ * revision 0.
+ */
+export function mapSkew(
+	server: { version: string; graph?: number },
+	client: MapClient,
+): 'map_older' | 'client_older' | undefined {
+	const graph = server.graph ?? 0
+	if (client.graph > graph) return 'map_older'
+	if (client.graph < graph) return 'client_older'
+	if (client.kind === 'cli' && (compareVersions(client.version, server.version) ?? 0) > 0) return 'map_older'
+	return undefined
+}
 
 export type MapHome = {
 	/** Where the map's files live: this project directory in the main checkout. */
@@ -323,11 +390,25 @@ export type MapServerRecord = {
 	token: string
 	protocol: number
 	version: string
+	/** The graph revision the server draws (absent before protocol 7). */
+	graph?: number
 	home: string
 	startedAt: string
 }
 
-export type MapHealth = { instance: string; home: string; protocol: number; version: string; clients: number }
+export type MapHealth = {
+	instance: string
+	home: string
+	protocol: number
+	version: string
+	clients: number
+	/** The graph revision the server draws (absent before protocol 7). */
+	graph?: number
+	/** A newer @extenshi/cli on npm that the map can restart on. */
+	available?: string
+	/** The version the map is restarting on right now. */
+	updating?: string
+}
 
 export async function readServerRecord(home: string): Promise<MapServerRecord | undefined> {
 	try {
@@ -339,10 +420,15 @@ export async function readServerRecord(home: string): Promise<MapServerRecord | 
 	}
 }
 
-export async function fetchHealth(port: number, timeoutMs = 1_500): Promise<MapHealth | undefined> {
+export async function fetchHealth(
+	port: number,
+	timeoutMs = 1_500,
+	headers?: Record<string, string>,
+): Promise<MapHealth | undefined> {
 	try {
 		const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
 			signal: AbortSignal.timeout(timeoutMs),
+			...(headers ? { headers } : {}),
 		})
 		if (!response.ok) return undefined
 		return (await response.json()) as MapHealth
@@ -351,20 +437,36 @@ export async function fetchHealth(port: number, timeoutMs = 1_500): Promise<MapH
 	}
 }
 
-export type RunningServer = MapServerRecord & { clients: number }
+export type RunningServer = MapServerRecord &
+	Pick<MapHealth, 'available' | 'updating'> & { clients: number; graph: number }
 
 /**
  * The server recorded for `home`, if it is really up: same machine, process
  * alive, and its health answer carries the recorded instance id and home. A
  * record left by a crash, by another machine (a synced folder) or a reused pid
- * reads as no server.
+ * reads as no server. With `client`, the probe also tells the server which
+ * program asks and which graph it knows, so the map can offer an update when
+ * an agent works with newer steps than the map draws.
  */
-export async function probeServer(home: string): Promise<RunningServer | undefined> {
+export async function probeServer(home: string, client?: MapClient): Promise<RunningServer | undefined> {
 	const record = await readServerRecord(home)
 	if (!record || record.host !== os.hostname() || !pidAlive(record.pid)) return undefined
-	const health = await fetchHealth(record.port)
+	const health = await fetchHealth(
+		record.port,
+		1_500,
+		client && record.token
+			? { [MAP_TOKEN_HEADER]: record.token, [MAP_CLIENT_HEADER]: mapClientHeader(client) }
+			: undefined,
+	)
 	if (!health || health.instance !== record.instance || health.home !== home) return undefined
-	return { ...record, clients: health.clients }
+	return {
+		...record,
+		version: health.version ?? record.version,
+		clients: health.clients,
+		graph: health.graph ?? 0,
+		...(health.available ? { available: health.available } : {}),
+		...(health.updating ? { updating: health.updating } : {}),
+	}
 }
 
 export const serverLockPath = (home: string) => mapPath(home, SERVER_LOCK)

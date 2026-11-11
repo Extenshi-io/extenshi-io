@@ -24,7 +24,11 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { FastMCP, UserError } from 'fastmcp'
 import { type Bff, makeBff } from './bff.js'
+import { buildMapApp, registerBuildMapApp } from './build-map-app.js'
+import { mapClient } from './build-map-store.js'
 import { readBuildMapSummary } from './build-map-summary.js'
+import { buildMapAgent } from './build-map-tools.js'
+import { BUILD_MAP_APP_TOOLS, clientShowsApps } from './build-map-ui.js'
 import { loadConfig } from './config.js'
 import { instrumentMcpAnalytics } from './mcp-analytics.js'
 import { reportServerStarted } from './startup.js'
@@ -68,6 +72,9 @@ const server = new FastMCP({
 
 // stdio identity is fixed (env key) — the call context is ignored. ALL four
 // capabilities are enabled: the local client has a filesystem and store creds.
+// How this server introduces itself to the author's build map: its release and graph revision.
+const mapAs = mapClient('mcp', pkg.version)
+
 const stdioDeps: ToolDeps = {
 	cfg: { bffUrl: cfg.bffUrl, scanUrl: cfg.scanUrl, docsUrl: cfg.docsUrl },
 	capabilities,
@@ -75,10 +82,22 @@ const stdioDeps: ToolDeps = {
 	requireApiKey: () => requireKey(),
 	getApiKey: () => cfg.apiKey ?? undefined,
 	// The client starts this server in the project it works on; the map of that project is the author's.
-	readBuildMap: (projectDir) => readBuildMapSummary(path.resolve(process.cwd(), projectDir ?? '.')),
+	readBuildMap: (projectDir) => readBuildMapSummary(path.resolve(process.cwd(), projectDir ?? '.'), mapAs),
+	// Reports, variants for the author and the map itself, written to the same state file the CLI writes.
+	buildMap: buildMapAgent(process.cwd(), mapAs),
 }
 
 registerTools(server, stdioDeps)
+
+// The build map in the chat (MCP Apps): show_build_map draws the page, and the page calls its own three
+// tools. They write the author's answers, so they answer only a client that said it shows apps, and a
+// client that did not loses them once start() resolves (below): one that ignores their `visibility`
+// would list them to the model. On stdio the session is set up, capabilities included, before `connect`.
+let showsApps = false
+registerBuildMapApp(server, buildMapApp({ version: pkg.version, writable: () => showsApps }))
+server.on('connect', ({ session }) => {
+	showsApps = clientShowsApps(session.clientCapabilities)
+})
 instrumentMcpAnalytics({ surface: 'mcp' })
 
 // Flush buffered telemetry on shutdown. 'beforeExit' covers the natural
@@ -104,6 +123,9 @@ process.once('beforeExit', () => {
 // catches it, the process dies, and no event is emitted for a server that never
 // served. Top-level await is available here (ESM, target ES2022).
 await server.start({ transportType: 'stdio' })
+
+// fastmcp changes a connected session's tools only once start() has resolved (then with tools/list_changed).
+if (!showsApps) server.removeTools([...BUILD_MAP_APP_TOOLS])
 
 // Reaching this line means a client actually EXECUTED the server and the stdio
 // session connected: config parsed, tools registered, transport live. That is the

@@ -124,6 +124,12 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `generate_landing_page` | Static landing-page (homepage) HTML with no JavaScript — same generator as the cabinet Page generator; returns `{html, bytes, warnings, nextSteps}`. Host it on any HTTPS origin and register the URL with `upsert_hosted_page` (feeds `HOMEPAGE_URL`) | Free (no key) |
 | `scan_extension` | Pre-publish security scan of a local artifact (.zip/.crx/.xpi), with live progress | 1 scan |
 | `publish_extension` | Publish to Chrome/Firefox/Edge with your own store credentials (fully local) | Free |
+| `get_build_map` | The author's build map of `projectDir` (`npx @extenshi/cli map`): progress, steps waiting on the author, steps that can start now, every step's current task, and the variants offered with the author's answer. Local server only | Free (no key) |
+| `show_build_map` | Draw the build map in the conversation in a client that shows MCP Apps (Claude), optionally open at one step, where the author picks variants, marks their own tasks or skips a step; elsewhere returns the link to the author's map. Local server only | Free (no key) |
+| `report_build_step` | Report on a build map step (start, progress, done with hashed file proof, stop), or record the author's answer from the chat (`choice` / `redo`). Local server only | Free (no key) |
+| `request_build_review` | Offer the author 1–8 variants to choose from on the map (icon concepts, screenshots, listing copy), each a preview page or image in the project; returns the link to the step. Local server only | Free (no key) |
+
+In a client that shows [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview), `show_build_map` draws the map in the conversation (the page `ui://extenshi/build-map`). The page calls three app-only tools, `build_map_view`, `build_map_answer` and `build_map_file`; the server keeps them from any client that does not advertise `io.modelcontextprotocol/ui`.
 
 ### Identifying an extension by its store id
 

@@ -47,6 +47,8 @@ import { z } from 'zod'
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import type { Bff } from './bff.js'
 import type { BuildMapSummary } from './build-map-summary.js'
+import type { BuildMapAgent } from './build-map-tools.js'
+import { BUILD_MAP_UI } from './build-map-ui.js'
 import { buildDevelopmentGuide, GUIDE_SECTIONS, type GuideTool } from './development-guide.js'
 import {
 	DEFAULT_EXCERPT_CHARS,
@@ -298,6 +300,14 @@ export interface ToolDeps {
 	 * take `projectDir` and answer with `buildMap`. The hosted connector omits it.
 	 */
 	readBuildMap?: (projectDir?: string) => Promise<BuildMapSummary>
+	/**
+	 * The agent side of the build map on THIS machine (plan phase 2): read the
+	 * map, report a step, offer the author variants to choose from. Only the local
+	 * stdio server has the author's files: with this, get_build_map,
+	 * report_build_step and request_build_review are registered. The hosted
+	 * connector omits it.
+	 */
+	buildMap?: BuildMapAgent
 }
 
 /** How long a project answer waits for the build map (a slow `git`, a hung server) before going without it. */
@@ -771,6 +781,32 @@ const TOOL_ANNOTATIONS: Record<
 		readOnlyHint: false,
 		destructiveHint: false,
 		openWorldHint: true,
+	},
+	get_build_map: {
+		title: 'Read the build map',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
+	report_build_step: {
+		title: 'Report a build step',
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	show_build_map: {
+		title: 'Show the build map',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
+	request_build_review: {
+		title: 'Offer the author variants',
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
 	},
 	publish_extension: {
 		title: 'Publish extension to stores',
@@ -3009,6 +3045,152 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		})
 	}
 
+	// ── Build map (local files; no key; stdio only) ───────────────────────────────
+	const buildMap = deps.buildMap
+	if (buildMap) {
+		const stepParam = z
+			.string()
+			.min(1)
+			.max(64)
+			.describe('The build step id, as get_build_map lists them (iconConcepts, screenshots, listing, …).')
+		const agentParam = z
+			.string()
+			.min(1)
+			.max(60)
+			.describe('Who works on the step, shown to the author on the map: a short label such as "icons agent".')
+		const run = async (work: () => Promise<unknown>) => {
+			try {
+				return JSON.stringify(await work(), null, 2)
+			} catch (error) {
+				throw new UserError((error as Error).message)
+			}
+		}
+		add({
+			name: 'get_build_map',
+			description:
+				'The author’s build map of the extension project in projectDir (npx @extenshi/cli map): progress, the steps ' +
+				'waiting on the author (needsYou), the steps that can start now (next, safe to run in parallel), who works on ' +
+				'what, every step with the task it is on, and the variants offered to the author with their answer ' +
+				'(reviews: waiting, picked, or redo with what to change). One map per project, shared by every agent and git ' +
+				'worktree. While the author’s map runs, the answer carries the project facts and the release the map runs ' +
+				'(map); update, when present, says what to do because the map draws older or newer steps than this server ' +
+				'knows, or a newer release is out. Otherwise facts is false and steps proven only by project files look not ' +
+				'done. Free; local files only.',
+			parameters: z.object({ projectDir: projectDirParam }),
+			execute: async (args) => run(() => buildMap.getMap(args.projectDir)),
+		})
+		add({
+			name: 'show_build_map',
+			description:
+				'Show the author the build map in the conversation (clients that show MCP Apps, such as Claude, draw it ' +
+				'inline; elsewhere the answer has the link to the author’s map). Pass `step` to open one step, such as the ' +
+				'variants waiting on the author after request_build_review: the author picks one, asks for another round, ' +
+				'marks their own tasks or skips a step right there, and get_build_map reads the answer. Call it when the ' +
+				'author should look or choose; to read the map yourself use get_build_map, which draws nothing. Free; ' +
+				'local files only.',
+			parameters: z.object({ projectDir: projectDirParam, step: stepParam.optional() }),
+			_meta: { ui: { resourceUri: BUILD_MAP_UI } },
+			execute: async (args) => run(() => buildMap.showMap(args.projectDir, args.step)),
+		})
+		add({
+			name: 'report_build_step',
+			description:
+				'Report on a build map step as an agent. state: start (you are on it), progress (with progress 0–1), done ' +
+				'(closes the current task, or `task`; `files` are hashed into the evidence journal as proof) or stop. A step ' +
+				'whose inputs are not done is refused while the author’s map runs. The author’s choice between variants is ' +
+				'not closed by `done`: pass `choice` (the variant id the author picked in the chat) or `redo` (what to change, ' +
+				'in the author’s words) to record the author’s answer. Never record a choice the author did not make. ' +
+				'Free; writes .extenshi/build-map.json in the project.',
+			parameters: z.object({
+				projectDir: projectDirParam,
+				step: stepParam,
+				agent: agentParam,
+				state: z.enum(['start', 'progress', 'done', 'stop']).optional().describe('Default: done.'),
+				task: z
+					.number()
+					.int()
+					.min(0)
+					.optional()
+					.describe('The task `done` closes, counted from 0 (default: the current one).'),
+				progress: z
+					.number()
+					.min(0)
+					.max(1)
+					.optional()
+					.describe('How far the current task is (state progress).'),
+				claim: z
+					.string()
+					.max(280)
+					.optional()
+					.describe('What the closed task produced, in one line (default: the task).'),
+				note: z.string().max(280).optional(),
+				files: z
+					.array(z.string().min(1))
+					.max(20)
+					.optional()
+					.describe(
+						'Files that show the task done, relative to projectDir: hashed, so the entry is checked.',
+					),
+				urls: z.array(z.string().url()).max(20).optional().describe('Pages that show the task done.'),
+				choice: z
+					.string()
+					.min(1)
+					.max(16)
+					.optional()
+					.describe('The variant id the author picked in the chat.'),
+				redo: z
+					.string()
+					.min(1)
+					.max(2000)
+					.optional()
+					.describe('What to change, in the author’s words: asks for another round.'),
+				round: z
+					.number()
+					.int()
+					.min(1)
+					.optional()
+					.describe('The round the author answered (refused if another one is open).'),
+			}),
+			execute: async (args) => {
+				const { projectDir, ...input } = args
+				return run(() => buildMap.reportStep(projectDir, input))
+			},
+		})
+		add({
+			name: 'request_build_review',
+			description:
+				'Offer the author variants to choose from on the build map: icon concepts (iconConcepts), screenshots ' +
+				'(screenshots) or listing copy (listing). Each variant is a preview page or image inside the project (an ' +
+				'`npx @extenshi/cli icon preview` page fits icons) or an https address; `image` adds a thumbnail. The step ' +
+				'waits on the author until they pick one or ask for another round. Returns the link to the step while the ' +
+				'map runs: give it to the author, then read the answer with get_build_map. Free; local files only.',
+			parameters: z.object({
+				projectDir: projectDirParam,
+				step: stepParam,
+				agent: agentParam,
+				variants: z
+					.array(
+						z.object({
+							label: z.string().min(1).max(80),
+							preview: z
+								.string()
+								.min(1)
+								.describe(
+									'A preview page or image inside the project, relative to projectDir, or an https address.',
+								),
+							image: z.string().min(1).optional().describe('A thumbnail image for the map, like preview.'),
+						}),
+					)
+					.min(1)
+					.max(8),
+			}),
+			execute: async (args) => {
+				const { projectDir, ...input } = args
+				return run(() => buildMap.requestReview(projectDir, input))
+			},
+		})
+	}
+
 	if (caps.has('publish')) {
 		add({
 			name: 'publish_extension',
@@ -3041,7 +3223,22 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					.string()
 					.optional()
 					.describe('Separate Firefox artifact (.xpi); defaults to artifact_path.'),
-				release_notes: z.string().optional().describe('Release notes for stores that accept them.'),
+				release_notes: z
+					.string()
+					.optional()
+					.describe(
+						"Firefox: the new version's public release notes on AMO (en-US; an AMO listing's own release notes " +
+							'win). Edge: sent as the notes for certification, which only reviewers see, unless reviewer_notes ' +
+							'is given. Chrome: not sent (the Chrome Web Store API has no such field).',
+					),
+				reviewer_notes: z
+					.string()
+					.optional()
+					.describe(
+						"Notes for store reviewers only, not shown publicly. Firefox: the version's AMO approval notes, at most " +
+							"3,000 characters (an AMO listing's own reviewer notes win). Edge: the notes for certification, " +
+							'in place of release_notes. Chrome: not sent.',
+					),
 				listing_path: z
 					.string()
 					.optional()
@@ -3160,6 +3357,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 						stores: args.stores,
 						firefoxArtifactPath: args.firefox_artifact_path,
 						releaseNotes: args.release_notes,
+						reviewerNotes: args.reviewer_notes,
 						addonId: args.addon_id,
 						firefoxListing,
 					})

@@ -75,7 +75,10 @@ export interface PublishArgs {
 	artifactPath: string
 	stores?: StoreType[]
 	firefoxArtifactPath?: string
+	/** Firefox: public release notes (en-US). Edge: notes for certification without reviewerNotes. Chrome: not sent. */
 	releaseNotes?: string
+	/** Reviewers only. Firefox: AMO approval notes. Edge: notes for certification. Chrome: not sent. */
+	reviewerNotes?: string
 	/** Explicit AMO add-on id; fills FIREFOX_ADDON_GUID when the environment has none. */
 	addonId?: string
 	/** Listed AMO submission with metadata instead of a version-only upload. */
@@ -142,6 +145,20 @@ export function amoCreateAllowed(opts: {
 	return false
 }
 
+/**
+ * An MCP installed with an older @extenshi/publisher would drop reviewer notes
+ * without a word (its options schema strips unknown keys), so refuse instead.
+ * Read through the namespace: a missing named export would fail the import.
+ */
+export function requireReviewerNotesSupport(
+	firefox: { AMO_APPROVAL_NOTES_MAX?: unknown } = FirefoxAPI,
+): void {
+	if (typeof firefox.AMO_APPROVAL_NOTES_MAX !== 'number')
+		throw new PublishSetupError(
+			"This installation's @extenshi/publisher predates reviewer_notes. Reinstall @extenshi/mcp to update it.",
+		)
+}
+
 /** Load the listing, source and screenshots for a listed AMO submission. */
 export function loadFirefoxListing(listing: NonNullable<PublishArgs['firefoxListing']>) {
 	if (typeof FirefoxAPI.submitListing !== 'function' || typeof FirefoxAPI.loadAmoListing !== 'function')
@@ -188,6 +205,8 @@ export async function publishArtifact(args: PublishArgs): Promise<UniversalPubli
 	} catch (err) {
 		throw new PublishSetupError(err instanceof Error ? err.message : String(err))
 	}
+	const reviewerNotes = args.reviewerNotes?.trim() || undefined
+	if (reviewerNotes) requireReviewerNotesSupport()
 
 	const env = credentialsEnv(args.addonId)
 	const stores = args.stores?.length ? args.stores : configuredStores(env)
@@ -226,6 +245,7 @@ export async function publishArtifact(args: PublishArgs): Promise<UniversalPubli
 			edge: creds.edge,
 		},
 		releaseNotes: args.releaseNotes,
+		reviewerNotes,
 		parallel: true,
 	})
 }

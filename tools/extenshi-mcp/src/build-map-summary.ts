@@ -10,7 +10,7 @@
  * Reading never starts a server and never writes the state file.
  */
 
-import { probeServer, readMapState, resolveMapHome } from './build-map-store.js'
+import { type MapClient, probeServer, readMapState, resolveMapHome } from './build-map-store.js'
 
 export type BuildMapSummary = {
 	/** A map server for this project answers on this machine. */
@@ -29,9 +29,10 @@ export type BuildMapSummary = {
 	problem?: string
 }
 
-export async function readBuildMapSummary(dir: string): Promise<BuildMapSummary> {
+/** `client` tells a running map which release and graph revision this MCP server knows. */
+export async function readBuildMapSummary(dir: string, client?: MapClient): Promise<BuildMapSummary> {
 	const where = await resolveMapHome(dir)
-	const [read, server] = await Promise.all([readMapState(where.home), probeServer(where.home)])
+	const [read, server] = await Promise.all([readMapState(where.home), probeServer(where.home, client)])
 	const { offer } = read.state
 	const declinedAt = Date.parse(offer.declinedAt ?? '')
 	const acceptedAt = Date.parse(offer.acceptedAt ?? '')
