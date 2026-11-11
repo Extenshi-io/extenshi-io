@@ -103,7 +103,7 @@ function renderOverview(args: PinGuideToolArgs, kit: PinGuideKit): string {
 		`Browsers: ${browserNames}. Languages: ${kit.locales.join(', ')}. Theme: ${kit.theme}. Icon: ${icon}.`,
 		'',
 		'Four illustrated steps per browser: open the puzzle (extensions) menu, find the extension,',
-		'pin it (a pushpin in Chrome, an eye in Edge, ⋯ → "Pin to Toolbar" in Firefox), see the icon',
+		'pin it (a pushpin in Chrome and Edge, ⋯ → "Pin to Toolbar" in Firefox), see the icon',
 		'in the toolbar. The icon and the numbered markers are drawn inside each SVG, so the pictures',
 		'need no overlay renderer, no network access and no inline script — they suit a welcome page',
 		'bundled in the extension package and running under its CSP. Firefox captions quote the',

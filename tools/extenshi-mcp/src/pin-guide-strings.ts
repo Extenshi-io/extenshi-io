@@ -26,8 +26,9 @@
  *   - Firefox "Pin to Toolbar" — from Mozilla's localization repository
  *     (mozilla-l10n/firefox-l10n, browser/browser/unifiedExtensions.ftl,
  *     `unified-extensions-context-menu-pin-to-toolbar`, checked 2026-11-04).
- *   - Edge "Show in toolbar" — Edge is closed source, so outside English the
- *     eye is described by what it does, never quoted.
+ *   - Edge — a pushpin glyph with no visible label, like Chrome. (Earlier
+ *     Edge versions showed an eye captioned "Show in toolbar"; the current
+ *     menu has an outlined pin followed by a ⋯ button.)
  *   - Chrome — the control is a pushpin glyph with no visible label.
  */
 
@@ -63,6 +64,11 @@ export interface PinGuideStrings {
 	step3Title: PerBrowser
 	step3Body: PerBrowser
 	step3Alt: PerBrowser
+	/**
+	 * Firefox's own label for the menu item, drawn inside the step-3
+	 * illustration. The same string the Firefox step3Title quotes.
+	 */
+	step3MenuItem: string
 	step4Title: string
 	step4Body: string
 	step4Alt: string
@@ -79,19 +85,21 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'The open extensions menu with {name} highlighted',
 		step3Title: {
 			chrome: 'Click the pin icon next to it',
-			edge: 'Click the eye icon next to it',
+			edge: 'Click the pin icon next to it',
 			firefox: 'Open the ⋯ menu next to it and choose “Pin to Toolbar”',
 		},
 		step3Body: {
 			chrome: EN_MISS,
-			edge: `Edge calls it “Show in toolbar”. ${EN_MISS}`,
+			edge: EN_MISS,
 			firefox: EN_MISS,
 		},
 		step3Alt: {
 			chrome: 'Close-up of the {name} row in the extensions menu, with the pin toggle highlighted',
-			edge: 'Close-up of the {name} row in the extensions menu, with the “Show in toolbar” eye toggle highlighted',
-			firefox: 'Close-up of the {name} row in the extensions menu, with the ⋯ overflow button highlighted',
+			edge: 'Close-up of the {name} row in the extensions menu, with the pin toggle highlighted',
+			firefox:
+				'Close-up of the {name} row in the extensions menu, with the ⋯ overflow button highlighted and its menu open on “Pin to Toolbar”',
 		},
+		step3MenuItem: 'Pin to Toolbar',
 		step4Title: 'Done — the icon now sits in your toolbar',
 		step4Body: 'Click it any time to open the extension.',
 		step4Alt: 'The {browser} toolbar with the {name} icon pinned next to the address bar',
@@ -105,22 +113,24 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'El menú de extensiones abierto con la fila de {name} resaltada',
 		step3Title: {
 			chrome: 'Haz clic en el icono de la chincheta que está al lado',
-			edge: 'Haz clic en el icono del ojo que está al lado',
+			edge: 'Haz clic en el icono de la chincheta que está al lado',
 			firefox: 'Abre el menú ⋯ que está al lado y elige «Fijar a la barra de herramientas»',
 		},
 		step3Body: {
 			chrome:
 				'Es el paso que casi todo el mundo se salta: abrir el menú no es lo mismo que fijar la extensión.',
-			edge: 'Así Edge la muestra en la barra de herramientas. Es el paso que casi todo el mundo se salta: abrir el menú no es lo mismo que fijar la extensión.',
+			edge: 'Es el paso que casi todo el mundo se salta: abrir el menú no es lo mismo que fijar la extensión.',
 			firefox:
 				'Es el paso que casi todo el mundo se salta: abrir el menú no es lo mismo que fijar la extensión.',
 		},
 		step3Alt: {
 			chrome:
 				'Vista ampliada de la fila de {name} en el menú de extensiones, con el botón de fijar resaltado',
-			edge: 'Vista ampliada de la fila de {name} en el menú de extensiones, con el icono del ojo resaltado',
-			firefox: 'Vista ampliada de la fila de {name} en el menú de extensiones, con el botón ⋯ resaltado',
+			edge: 'Vista ampliada de la fila de {name} en el menú de extensiones, con el botón de fijar resaltado',
+			firefox:
+				'Vista ampliada de la fila de {name} en el menú de extensiones, con el botón ⋯ resaltado y su menú abierto en «Fijar a la barra de herramientas»',
 		},
+		step3MenuItem: 'Fijar a la barra de herramientas',
 		step4Title: 'Listo: el icono ya está en tu barra de herramientas',
 		step4Body: 'Haz clic en él cuando quieras para abrir la extensión.',
 		step4Alt:
@@ -135,19 +145,21 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'O menu de extensões aberto com a linha de {name} destacada',
 		step3Title: {
 			chrome: 'Clique no ícone de alfinete ao lado',
-			edge: 'Clique no ícone de olho ao lado',
+			edge: 'Clique no ícone de alfinete ao lado',
 			firefox: 'Abra o menu ⋯ ao lado e escolha “Fixar na barra de ferramentas”',
 		},
 		step3Body: {
 			chrome: 'É a etapa que quase todo mundo pula: abrir o menu não é o mesmo que fixar a extensão.',
-			edge: 'É assim que o Edge mostra a extensão na barra de ferramentas. É a etapa que quase todo mundo pula: abrir o menu não é o mesmo que fixar a extensão.',
+			edge: 'É a etapa que quase todo mundo pula: abrir o menu não é o mesmo que fixar a extensão.',
 			firefox: 'É a etapa que quase todo mundo pula: abrir o menu não é o mesmo que fixar a extensão.',
 		},
 		step3Alt: {
 			chrome: 'Detalhe da linha de {name} no menu de extensões, com o botão de fixar destacado',
-			edge: 'Detalhe da linha de {name} no menu de extensões, com o ícone de olho destacado',
-			firefox: 'Detalhe da linha de {name} no menu de extensões, com o botão ⋯ destacado',
+			edge: 'Detalhe da linha de {name} no menu de extensões, com o botão de fixar destacado',
+			firefox:
+				'Detalhe da linha de {name} no menu de extensões, com o botão ⋯ destacado e o menu dele aberto em “Fixar na barra de ferramentas”',
 		},
+		step3MenuItem: 'Fixar na barra de ferramentas',
 		step4Title: 'Pronto: o ícone agora fica na sua barra de ferramentas',
 		step4Body: 'Clique nele a qualquer momento para abrir a extensão.',
 		step4Alt:
@@ -161,23 +173,24 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'Le menu des extensions ouvert, avec la ligne de {name} mise en évidence',
 		step3Title: {
 			chrome: 'Cliquez sur l’icône en forme d’épingle à côté',
-			edge: 'Cliquez sur l’icône en forme d’œil à côté',
+			edge: 'Cliquez sur l’icône en forme d’épingle à côté',
 			firefox: 'Ouvrez le menu ⋯ à côté et choisissez « Épingler à la barre d’outils »',
 		},
 		step3Body: {
 			chrome:
 				'C’est l’étape que presque tout le monde oublie : ouvrir le menu ne suffit pas à épingler l’extension.',
-			edge: 'C’est ainsi qu’Edge affiche l’extension dans la barre d’outils. C’est l’étape que presque tout le monde oublie : ouvrir le menu ne suffit pas à épingler l’extension.',
+			edge: 'C’est l’étape que presque tout le monde oublie : ouvrir le menu ne suffit pas à épingler l’extension.',
 			firefox:
 				'C’est l’étape que presque tout le monde oublie : ouvrir le menu ne suffit pas à épingler l’extension.',
 		},
 		step3Alt: {
 			chrome:
 				'Gros plan sur la ligne de {name} dans le menu des extensions, avec le bouton d’épingle mis en évidence',
-			edge: 'Gros plan sur la ligne de {name} dans le menu des extensions, avec l’icône en forme d’œil mise en évidence',
+			edge: 'Gros plan sur la ligne de {name} dans le menu des extensions, avec le bouton d’épingle mis en évidence',
 			firefox:
-				'Gros plan sur la ligne de {name} dans le menu des extensions, avec le bouton ⋯ mis en évidence',
+				'Gros plan sur la ligne de {name} dans le menu des extensions, avec le bouton ⋯ mis en évidence et son menu ouvert sur « Épingler à la barre d’outils »',
 		},
+		step3MenuItem: 'Épingler à la barre d’outils',
 		step4Title: 'C’est fait : l’icône est maintenant dans votre barre d’outils',
 		step4Body: 'Cliquez dessus à tout moment pour ouvrir l’extension.',
 		step4Alt: 'La barre d’outils de {browser} avec l’icône de {name} épinglée à côté de la barre d’adresse',
@@ -190,21 +203,23 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'Das geöffnete Erweiterungsmenü, die Zeile von {name} ist hervorgehoben',
 		step3Title: {
 			chrome: 'Klicken Sie daneben auf das Pin-Symbol',
-			edge: 'Klicken Sie daneben auf das Augen-Symbol',
+			edge: 'Klicken Sie daneben auf das Pin-Symbol',
 			firefox: 'Öffnen Sie daneben das Menü ⋯ und wählen Sie „An Symbolleiste anheften“',
 		},
 		step3Body: {
 			chrome:
 				'Diesen Schritt übersehen die meisten: Das Menü zu öffnen heißt noch nicht, die Erweiterung anzuheften.',
-			edge: 'So zeigt Edge die Erweiterung in der Symbolleiste an. Diesen Schritt übersehen die meisten: Das Menü zu öffnen heißt noch nicht, die Erweiterung anzuheften.',
+			edge: 'Diesen Schritt übersehen die meisten: Das Menü zu öffnen heißt noch nicht, die Erweiterung anzuheften.',
 			firefox:
 				'Diesen Schritt übersehen die meisten: Das Menü zu öffnen heißt noch nicht, die Erweiterung anzuheften.',
 		},
 		step3Alt: {
 			chrome: 'Nahansicht der Zeile von {name} im Erweiterungsmenü, der Pin-Schalter ist hervorgehoben',
-			edge: 'Nahansicht der Zeile von {name} im Erweiterungsmenü, das Augen-Symbol ist hervorgehoben',
-			firefox: 'Nahansicht der Zeile von {name} im Erweiterungsmenü, die Schaltfläche ⋯ ist hervorgehoben',
+			edge: 'Nahansicht der Zeile von {name} im Erweiterungsmenü, der Pin-Schalter ist hervorgehoben',
+			firefox:
+				'Nahansicht der Zeile von {name} im Erweiterungsmenü, die Schaltfläche ⋯ ist hervorgehoben, in ihrem geöffneten Menü ist „An Symbolleiste anheften“ markiert',
 		},
+		step3MenuItem: 'An Symbolleiste anheften',
 		step4Title: 'Fertig – das Symbol ist jetzt in Ihrer Symbolleiste',
 		step4Body: 'Klicken Sie jederzeit darauf, um die Erweiterung zu öffnen.',
 		step4Alt: 'Die {browser}-Symbolleiste mit dem angehefteten Symbol von {name} neben der Adressleiste',
@@ -217,20 +232,22 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'Il menu delle estensioni aperto con la riga di {name} evidenziata',
 		step3Title: {
 			chrome: 'Fai clic sull’icona della puntina accanto',
-			edge: 'Fai clic sull’icona dell’occhio accanto',
+			edge: 'Fai clic sull’icona della puntina accanto',
 			firefox: 'Apri il menu ⋯ accanto e scegli «Aggiungi alla barra degli strumenti»',
 		},
 		step3Body: {
 			chrome: 'È il passaggio che quasi tutti saltano: aprire il menu non significa fissare l’estensione.',
-			edge: 'Così Edge mostra l’estensione nella barra degli strumenti. È il passaggio che quasi tutti saltano: aprire il menu non significa fissare l’estensione.',
+			edge: 'È il passaggio che quasi tutti saltano: aprire il menu non significa fissare l’estensione.',
 			firefox: 'È il passaggio che quasi tutti saltano: aprire il menu non significa fissare l’estensione.',
 		},
 		step3Alt: {
 			chrome:
 				'Primo piano della riga di {name} nel menu delle estensioni, con il pulsante della puntina evidenziato',
-			edge: 'Primo piano della riga di {name} nel menu delle estensioni, con l’icona dell’occhio evidenziata',
-			firefox: 'Primo piano della riga di {name} nel menu delle estensioni, con il pulsante ⋯ evidenziato',
+			edge: 'Primo piano della riga di {name} nel menu delle estensioni, con il pulsante della puntina evidenziato',
+			firefox:
+				'Primo piano della riga di {name} nel menu delle estensioni, con il pulsante ⋯ evidenziato e il suo menu aperto su «Aggiungi alla barra degli strumenti»',
 		},
+		step3MenuItem: 'Aggiungi alla barra degli strumenti',
 		step4Title: 'Fatto: ora l’icona è nella barra degli strumenti',
 		step4Body: 'Fai clic quando vuoi per aprire l’estensione.',
 		step4Alt:
@@ -244,19 +261,21 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'Открытое меню расширений, выделена строка {name}',
 		step3Title: {
 			chrome: 'Нажмите на значок булавки рядом',
-			edge: 'Нажмите на значок глаза рядом',
+			edge: 'Нажмите на значок булавки рядом',
 			firefox: 'Откройте меню ⋯ рядом и выберите «Закрепить на панели инструментов»',
 		},
 		step3Body: {
 			chrome: 'Этот шаг пропускают чаще всего: открыть меню — ещё не значит закрепить расширение.',
-			edge: 'Так Edge показывает расширение на панели инструментов. Этот шаг пропускают чаще всего: открыть меню — ещё не значит закрепить расширение.',
+			edge: 'Этот шаг пропускают чаще всего: открыть меню — ещё не значит закрепить расширение.',
 			firefox: 'Этот шаг пропускают чаще всего: открыть меню — ещё не значит закрепить расширение.',
 		},
 		step3Alt: {
 			chrome: 'Крупный план строки {name} в меню расширений, выделена кнопка закрепления',
-			edge: 'Крупный план строки {name} в меню расширений, выделен значок глаза',
-			firefox: 'Крупный план строки {name} в меню расширений, выделена кнопка ⋯',
+			edge: 'Крупный план строки {name} в меню расширений, выделена кнопка закрепления',
+			firefox:
+				'Крупный план строки {name} в меню расширений, выделена кнопка ⋯, в её открытом меню отмечен пункт «Закрепить на панели инструментов»',
 		},
+		step3MenuItem: 'Закрепить на панели инструментов',
 		step4Title: 'Готово — значок теперь на панели инструментов',
 		step4Body: 'Нажимайте на него, когда нужно открыть расширение.',
 		step4Alt: 'Панель инструментов {browser}, значок {name} закреплён рядом с адресной строкой',
@@ -269,19 +288,21 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: '開いた拡張機能メニュー。{name} の行が強調表示されています',
 		step3Title: {
 			chrome: '横にあるピンのアイコンをクリックします',
-			edge: '横にある目のアイコンをクリックします',
+			edge: '横にあるピンのアイコンをクリックします',
 			firefox: '横にある ⋯ メニューを開き、「ツールバーにピン留め」を選びます',
 		},
 		step3Body: {
 			chrome: '多くの人が見落とす手順です。メニューを開いただけではピン留めされません。',
-			edge: 'これで Edge のツールバーに拡張機能が表示されます。多くの人が見落とす手順です。メニューを開いただけではピン留めされません。',
+			edge: '多くの人が見落とす手順です。メニューを開いただけではピン留めされません。',
 			firefox: '多くの人が見落とす手順です。メニューを開いただけではピン留めされません。',
 		},
 		step3Alt: {
 			chrome: '拡張機能メニューの {name} の行の拡大図。ピンのボタンが強調表示されています',
-			edge: '拡張機能メニューの {name} の行の拡大図。目のアイコンが強調表示されています',
-			firefox: '拡張機能メニューの {name} の行の拡大図。⋯ ボタンが強調表示されています',
+			edge: '拡張機能メニューの {name} の行の拡大図。ピンのボタンが強調表示されています',
+			firefox:
+				'拡張機能メニューの {name} の行の拡大図。⋯ ボタンが強調表示され、開いたメニューで「ツールバーにピン留め」が選ばれています',
 		},
+		step3MenuItem: 'ツールバーにピン留め',
 		step4Title: '完了です。アイコンがツールバーに表示されました',
 		step4Body: 'いつでもクリックして拡張機能を開けます。',
 		step4Alt: '{browser} のツールバー。{name} のアイコンがアドレスバーの横にピン留めされています',
@@ -294,19 +315,21 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: '열린 확장 프로그램 메뉴, {name} 행이 강조 표시됨',
 		step3Title: {
 			chrome: '옆에 있는 핀 아이콘을 클릭하세요',
-			edge: '옆에 있는 눈 아이콘을 클릭하세요',
+			edge: '옆에 있는 핀 아이콘을 클릭하세요',
 			firefox: '옆에 있는 ⋯ 메뉴를 열고 “도구 모음에 고정”을 선택하세요',
 		},
 		step3Body: {
 			chrome: '가장 많이 놓치는 단계입니다. 메뉴를 여는 것만으로는 고정되지 않습니다.',
-			edge: '이렇게 하면 Edge 도구 모음에 확장 프로그램이 표시됩니다. 가장 많이 놓치는 단계입니다. 메뉴를 여는 것만으로는 고정되지 않습니다.',
+			edge: '가장 많이 놓치는 단계입니다. 메뉴를 여는 것만으로는 고정되지 않습니다.',
 			firefox: '가장 많이 놓치는 단계입니다. 메뉴를 여는 것만으로는 고정되지 않습니다.',
 		},
 		step3Alt: {
 			chrome: '확장 프로그램 메뉴의 {name} 행 확대 화면, 고정 버튼이 강조 표시됨',
-			edge: '확장 프로그램 메뉴의 {name} 행 확대 화면, 눈 아이콘이 강조 표시됨',
-			firefox: '확장 프로그램 메뉴의 {name} 행 확대 화면, ⋯ 버튼이 강조 표시됨',
+			edge: '확장 프로그램 메뉴의 {name} 행 확대 화면, 고정 버튼이 강조 표시됨',
+			firefox:
+				'확장 프로그램 메뉴의 {name} 행 확대 화면, ⋯ 버튼이 강조 표시되고 열린 메뉴에서 “도구 모음에 고정”이 선택됨',
 		},
+		step3MenuItem: '도구 모음에 고정',
 		step4Title: '완료되었습니다. 이제 아이콘이 도구 모음에 표시됩니다',
 		step4Body: '언제든지 아이콘을 클릭해 확장 프로그램을 여세요.',
 		step4Alt: '{browser} 도구 모음, 주소 표시줄 옆에 {name} 아이콘이 고정됨',
@@ -319,19 +342,20 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: '已打开的扩展程序菜单，{name} 所在行已突出显示',
 		step3Title: {
 			chrome: '点击旁边的图钉图标',
-			edge: '点击旁边的眼睛图标',
+			edge: '点击旁边的图钉图标',
 			firefox: '打开旁边的 ⋯ 菜单，选择“固定到工具栏”',
 		},
 		step3Body: {
 			chrome: '这是最容易漏掉的一步：打开菜单并不等于固定扩展程序。',
-			edge: '这样 Edge 就会在工具栏中显示该扩展程序。这是最容易漏掉的一步：打开菜单并不等于固定扩展程序。',
+			edge: '这是最容易漏掉的一步：打开菜单并不等于固定扩展程序。',
 			firefox: '这是最容易漏掉的一步：打开菜单并不等于固定扩展程序。',
 		},
 		step3Alt: {
 			chrome: '扩展程序菜单中 {name} 所在行的特写，图钉按钮已突出显示',
-			edge: '扩展程序菜单中 {name} 所在行的特写，眼睛图标已突出显示',
-			firefox: '扩展程序菜单中 {name} 所在行的特写，⋯ 按钮已突出显示',
+			edge: '扩展程序菜单中 {name} 所在行的特写，图钉按钮已突出显示',
+			firefox: '扩展程序菜单中 {name} 所在行的特写，⋯ 按钮已突出显示，展开的菜单中选中了“固定到工具栏”',
 		},
+		step3MenuItem: '固定到工具栏',
 		step4Title: '完成，图标现在固定在工具栏中',
 		step4Body: '随时点击它即可打开扩展程序。',
 		step4Alt: '{browser} 工具栏，{name} 的图标已固定在地址栏旁边',
@@ -346,19 +370,21 @@ export const PIN_GUIDE_STRINGS: Record<PinGuideLocale, PinGuideStrings> = {
 		step2Alt: 'قائمة الإضافات مفتوحة مع إبراز صف {name}',
 		step3Title: {
 			chrome: 'انقر على أيقونة الدبوس بجانبها',
-			edge: 'انقر على أيقونة العين بجانبها',
+			edge: 'انقر على أيقونة الدبوس بجانبها',
 			firefox: 'افتح قائمة ⋯ بجانبها واختر «ثبّته في شريط الأدوات»',
 		},
 		step3Body: {
 			chrome: 'هذه هي الخطوة التي يفوّتها معظم الناس: فتح القائمة لا يعني تثبيت الإضافة في شريط الأدوات.',
-			edge: 'بهذه الطريقة يعرض Edge الإضافة في شريط الأدوات. هذه هي الخطوة التي يفوّتها معظم الناس: فتح القائمة لا يعني تثبيت الإضافة في شريط الأدوات.',
+			edge: 'هذه هي الخطوة التي يفوّتها معظم الناس: فتح القائمة لا يعني تثبيت الإضافة في شريط الأدوات.',
 			firefox: 'هذه هي الخطوة التي يفوّتها معظم الناس: فتح القائمة لا يعني تثبيت الإضافة في شريط الأدوات.',
 		},
 		step3Alt: {
 			chrome: 'لقطة مقرّبة لصف {name} في قائمة الإضافات مع إبراز زر الدبوس',
-			edge: 'لقطة مقرّبة لصف {name} في قائمة الإضافات مع إبراز أيقونة العين',
-			firefox: 'لقطة مقرّبة لصف {name} في قائمة الإضافات مع إبراز زر ⋯',
+			edge: 'لقطة مقرّبة لصف {name} في قائمة الإضافات مع إبراز زر الدبوس',
+			firefox:
+				'لقطة مقرّبة لصف {name} في قائمة الإضافات مع إبراز زر ⋯ وقائمته مفتوحة على «ثبّته في شريط الأدوات»',
 		},
+		step3MenuItem: 'ثبّته في شريط الأدوات',
 		step4Title: 'تمّ — أصبحت الأيقونة الآن في شريط الأدوات',
 		step4Body: 'انقر عليها في أي وقت لفتح الإضافة.',
 		step4Alt: 'شريط أدوات {browser} وأيقونة {name} مثبّتة بجانب شريط العنوان',

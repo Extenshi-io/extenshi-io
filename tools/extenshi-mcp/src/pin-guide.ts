@@ -22,8 +22,9 @@
  * modelled (tab strip, back/forward/reload/home, omnibox with lock and star,
  * app menu) and the extensions button uses the real jigsaw glyph rather than a
  * hand-rolled approximation. The per-row control differs by browser and is
- * drawn as what that browser actually shows: a pushpin in Chrome, an eye in
- * Edge, a ⋯ overflow menu in Firefox.
+ * drawn as what that browser actually shows: a filled pushpin in Chrome, an
+ * outlined, tilted pushpin followed by a ⋯ button in Edge, and a ⋯ overflow
+ * button in Firefox whose opened menu holds "Pin to Toolbar".
  *
  * SELF-CONTAINED ON PURPOSE — its only import is the sibling captions file, so
  * the pair (plus pin-guide-kit.ts) can be copied into the published `@extenshi/mcp`
@@ -106,6 +107,8 @@ const VIEW_W = 640
  */
 const H_TOOLBAR = 168
 const H_MENU = 240
+/** Firefox's step 3 also shows the ⋯ button's opened menu, which hangs below the panel. */
+const H_ROW_MENU = 310
 
 /** Toolbar band: everything above is the tab strip, everything below is the page. */
 const TOOLBAR_Y = 38
@@ -157,15 +160,26 @@ function palette(theme: 'light' | 'dark'): Palette {
  */
 interface BrowserUi {
 	/** The per-row control that pins the extension. Its wording lives in ./pin-guide-strings.ts. */
-	toggle: 'pin' | 'eye' | 'more'
+	toggle: 'pin' | 'pinOutline' | 'more'
+	/**
+	 * A ⋯ button after the toggle. Edge has both on every row (checked on
+	 * Edge for macOS, November 2026), so the pin is the second control from the
+	 * right there, not the last one.
+	 */
+	trailingMore: boolean
+	/**
+	 * The toggle only opens a menu, and the item to choose is inside it. Step 3
+	 * then draws that menu open, with the item highlighted.
+	 */
+	opensMenu: boolean
 	/** The browser's own app menu, at the far right of the toolbar. */
 	appMenu: 'kebab' | 'ellipsis' | 'hamburger'
 }
 
 const BROWSER_UI: Record<PinGuideBrowser, BrowserUi> = {
-	chrome: { toggle: 'pin', appMenu: 'kebab' },
-	edge: { toggle: 'eye', appMenu: 'ellipsis' },
-	firefox: { toggle: 'more', appMenu: 'hamburger' },
+	chrome: { toggle: 'pin', trailingMore: false, opensMenu: false, appMenu: 'kebab' },
+	edge: { toggle: 'pinOutline', trailingMore: true, opensMenu: false, appMenu: 'ellipsis' },
+	firefox: { toggle: 'more', trailingMore: false, opensMenu: true, appMenu: 'hamburger' },
 }
 
 /** Escape text that goes inside an SVG text node. */
@@ -202,9 +216,12 @@ const GLYPH_24 = {
 		'<path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z"/>',
 	// Pushpin, as shown beside each row in the Chrome extensions panel.
 	pin: '<path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/>',
-	// Eye — Edge's "Show in toolbar" toggle.
-	eye: '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>',
-	// Horizontal ⋯ — Firefox's per-extension overflow button.
+	// Outlined pushpin tilted 45° — the pin button on each row of Edge's
+	// extensions menu. (Edge showed an eye here in earlier versions.)
+	pinOutline:
+		'<g transform="rotate(45 12 12)"><path d="M14 4v5c0 1.12.37 2.16 1 3H9c.65-.86 1-1.9 1-3V4h4m3-2H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3V4h1c.55 0 1-.45 1-1s-.45-1-1-1z"/></g>',
+	// Horizontal ⋯ — Firefox's per-extension overflow button, and the button
+	// after the pin on an Edge row.
 	more: '<circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>',
 } as const
 
@@ -270,6 +287,26 @@ const ZOOM_ROW_2: RowBox = { x: 106, y: 146, w: 428, h: 48, rx: 12 }
 const ZOOM_ICON_2 = { x: 126, y: 158, size: 24 }
 const ZOOM_TOGGLE_2 = { x: 487, y: 158, size: 24 }
 const ZOOM_ROW_2_TEXT = { x: 166, y: 168, w: 120, h: 8 }
+/**
+ * With a trailing ⋯ button (Edge) the ⋯ takes the toggle's slot and the toggle
+ * moves one slot to the left. Offsets are per frame scale.
+ */
+const TRAILING_SHIFT = 24
+const ZOOM_TRAILING_SHIFT = 48
+/**
+ * The menu the ⋯ button opens (Firefox), in the step-3 zoom: one inactive
+ * entry, a separator, the highlighted "Pin to Toolbar", a separator and two
+ * more inactive entries.
+ */
+const ZOOM_MENU = { x: 270, y: 136, w: 314, h: 150 }
+const ZOOM_MENU_ITEM = { x: 278, y: 180, w: 298, h: 32 }
+const ZOOM_MENU_TEXT = { x: 292, y: 201, size: 15 }
+const ZOOM_MENU_BARS = [
+	{ x: 292, y: 153, w: 150, h: 7 },
+	{ x: 292, y: 235, w: 176, h: 7 },
+	{ x: 292, y: 261, w: 118, h: 7 },
+]
+const ZOOM_MENU_SEPARATORS = [174, 218]
 /** Where the extension's name sits in each row. */
 const ROW_TEXT_ANCHOR = { x: 410, y: 141, size: 13 }
 const ZOOM_TEXT_ANCHOR = { x: 172, y: 113, size: 20 }
@@ -300,7 +337,7 @@ interface Callout {
 	badge: [number, number]
 }
 
-type CalloutDir = 'down' | 'left' | 'right'
+type CalloutDir = 'down' | 'up' | 'left' | 'right'
 
 /**
  * Build a callout around a target box.
@@ -322,6 +359,11 @@ function callout(
 		const from = box.y + box.h + LEADER_GAP
 		const to = from + len
 		return { box, leader: [cx, from, cx, to], badge: [cx, to + BADGE_GAP] }
+	}
+	if (dir === 'up') {
+		const from = box.y - LEADER_GAP
+		const to = from - len
+		return { box, leader: [cx, from, cx, to], badge: [cx, to - BADGE_GAP] }
 	}
 	if (dir === 'right') {
 		const from = box.x + box.w + LEADER_GAP
@@ -430,6 +472,41 @@ function iconPlaceholder(x: number, y: number, size: number, p: Palette): string
 	return `<rect x="${num(x)}" y="${num(y)}" width="${num(size)}" height="${num(size)}" rx="${num(size / 3.5)}" fill="${p.stroke}"/>`
 }
 
+/**
+ * The per-row controls: the toggle, and after it a ⋯ button where the browser
+ * has one. `at` is the slot of the LAST control; the toggle's own position
+ * comes from `toggleSlot`, which the callout uses too.
+ */
+function toggleSlot(at: { x: number; y: number; size: number }, ui: BrowserUi, shift: number) {
+	return ui.trailingMore ? { ...at, x: at.x - shift } : at
+}
+
+function rowControls(
+	at: { x: number; y: number; size: number },
+	ui: BrowserUi,
+	shift: number,
+	fill: string,
+): string {
+	const t = toggleSlot(at, ui, shift)
+	const toggle = glyph(GLYPH_24[ui.toggle], t.x, t.y, t.size, fill)
+	return ui.trailingMore ? toggle + glyph(GLYPH_24.more, at.x, at.y, at.size, fill) : toggle
+}
+
+/** The opened ⋯ menu of step 3, with the item to choose highlighted in the accent. */
+function rowMenu(label: string, p: Palette, accent: string): string {
+	const m = ZOOM_MENU
+	const item = ZOOM_MENU_ITEM
+	return [
+		`<rect x="${m.x}" y="${m.y}" width="${m.w}" height="${m.h}" rx="10" fill="${p.panelBg}" stroke="${p.stroke}"/>`,
+		...ZOOM_MENU_BARS.map((b) => bar(b, p)),
+		...ZOOM_MENU_SEPARATORS.map(
+			(y) => `<path d="M ${m.x + 8} ${y} H ${m.x + m.w - 8}" stroke="${p.stroke}" fill="none"/>`,
+		),
+		`<rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" rx="6" fill="${p.rowBg}" stroke="${accent}" stroke-width="2"/>`,
+		rowText(ZOOM_MENU_TEXT, label, p),
+	].join('')
+}
+
 function svgDoc(body: string, h: number): string {
 	return `<svg viewBox="0 0 ${VIEW_W} ${h}" xmlns="http://www.w3.org/2000/svg" role="img">${body}</svg>`
 }
@@ -481,7 +558,6 @@ export function buildPinGuideBlocks(input: PinGuideInput): PinGuideBlock[] {
 	const ui = BROWSER_UI[input.browser]
 	const name = clip(input.extensionName || 'Your extension')
 	const browserLabel = PIN_GUIDE_BROWSER_LABELS[input.browser]
-	const toggleGlyph = GLYPH_24[ui.toggle]
 	const t = PIN_GUIDE_STRINGS[pinGuideLocale(input.locale)]
 	const fill = (template: string) => pinGuideText(template, { name, browser: browserLabel })
 
@@ -498,12 +574,12 @@ export function buildPinGuideBlocks(input: PinGuideInput): PinGuideBlock[] {
 		bar(PANEL_HEADER, p),
 		row(ROW, p.rowBg, p),
 		rowText(ROW_TEXT_ANCHOR, name, p),
-		glyph(toggleGlyph, TOGGLE.x, TOGGLE.y, TOGGLE.size, p.text),
+		rowControls(TOGGLE, ui, TRAILING_SHIFT, p.text),
 		// A second, greyed row so the panel reads as a list rather than one card.
 		row(ROW_2, null, p),
 		iconPlaceholder(ICON_IN_ROW_2.x, ICON_IN_ROW_2.y, ICON_IN_ROW_2.size, p),
 		bar(ROW_2_TEXT, p),
-		glyph(toggleGlyph, TOGGLE_2.x, TOGGLE_2.y, TOGGLE_2.size, p.stroke),
+		rowControls(TOGGLE_2, ui, TRAILING_SHIFT, p.stroke),
 		bar(PANEL_FOOTER, p),
 	].join('')
 
@@ -524,23 +600,34 @@ export function buildPinGuideBlocks(input: PinGuideInput): PinGuideBlock[] {
 
 	// The zoom is drawn at ~1.7x the toolbar frame, so the shared leader length
 	// reads as a stub here; 22 keeps it proportional to the ring it leaves.
-	const call3 = callout(square(ZOOM_TOGGLE), 'right', 10, 22)
+	// With a ⋯ button to the toggle's right, a leader going right would run
+	// straight through it, so that row's badge sits above the toggle instead.
+	const call3 = callout(
+		square(toggleSlot(ZOOM_TOGGLE, ui, ZOOM_TRAILING_SHIFT)),
+		ui.trailingMore ? 'up' : 'right',
+		10,
+		22,
+	)
+	const h3 = ui.opensMenu ? H_ROW_MENU : H_MENU
 	const step3 = svgDoc(
 		[
-			`<rect x="0" y="0" width="${VIEW_W}" height="${H_MENU}" rx="12" fill="${p.pageBg}"/>`,
+			`<rect x="0" y="0" width="${VIEW_W}" height="${h3}" rx="12" fill="${p.pageBg}"/>`,
 			`<rect x="${ZOOM_PANEL.x}" y="${ZOOM_PANEL.y}" width="${ZOOM_PANEL.w}" height="${ZOOM_PANEL.h}" rx="16" fill="${p.panelBg}" stroke="${p.stroke}"/>`,
 			bar(ZOOM_HEADER, p),
 			row(ZOOM_ROW, p.rowBg, p),
 			zoomIconPlaceholder,
 			rowText(ZOOM_TEXT_ANCHOR, name, p),
-			glyph(toggleGlyph, ZOOM_TOGGLE.x, ZOOM_TOGGLE.y, ZOOM_TOGGLE.size, p.text),
+			rowControls(ZOOM_TOGGLE, ui, ZOOM_TRAILING_SHIFT, p.text),
 			row(ZOOM_ROW_2, null, p),
 			iconPlaceholder(ZOOM_ICON_2.x, ZOOM_ICON_2.y, ZOOM_ICON_2.size, p),
 			bar(ZOOM_ROW_2_TEXT, p),
-			glyph(toggleGlyph, ZOOM_TOGGLE_2.x, ZOOM_TOGGLE_2.y, ZOOM_TOGGLE_2.size, p.stroke),
+			rowControls(ZOOM_TOGGLE_2, ui, ZOOM_TRAILING_SHIFT, p.stroke),
 			drawCallout(call3, accent),
+			// After the callout: the menu is a popup on top of the panel, and the
+			// callout ring has to stay the first accent-stroked rect in the frame.
+			ui.opensMenu ? rowMenu(t.step3MenuItem, p, accent) : '',
 		].join(''),
-		H_MENU,
+		h3,
 	)
 
 	// ── Step 4: pinned in the toolbar ───────────────────────────────────────
@@ -590,8 +677,8 @@ export function buildPinGuideBlocks(input: PinGuideInput): PinGuideBlock[] {
 				source: 'svg',
 				svg: step3,
 				alt: fill(t.step3Alt[input.browser]),
-				annotations: [marker(call3.badge, 3, H_MENU)],
-				icon: icon(ZOOM_ICON.x, ZOOM_ICON.y, ZOOM_ICON.size, H_MENU),
+				annotations: [marker(call3.badge, 3, h3)],
+				icon: icon(ZOOM_ICON.x, ZOOM_ICON.y, ZOOM_ICON.size, h3),
 			},
 		},
 		{

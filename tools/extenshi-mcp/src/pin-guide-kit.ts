@@ -31,7 +31,12 @@ import {
 	type PinGuideBlock,
 	type PinGuideBrowser,
 } from './pin-guide.js'
-import { PIN_GUIDE_LOCALES, type PinGuideLocale, pinGuideLocale } from './pin-guide-strings.js'
+import {
+	PIN_GUIDE_LOCALES,
+	PIN_GUIDE_STRINGS,
+	type PinGuideLocale,
+	pinGuideLocale,
+} from './pin-guide-strings.js'
 
 export const PIN_GUIDE_BROWSERS: readonly PinGuideBrowser[] = ['chrome', 'edge', 'firefox']
 
@@ -62,8 +67,12 @@ export interface PinGuideKitStep {
 	svg: string
 	/** The dark copy, only with `theme: 'auto'`. */
 	svgDark: string | null
-	/** Message names of this step's captions; `body` is null for step 2. */
-	keys: { title: string; body: string | null; alt: string }
+	/**
+	 * Message names of this step's captions; `body` is null for step 2. `menu`
+	 * names the browser's menu item written inside the illustration (Firefox
+	 * step 3, "Pin to Toolbar") and is null for every other step.
+	 */
+	keys: { title: string; body: string | null; alt: string; menu: string | null }
 }
 
 export interface PinGuideKitMessage {
@@ -198,6 +207,20 @@ function flatten(block: PinGuideBlock, iconHref: string | null, accent: string):
 	return svg.replace(/<\/svg>$/, `${parts.join('')}</svg>`)
 }
 
+/**
+ * Mark the menu item drawn inside a step so the script can translate it: the
+ * picture carries the English label, and `data-i18n` swaps in the browser's
+ * own wording like any other caption. The menu is the last thing drawn, so an
+ * extension that happens to be called the same as the label is not touched.
+ */
+function tagMenuLabel(svg: string, label: string, key: string): string {
+	const text = `>${escText(label)}</text>`
+	const end = svg.lastIndexOf(text)
+	const start = end < 0 ? -1 : svg.lastIndexOf('<text ', end)
+	if (start < 0) throw new PinGuideKitError(`The menu item "${label}" is missing from the illustration`)
+	return `${svg.slice(0, start)}<text data-i18n="${key}" ${svg.slice(start + '<text '.length)}`
+}
+
 /** Put the accessible name on an inline copy; standalone files get it from `<img alt>`. */
 function inlineSvg(svg: string, alt: string, altKey: string, cls: string): string {
 	return svg.replace(
@@ -250,16 +273,24 @@ export function buildPinGuideKit(input: PinGuideKitInput): PinGuideKit {
 		const dark = theme === 'auto' ? blocksFor(browser, 'dark', 'en') : null
 		const key = (n: number, field: string) => `${prefix}${capitalize(browser)}${n}${field}`
 
+		// Only Firefox writes a menu item into a picture: step 3, the opened ⋯ menu.
+		const menuLabel = PIN_GUIDE_STRINGS.en.step3MenuItem
 		const browserSteps: PinGuideKitStep[] = en.map((block, i) => {
 			const n = i + 1
+			const menu = browser === 'firefox' && n === 3 ? key(n, 'Menu') : null
+			const picture = (b: PinGuideBlock) => {
+				const flat = flatten(b, iconHref, accent)
+				return menu ? tagMenuLabel(flat, menuLabel, menu) : flat
+			}
 			return {
 				n,
-				svg: flatten(block, iconHref, accent),
-				svgDark: dark?.[i] ? flatten(dark[i], iconHref, accent) : null,
+				svg: picture(block),
+				svgDark: dark?.[i] ? picture(dark[i]) : null,
 				keys: {
 					title: key(n, 'Title'),
 					body: block.body === null ? null : key(n, 'Body'),
 					alt: key(n, 'Alt'),
+					menu,
 				},
 			}
 		})
@@ -280,6 +311,12 @@ export function buildPinGuideKit(input: PinGuideKitInput): PinGuideKit {
 				out[s.keys.alt] = {
 					message: i18nMessage(block.media.alt),
 					description: `${where}: alt text of the illustration`,
+				}
+				if (s.keys.menu) {
+					out[s.keys.menu] = {
+						message: i18nMessage(PIN_GUIDE_STRINGS[locale].step3MenuItem),
+						description: `${where}: the browser's menu item, written inside the illustration`,
+					}
 				}
 			}
 		}
