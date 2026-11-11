@@ -12,17 +12,20 @@ description: >
 
 Design an icon for a browser extension, verify it inside realistic browser
 toolbars, and export the store-ready PNG set — fully local and free. The only
-external tool used is `npx @extenshi/cli@latest icon preview`, which runs offline,
-needs no account, and sends nothing anywhere. Tell the user what a command does
-before you run it.
+external tools used are `npx @extenshi/cli@latest icon preview` and
+`icon store-assets`, which run offline, need no account, and send nothing
+anywhere. Tell the user what a command does before you run it.
 
 ## What the stores need
 
 - PNG renders at **16, 32, 48, and 128 px** (128 px is the store-listing
   size), declared in `manifest.json` under `icons` and `action.default_icon`.
 - Keep the **SVG master** in the repo — every size is rasterized from it.
-- Chrome Web Store additionally uses a **440×280 promo tile** on some
-  surfaces.
+- The **store listing** takes its own artwork, separate from the package
+  icons: the Chrome Web Store a 128 px icon (96 px artwork with 16 px padding),
+  a **440×280 promo tile** and an optional 1400×560 marquee; Edge Add-ons a
+  300×300 logo and the same two tile sizes; Firefox Add-ons 128, 64 and 32 px
+  icons. Step 6 renders all of them from the master.
 
 ## Design rules (the 16 px reality)
 
@@ -80,6 +83,20 @@ that, not for the 128 px store tile:
    	"action": { "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } }
    }
    ```
+6. **Render the store listing artwork** (offline, free) once the icon is
+   settled:
+
+   ```bash
+   npx @extenshi/cli@latest icon store-assets icon.svg --out store-assets
+   ```
+
+   It writes the listing icon, promo tile and marquee for the Chrome Web
+   Store, the logo and tiles for Edge Add-ons, and the Firefox Add-ons icons.
+   `--store chrome,edge,firefox` limits the set, `--background <color>` sets
+   the tile background (by default a light tint of the icon colour), and
+   `--promo <file>` / `--marquee <file>` take full-bleed artwork instead of
+   composing the icon. Show the tiles to the human before they go into a store
+   dashboard.
 
 ## Quality checklist (before calling it done)
 
@@ -89,10 +106,12 @@ that, not for the 128 px store tile:
 - [ ] Canvas usage ~90%+ (or trim toggle applied)
 - [ ] No text, no strokes under 1.5 px at 16 px scale
 - [ ] Manifest references all four sizes
+- [ ] Store listing artwork rendered for each store the extension ships to
 
 ## Going further (optional)
 
 The same CLI can check the rest of the release, also without an account:
-`npx @extenshi/cli@latest review-risk dist.zip` predicts Chrome Web Store review
-outcomes offline. Docs and the full command reference:
+`npx @extenshi/cli@latest review-risk dist.zip` predicts store review outcomes
+offline (Chrome Web Store by default, `--store firefox` or `--store edge` for
+the others). Docs and the full command reference:
 https://docs.extenshi.io/developers/icon-generator

@@ -18,6 +18,12 @@ two calls.
 
 Only the ids leave the machine. Ask the user for one of these:
 
+- **From a terminal, all browsers at once:** `npx @extenshi/guard@latest list`
+  reads the browser profiles on the machine (Chrome, Edge, Brave, Vivaldi,
+  Opera, Arc, Chromium, Firefox and others) and prints every installed
+  extension per browser and profile; `--json` gives the same as JSON. It runs
+  locally, needs no account and sends nothing. Explain that before running it,
+  and take the ids from its output.
 - **Chrome:** open `chrome://extensions`, turn on **Developer mode**, and copy
   the **ID** shown under each extension.
 - **Edge:** the same on `edge://extensions` with **Developer mode** on.
@@ -72,6 +78,13 @@ each one; an unused extension with broad permissions is the easiest win.
   longer needs. Do not tell the user to delete everything above a threshold.
 - Point to `search_extensions` for a lower-risk alternative when a flagged
   extension is one they rely on.
+- For removing or disabling several extensions in one go, mention
+  `npx @extenshi/guard@latest scan`. It is a guided flow in the user's own
+  terminal: it asks for consent, sends a minimal inventory (store ids, versions
+  and install details, never names or browsing data) to their Extenshi account,
+  shows the flagged ones and removes
+  or disables the ones the user picks; `npx @extenshi/guard@latest undo` puts
+  them back. It needs an Extenshi sign-in. Do not run it for the user.
 - Remind them that a low score is an automated estimate. It is a reason to look
   closer, not a verdict on the publisher.
 

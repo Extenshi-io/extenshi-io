@@ -2,12 +2,13 @@
 name: extension-store-readiness
 description: >
   Get a browser extension ready for store review: trim the manifest to the
-  permissions it needs, predict what the Chrome Web Store will reject or send to
-  slow manual review, prepare permission justifications and the privacy practices
-  answers, and clean up the listing text. Use when the user asks "will my
-  extension pass review", "why was my extension rejected", "check my manifest",
-  "are my permissions too broad", "prepare my extension for the Chrome Web Store",
-  or "review my store listing".
+  permissions it needs, predict what the Chrome Web Store, Firefox Add-ons or
+  Edge Add-ons will reject or send to slow manual review, check the code against
+  recent browser changes, prepare permission justifications and the privacy
+  practices answers, and clean up the listing text. Use when the user asks "will
+  my extension pass review", "why was my extension rejected", "check my
+  manifest", "are my permissions too broad", "prepare my extension for the
+  Chrome Web Store", "submit my add-on to AMO", or "review my store listing".
 ---
 
 # Extension store readiness
@@ -61,11 +62,37 @@ per browser) or ask the user to.
    For an extension that is already published, `--extension-id <catalog id>`
    also diffs the new manifest against the live one (this sends the id, not the
    build).
+
+   One run predicts one store. The default is the Chrome Web Store; run it
+   again with `--store firefox` or `--store edge` for each other store the
+   extension ships to. The store sets the listing and review-process findings,
+   the name and description length limits, and the published manifest the diff
+   uses.
 5. **Fix, then re-run.** Work through findings in order: rejections first, then
    slow-review triggers, then attrition. Change the manifest or listing, rebuild
    and run `review-risk` again until the remaining findings are understood and
    accepted.
-6. **Prepare the store forms.**
+6. **Check the code against browser changes:**
+
+   ```bash
+   npx @extenshi/cli@latest advise .
+   ```
+
+   It matches the source (or a `.zip`, `.crx`, `.xpi`) against the list of
+   Chrome, Edge and Firefox changes at https://cli.extenshi.io/changes and
+   labels each match `BREAKS`, `BEHAVIOR CHANGE`, `DEPRECATED` or `OPPORTUNITY`,
+   with the file and line, the browser version and what to do. The code stays on
+   the machine; the run downloads the public list of changes (`--offline` uses
+   the list shipped with the CLI). Matching is textual, so treat each match as a
+   place to check, and the command always exits 0.
+7. **Boot the exact package (optional).** `npx @extenshi/cli@latest test smoke
+   <zip> --browser chromium` installs the package in a real browser and checks
+   that every file the manifest names is present, the service worker starts and
+   the popup, options and side-panel pages open without errors. It needs
+   Playwright in the project (`npm i -D playwright && npx playwright install
+   chromium`); `--browser firefox` needs only a Firefox binary. The
+   `extension-testing` skill covers this and scenario tests.
+8. **Prepare the store forms.**
    - **Privacy practices:** the store derives these questions from the manifest.
      `review-risk` predicts which data types must be declared and whether a
      privacy policy URL is required. The answers must describe what the extension
@@ -75,8 +102,16 @@ per browser) or ask the user to.
      feature. Offer wording as a starting point and tell the user to check it
      against the code.
    - **Listing draft:** `npx @extenshi/cli@latest generate-listing ./dist/my-extension.zip`
-     writes a `CHROMEWEBSTORE.md` from the package. Treat it as a draft to edit.
-7. **Clean up the name and description.**
+     writes a `CHROMEWEBSTORE.md` from the package; `--store edge` writes
+     `EDGE.md` and `--store firefox` writes `AMO.md`. Treat it as a draft to
+     edit. `review-risk --listing` accepts any of the three.
+   - **Firefox source code:** when the Firefox build is bundled or minified, AMO
+     asks for the source. `npx @extenshi/cli@latest amo-source <project-dir>`
+     writes the source archive and a `BUILD.md` for the reviewer from the
+     committed files (dotenv files never go in), and `--verify <package>`
+     rebuilds from the archive and compares the SHA-256 with the zip to upload.
+     It does not talk to AMO.
+9. **Clean up the name and description.**
    - Keep the name to one or two main keywords. A name that reads as a keyword
      list (several segments split by dashes, commas or ampersands) is flagged as
      keyword stuffing and can slow review. Put long-tail keywords in the short
@@ -84,8 +119,10 @@ per browser) or ask the user to.
    - Write the description for people. Repeating the same keyword many times is
      also flagged.
    - Every claim in the listing must match what the extension does.
-8. **Hand off related work.** The `extension-icon-design` skill covers store
-   icons. `npx @extenshi/cli@latest scan ./dist/my-extension.zip` adds a security
+10. **Hand off related work.** The `extension-icon-design` skill covers the
+   icon and the store listing artwork, `extension-localization` the `_locales`
+   translations, and `extension-testing` the store screenshots.
+   `npx @extenshi/cli@latest scan ./dist/my-extension.zip` adds a security
    scan of the package. It **uploads the package** to the Extenshi scan service,
    needs an Extenshi account and uses one scan from the allowance, so only offer
    it and run it when the user agrees. `search_docs` answers exact CLI flags and publishing steps.
@@ -107,5 +144,8 @@ per browser) or ask the user to.
 - Do not write justifications or privacy answers for behaviour the extension does
   not have, and do not suggest hiding functionality from the reviewer.
 - Firefox and Edge have their own requirements (for example a Firefox add-on id
-  under `browser_specific_settings`); `review-risk` predicts Chrome Web Store
-  review by default, and `--store` only selects which store's manifest to diff.
+  under `browser_specific_settings`). `review-risk` predicts Chrome Web Store
+  review unless `--store firefox` or `--store edge` is passed, so a clean Chrome
+  run says nothing about the other two stores.
+- `advise` finds calls by their text. A call through an alias is missed, and a
+  call that is already guarded is still listed.
