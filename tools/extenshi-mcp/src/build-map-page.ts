@@ -29,9 +29,12 @@
  *
  * Look and interaction follow the prototype in
  * internal-docs/prototypes/extension-progress-map/index.html (catalog design
- * tokens, both themes, pan/zoom, inspector). Everything the project or an agent
- * wrote (extension name, fact sentences, log lines) reaches the DOM through
- * textContent or `esc()`, never as markup.
+ * tokens, both themes, pan/zoom, inspector), with two departures: the
+ * dependency lines are routed round the steps (buildMapEdges) instead of drawn
+ * straight through them, and they stay one neutral colour, so that the colour
+ * on the map belongs to the steps and their clusters. Everything the project
+ * or an agent wrote (extension name, fact sentences, log lines) reaches the DOM
+ * through textContent or `esc()`, never as markup.
  *
  * The client script is plain ES2017 inside a template literal: it must not
  * contain backticks or `${`, so it concatenates strings.
@@ -107,6 +110,386 @@ function scriptJson(value: unknown): string {
 	return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
 }
 
+// ── Dependency lines ─────────────────────────────────────────────────────────
+// One S-curve from step to step runs over whatever stands between the two: on
+// this graph 41 of 101 lines crossed the body or the label of a step they have
+// nothing to do with. Each line is routed here instead: among the direct curve
+// and a family of detours (out to a clear horizontal lane and back in, from the
+// side or from above or below, or a bow round the column for steps one above
+// the other) the page draws the cheapest one, where running over a step costs
+// far more than a longer way round.
+
+/** Node radius; the client script draws with the same number. */
+const NODE_R = 27
+/** Where a line leaves and enters a step, from its centre. */
+const EDGE_GAP = NODE_R + 6
+/** How close to a step's centre a line may pass: its progress ring and some air. */
+const BODY_CLEAR = NODE_R + 10
+/** The label under a step, from its centre: top, bottom, and half a character's width. */
+const LABEL_TOP = NODE_R + 7
+const LABEL_BOTTOM = NODE_R + 20
+const LABEL_CHAR_HALF = 3.2
+/**
+ * What a sample of a line costs where it runs over a body, over the label of
+ * one of its own two steps (the line then seems to end at the text), over
+ * another step's label (its halo hides the line for a moment, which is mild),
+ * over a cluster title, along a cluster's border, or off the map.
+ */
+const COST_BODY = 220
+const COST_OWN_LABEL = 70
+const COST_LABEL = 26
+const COST_TITLE = 25
+const COST_RIM = 7
+const COST_OUTSIDE = 400
+/** And once per step it runs over, so that a short clip is not cheap. */
+const COST_BODY_ONCE = 600
+const COST_OWN_LABEL_ONCE = 200
+const COST_LABEL_ONCE = 70
+/**
+ * A detour pays for every unit it is longer than the plain curve, for each
+ * turn, and for every unit its lane lies above or below both of its steps: a
+ * line that heads away from where it is going is the hardest to follow.
+ */
+const COST_DETOUR = 0.7
+const COST_BEND = 14
+const COST_AWAY = 1.1
+
+type Pt = readonly [number, number]
+/** A cubic curve (four points) or a straight run (two). */
+type Seg = readonly [Pt, Pt, Pt, Pt] | readonly [Pt, Pt]
+type Candidate = { segments: Seg[]; bends: number; away?: number }
+
+export type BuildMapEdge = {
+	from: string
+	to: string
+	/** SVG path data, in world units. */
+	d: string
+	/** Steps the line still runs over (`id` for a body, `id:label` for a label); empty when it is clear. */
+	crosses: string[]
+}
+
+const clamp = (value: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, value))
+const coord = (value: number): number => Math.round(value * 10) / 10
+
+/** What stands where on the map, in cells of CELL world units: the step whose body or label covers a cell (index + 1). */
+const CELL = 2
+type Field = {
+	cols: number
+	rows: number
+	body: Int16Array
+	label: Int16Array
+	title: Uint8Array
+	rim: Uint8Array
+}
+
+function obstacleField(): Field {
+	const cols = Math.ceil(BUILD_WORLD.w / CELL) + 1
+	const rows = Math.ceil(BUILD_WORLD.h / CELL) + 1
+	const field: Field = {
+		cols,
+		rows,
+		body: new Int16Array(cols * rows),
+		label: new Int16Array(cols * rows),
+		title: new Uint8Array(cols * rows),
+		rim: new Uint8Array(cols * rows),
+	}
+	const fill = (
+		x0: number,
+		y0: number,
+		x1: number,
+		y1: number,
+		set: (index: number, x: number, y: number) => void,
+	) => {
+		for (let cy = Math.max(0, Math.floor(y0 / CELL)); cy <= Math.min(rows - 1, Math.ceil(y1 / CELL)); cy++)
+			for (let cx = Math.max(0, Math.floor(x0 / CELL)); cx <= Math.min(cols - 1, Math.ceil(x1 / CELL)); cx++)
+				set(cy * cols + cx, cx * CELL, cy * CELL)
+	}
+	BUILD_NODES.forEach((node, i) => {
+		fill(
+			node.x - BODY_CLEAR,
+			node.y - BODY_CLEAR,
+			node.x + BODY_CLEAR,
+			node.y + BODY_CLEAR,
+			(index, x, y) => {
+				if ((x - node.x) ** 2 + (y - node.y) ** 2 < BODY_CLEAR ** 2) field.body[index] = i + 1
+			},
+		)
+		const half = node.label.length * LABEL_CHAR_HALF + 4
+		fill(node.x - half, node.y + LABEL_TOP, node.x + half, node.y + LABEL_BOTTOM, (index) => {
+			field.label[index] = i + 1
+		})
+	})
+	for (const cluster of BUILD_CLUSTERS) {
+		const width = Math.max(cluster.name.length * 9.5, cluster.hint.length * 5.8) + 14
+		fill(cluster.x + 10, cluster.y + 8, cluster.x + 18 + width, cluster.y + 52, (index) => {
+			field.title[index] = 1
+		})
+		// A line that runs along a cluster's border reads as a second border; one that crosses it pays next to nothing.
+		const x1 = cluster.x + cluster.w
+		const y1 = cluster.y + cluster.h
+		const rim = (index: number) => {
+			field.rim[index] = 1
+		}
+		fill(cluster.x, cluster.y - 8, x1, cluster.y + 8, rim)
+		fill(cluster.x, y1 - 8, x1, y1 + 8, rim)
+		fill(cluster.x - 8, cluster.y, cluster.x + 8, y1, rim)
+		fill(x1 - 8, cluster.y, x1 + 8, y1, rim)
+	}
+	return field
+}
+
+function samples(segments: readonly Seg[]): { points: Pt[]; length: number } {
+	const points: Pt[] = []
+	for (const seg of segments) {
+		if (seg.length === 2) {
+			const [a, b] = seg
+			const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 10))
+			for (let i = 0; i <= steps; i++) {
+				const t = i / steps
+				points.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
+			}
+			continue
+		}
+		const [p0, p1, p2, p3] = seg
+		const steps = clamp(Math.ceil((Math.abs(p3[0] - p0[0]) + Math.abs(p3[1] - p0[1])) / 10), 8, 60)
+		for (let i = 0; i <= steps; i++) {
+			const t = i / steps
+			const u = 1 - t
+			points.push([
+				u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0],
+				u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1],
+			])
+		}
+	}
+	let length = 0
+	for (let i = 1; i < points.length; i++)
+		length += Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1])
+	return { points, length }
+}
+
+function pathData(segments: readonly Seg[]): string {
+	const at = (p: Pt): string => `${coord(p[0])},${coord(p[1])}`
+	let d = `M${at(segments[0][0])}`
+	for (const seg of segments)
+		d += seg.length === 2 ? ` L${at(seg[1])}` : ` C${at(seg[1])} ${at(seg[2])} ${at(seg[3])}`
+	return d
+}
+
+type Step = (typeof BUILD_NODES)[number]
+
+/** A turn of a quarter circle between a horizontal run through `corner` at height `lane` and a vertical one. */
+function quarter(from: Pt, corner: Pt, to: Pt): Seg {
+	const k = 0.55
+	return [
+		from,
+		[from[0] + (corner[0] - from[0]) * k, from[1] + (corner[1] - from[1]) * k],
+		[to[0] + (corner[0] - to[0]) * k, to[1] + (corner[1] - to[1]) * k],
+		to,
+	]
+}
+
+/** The ways to draw the line from `s` to `t`, the plain curve first. */
+function candidates(s: Step, t: Step): Candidate[] {
+	const out: Candidate[] = []
+	if (t.x - s.x <= 80) {
+		// One above the other (or the target to the left): top to bottom, or a bow round either side of the column.
+		const dir = t.y > s.y ? 1 : -1
+		const s2y = s.y + dir * EDGE_GAP
+		const t2y = t.y - dir * EDGE_GAP
+		const k = Math.max(40, Math.abs(t2y - s2y) * 0.45)
+		out.push({
+			segments: [
+				[
+					[s.x, s2y],
+					[s.x, s2y + dir * k],
+					[t.x, t2y - dir * k],
+					[t.x, t2y],
+				],
+			],
+			bends: 0,
+		})
+		for (const side of [-1, 1])
+			for (const bow of [40, 60, 84, 116, 150, 190]) {
+				const p0: Pt = [s.x + side * EDGE_GAP, s.y]
+				const p3: Pt = [t.x + side * EDGE_GAP, t.y]
+				out.push({
+					segments: [[p0, [p0[0] + side * bow, p0[1]], [p3[0] + side * bow, p3[1]], p3]],
+					bends: 1,
+				})
+			}
+		return out
+	}
+	const sx = s.x + EDGE_GAP
+	const tx = t.x - EDGE_GAP
+	const k = Math.max(40, (tx - sx) * 0.5)
+	out.push({
+		segments: [
+			[
+				[sx, s.y],
+				[sx + k, s.y],
+				[tx - k, t.y],
+				[tx, t.y],
+			],
+		],
+		bends: 0,
+	})
+	// Out to a horizontal lane, along it, and in: the lane is where the long stretch runs clear of the steps.
+	// Each end joins the lane from the side, in a gentle or a steep S, or from above or below in a quarter turn.
+	type End = { at: number; segments: Seg[]; bends: number }
+	const ends = (node: Step, lane: number, source: boolean): End[] => {
+		const side = source ? 1 : -1
+		const x0 = node.x + side * EDGE_GAP
+		const rise = Math.abs(lane - node.y)
+		if (!rise) return [{ at: x0, segments: [], bends: 0 }]
+		const list: End[] = []
+		const widths = new Set([0.2, 0.45, 0.8].map((scale) => Math.round(clamp(rise * scale, 38, 190))))
+		for (const width of widths) {
+			const x1 = x0 + side * width
+			const curve: Seg = source
+				? [
+						[x0, node.y],
+						[x0 + width * 0.5, node.y],
+						[x1 - width * 0.5, lane],
+						[x1, lane],
+					]
+				: [
+						[x1, lane],
+						[x1 + width * 0.5, lane],
+						[x0 - width * 0.5, node.y],
+						[x0, node.y],
+					]
+			list.push({ at: x1, segments: [curve], bends: 1 })
+		}
+		const radius = Math.min(40, rise - EDGE_GAP)
+		if (radius >= 14) {
+			const up = lane < node.y ? -1 : 1
+			const edge: Pt = [node.x, node.y + up * EDGE_GAP]
+			const turn: Pt = [node.x, lane - up * radius]
+			const onLane: Pt = [node.x + side * radius, lane]
+			const segments: Seg[] = source
+				? [quarter(turn, [node.x, lane], onLane)]
+				: [quarter(onLane, [node.x, lane], turn)]
+			if (rise - EDGE_GAP > radius) {
+				if (source) segments.unshift([edge, turn])
+				else segments.push([turn, edge])
+			}
+			// A turn into the top or the bottom of a step reads less plainly than one into its side.
+			list.push({ at: onLane[0], segments, bends: 1.7 })
+		}
+		return list
+	}
+	const lanes = new Set<number>([s.y, t.y])
+	const lo = clamp(Math.min(s.y, t.y) - 240, 20, BUILD_WORLD.h - 20)
+	const hi = clamp(Math.max(s.y, t.y) + 240, 20, BUILD_WORLD.h - 20)
+	for (let y = Math.ceil(lo / 5) * 5; y <= hi; y += 5) lanes.add(y)
+	for (const lane of lanes)
+		for (const a of ends(s, lane, true))
+			for (const b of ends(t, lane, false)) {
+				if (b.at < a.at) continue
+				const segments: Seg[] = [...a.segments]
+				if (b.at > a.at)
+					segments.push([
+						[a.at, lane],
+						[b.at, lane],
+					])
+				segments.push(...b.segments)
+				const away = Math.max(0, Math.min(s.y, t.y) - lane, lane - Math.max(s.y, t.y))
+				if (segments.length) out.push({ segments, bends: a.bends + b.bends, away })
+			}
+	return out
+}
+
+/**
+ * What a line runs over, and what that costs (the COST_ constants). Stops at
+ * `budget`: a candidate that already costs more than the best one is of no
+ * interest.
+ */
+function obstruction(
+	field: Field,
+	points: readonly Pt[],
+	from: number,
+	to: number,
+	budget: number,
+): { cost: number; bodies: Set<number>; labels: Set<number> } {
+	const bodies = new Set<number>()
+	const labels = new Set<number>()
+	let cost = 0
+	for (const [x, y] of points) {
+		if (x < 0 || y < 0 || x > BUILD_WORLD.w || y > BUILD_WORLD.h) {
+			cost += COST_OUTSIDE
+		} else {
+			const index = Math.round(y / CELL) * field.cols + Math.round(x / CELL)
+			const body = field.body[index] - 1
+			const label = field.label[index] - 1
+			if (body >= 0 && body !== from && body !== to) {
+				cost += COST_BODY
+				if (!bodies.has(body)) {
+					bodies.add(body)
+					cost += COST_BODY_ONCE
+				}
+			} else if (label >= 0) {
+				const own = label === from || label === to
+				cost += own ? COST_OWN_LABEL : COST_LABEL
+				if (!labels.has(label)) {
+					labels.add(label)
+					cost += own ? COST_OWN_LABEL_ONCE : COST_LABEL_ONCE
+				}
+			}
+			if (field.title[index]) cost += COST_TITLE
+			if (field.rim[index]) cost += COST_RIM
+		}
+		if (cost >= budget) break
+	}
+	return { cost, bodies, labels }
+}
+
+let routed: BuildMapEdge[] | undefined
+
+/** Every dependency of the graph as the line the page draws for it. The graph is static, so this runs once. */
+export function buildMapEdges(): readonly BuildMapEdge[] {
+	if (routed) return routed
+	const field = obstacleField()
+	const index = new Map(BUILD_NODES.map((node, i) => [node.id, i]))
+	const edges: BuildMapEdge[] = []
+	for (const node of BUILD_NODES)
+		for (const dep of node.deps) {
+			const from = index.get(dep)
+			const to = index.get(node.id)
+			if (from === undefined || to === undefined) continue
+			let best: { cost: number; edge: BuildMapEdge } | undefined
+			let shortest = 0
+			for (const candidate of candidates(BUILD_NODES[from], node)) {
+				// Its turns and its lane alone already cost more than the best line so far: not worth measuring.
+				if (best && candidate.bends * COST_BEND + (candidate.away ?? 0) * COST_AWAY >= best.cost) continue
+				const { points, length } = samples(candidate.segments)
+				if (!shortest) shortest = length
+				const shape =
+					Math.max(0, length - shortest) * COST_DETOUR +
+					candidate.bends * COST_BEND +
+					(candidate.away ?? 0) * COST_AWAY
+				if (best && shape >= best.cost) continue
+				const over = obstruction(field, points, from, to, best ? best.cost - shape : Number.POSITIVE_INFINITY)
+				const cost = over.cost + shape
+				if (best && cost >= best.cost) continue
+				best = {
+					cost,
+					edge: {
+						from: dep,
+						to: node.id,
+						d: pathData(candidate.segments),
+						crosses: [
+							...[...over.bodies].map((i) => BUILD_NODES[i].id),
+							...[...over.labels].map((i) => `${BUILD_NODES[i].id}:label`),
+						],
+					},
+				}
+			}
+			if (best) edges.push(best.edge)
+		}
+	routed = edges
+	return routed
+}
+
 /**
  * `token` authorises the page's writes (/api/confirm); without it, as in a
  * saved copy, the page shows no write buttons. The token belongs to one server
@@ -130,6 +513,7 @@ export function buildMapPage(options: {
 		world: BUILD_WORLD,
 		icons: ICONS,
 		mapReviews: BUILD_MAP_REVIEWS,
+		edges: buildMapEdges().map(({ from, to, d }) => ({ from, to, d })),
 	})
 	const session = scriptJson({
 		token: options.token ?? null,
@@ -167,6 +551,7 @@ const DARK_TOKENS = `
 	--ok: oklch(0.72 0.15 145); --ok-soft: oklch(0.28 0.06 145); --warn: oklch(0.8 0.15 75); --warn-soft: oklch(0.32 0.07 75);
 	--run: oklch(0.74 0.11 240); --run-soft: oklch(0.28 0.05 245);
 	--node-fill: oklch(0.21 0.02 150); --node-locked: oklch(0.18 0.015 150);
+	--edge: oklch(0.42 0.02 150 / 0.55); --edge-on: oklch(0.66 0.02 150 / 0.6);
 	--c-found: oklch(0.78 0.12 60); --c-scaf: oklch(0.74 0.11 240); --c-vis: oklch(0.76 0.13 340); --c-comp: oklch(0.74 0.14 145);
 	--c-tele: oklch(0.72 0.14 300); --c-money: oklch(0.8 0.14 90); --c-qa: oklch(0.74 0.11 200); --c-rel: oklch(0.6731 0.1624 144.2);
 	--cluster-alpha: 10%; --shadow: 0 10px 30px oklch(0 0 0 / 0.45);
@@ -182,6 +567,7 @@ const STYLE = `
 	--ok: oklch(0.6 0.14 150); --ok-soft: oklch(0.92 0.06 150); --warn: oklch(0.72 0.16 65); --warn-soft: oklch(0.94 0.07 75);
 	--run: oklch(0.6 0.13 250); --run-soft: oklch(0.92 0.045 250);
 	--node-fill: oklch(0.995 0.004 80); --node-locked: oklch(0.93 0.01 78);
+	--edge: oklch(0.74 0.02 70 / 0.55); --edge-on: oklch(0.5 0.03 40 / 0.5);
 	--c-found: oklch(0.72 0.14 45); --c-scaf: oklch(0.62 0.12 250); --c-vis: oklch(0.68 0.15 340); --c-comp: oklch(0.6 0.13 150);
 	--c-tele: oklch(0.58 0.16 300); --c-money: oklch(0.72 0.15 85); --c-qa: oklch(0.6 0.12 200); --c-rel: oklch(0.7234 0.1783 41.15);
 	--cluster-alpha: 7%; --shadow: 0 10px 30px oklch(0.3 0.03 40 / 0.14);
@@ -241,13 +627,17 @@ button { font: inherit; color: inherit; }
 .cluster rect { fill: color-mix(in oklch, var(--cc) var(--cluster-alpha), transparent); stroke: color-mix(in oklch, var(--cc) 35%, transparent); stroke-width: 1; rx: 22; }
 .cluster text { font-family: var(--font-sans); font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; fill: var(--cc); }
 .cluster .hint { font-size: 11.5px; font-weight: 400; letter-spacing: 0; text-transform: none; fill: var(--fg-2); }
-.edge { fill: none; stroke: var(--line-2); stroke-width: 1.6; transition: opacity .25s, stroke .25s; }
-.edge.sat { stroke: color-mix(in oklch, var(--cc) 70%, var(--fg-3)); stroke-width: 2; }
-.edge.flow { stroke: var(--run); stroke-width: 2.2; stroke-dasharray: 6 8; animation: flow 1.1s linear infinite; }
-.edge.off { stroke-dasharray: 3 6; opacity: .4; }
-.edge.dim { opacity: .18; }
-.edge.hi { stroke: var(--primary); stroke-width: 2.6; opacity: 1; }
-.edge.hi.flow { stroke: var(--run); }
+/* Lines stay one quiet neutral: the steps and their clusters carry the colour. A line is darker once
+   its input is done, blue and moving while an agent works on what it leads to, and takes an accent only
+   for the step under the pointer (near) or the selected one (hi). */
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.3; stroke-linecap: round; transition: opacity .2s, stroke .2s, stroke-width .2s; }
+.edge.sat { stroke: var(--edge-on); }
+.edge.flow { stroke: var(--run); stroke-width: 1.7; stroke-dasharray: 6 8; opacity: .85; animation: flow 1.1s linear infinite; }
+.edge.off { stroke-dasharray: 2 6; opacity: .5; }
+.edge.dim { opacity: .22; }
+.edge.near { stroke: var(--fg-2); stroke-width: 2; opacity: 1; }
+.edge.hi { stroke: var(--primary); stroke-width: 2.4; opacity: 1; }
+.edge.near.flow, .edge.hi.flow { stroke: var(--run); }
 .node { cursor: pointer; transition: opacity .25s; outline: none; }
 .node .body { fill: var(--node-fill); stroke: var(--cc); stroke-width: 2; transition: stroke .25s, fill .25s; }
 .node .halo { fill: var(--primary); opacity: 0; }
@@ -285,13 +675,13 @@ button { font: inherit; color: inherit; }
 .node.redo .badge, .node.stalled .badge { opacity: 1; }
 .node.redo .badge circle, .node.stalled .badge circle { fill: var(--warn); stroke: var(--warn); }
 .node.redo .badge path, .node.stalled .badge path { stroke: var(--fg); }
-.node.st-inactive { opacity: .32; }
-.node.st-inactive .body { stroke-dasharray: 4 4; fill: transparent; }
-.node.st-inactive .ic { stroke: var(--fg-3); }
-.node.st-inactive .lbl { fill: var(--fg-2); }
+/* Muted by colour, not by opacity: a see-through step lets the lines behind it show. */
+.node.st-inactive .body { stroke: var(--line-2); stroke-dasharray: 4 4; fill: var(--bg); }
+.node.st-inactive .pr-track { opacity: 0; }
+.node.st-inactive .ic { stroke: var(--line-2); }
+.node.st-inactive .lbl { fill: var(--fg-3); }
 .hide-inactive .node.st-inactive, .hide-inactive .edge.off { display: none; }
 .node.dim { opacity: .28; }
-.node.st-inactive.dim { opacity: .12; }
 .node.sel .body { stroke-width: 3.5; }
 .node.sel .sel-ring { opacity: 1; }
 .node .sel-ring { fill: none; stroke: var(--primary); stroke-width: 1.5; stroke-dasharray: 3 4; opacity: 0; }
@@ -503,7 +893,7 @@ const CLIENT = `
 (function () {
 'use strict';
 var G = JSON.parse(document.getElementById('graph').textContent);
-var ICONS = G.icons, WORLD = G.world, NODES = G.nodes, CLUSTERS = G.clusters;
+var ICONS = G.icons, WORLD = G.world, NODES = G.nodes, CLUSTERS = G.clusters, EDGES = G.edges;
 var COLORS = { found: 'var(--c-found)', scaf: 'var(--c-scaf)', vis: 'var(--c-vis)', comp: 'var(--c-comp)', tele: 'var(--c-tele)', money: 'var(--c-money)', qa: 'var(--c-qa)', rel: 'var(--c-rel)' };
 var byId = {}, children = {};
 NODES.forEach(function (n) { byId[n.id] = n; });
@@ -515,7 +905,7 @@ var el = function (tag, attrs, parent) { var e = document.createElementNS(SV, ta
 var SESSION = JSON.parse(document.getElementById('session').textContent);
 // The map in a chat (MCP Apps), with the variant thumbnails the MCP server has sent so far.
 var APP = SESSION.app || null, thumbs = {}, thumbAsked = {};
-var snap = null, selected = null, showInactive = true, edgeEls = {}, nodeEls = {}, firstSnapshot = true;
+var snap = null, selected = null, hovered = null, showInactive = true, edgeEls = {}, nodeEls = {}, firstSnapshot = true;
 // The author's write (a mark, or a route): in flight (or saved, until the snapshot shows it), and the last failure.
 // What the author typed belongs to the step (and task) it was typed for: another step never sends it.
 var pending = null, writeError = null, drafts = {};
@@ -546,14 +936,6 @@ function ago(iso) {
 	if (s < 86400) return Math.round(s / 3600) + 'h ago'; return Math.round(s / 86400) + 'd ago';
 }
 
-function edgePath(s, t) {
-	var sx = s.x + NODE_R + 6, tx = t.x - NODE_R - 6, sy = s.y, ty = t.y, k;
-	if (t.x - s.x > 80) { k = Math.max(40, (tx - sx) * 0.5); return 'M' + sx + ',' + sy + ' C' + (sx + k) + ',' + sy + ' ' + (tx - k) + ',' + ty + ' ' + tx + ',' + ty; }
-	var dir = ty > sy ? 1 : -1, s2y = s.y + dir * (NODE_R + 6), t2y = t.y - dir * (NODE_R + 6);
-	k = Math.max(40, Math.abs(t2y - s2y) * 0.45);
-	return 'M' + s.x + ',' + s2y + ' C' + s.x + ',' + (s2y + dir * k) + ' ' + t.x + ',' + (t2y - dir * k) + ' ' + t.x + ',' + t2y;
-}
-
 function buildWorld() {
 	CLUSTERS.forEach(function (c) {
 		var g = el('g', { 'class': 'cluster', style: '--cc:' + COLORS[c.id] }, $('gClusters'));
@@ -561,9 +943,8 @@ function buildWorld() {
 		el('text', { x: c.x + 18, y: c.y + 26 }, g).textContent = c.name;
 		el('text', { x: c.x + 18, y: c.y + 44, 'class': 'hint' }, g).textContent = c.hint;
 	});
-	NODES.forEach(function (n) { n.deps.forEach(function (d) {
-		edgeEls[d + '>' + n.id] = el('path', { 'class': 'edge', d: edgePath(byId[d], n), style: '--cc:' + COLORS[byId[d].cluster] }, $('gEdges'));
-	}); });
+	// The lines come routed (buildMapEdges): each takes the way that runs over no other step.
+	EDGES.forEach(function (e) { edgeEls[e.from + '>' + e.to] = el('path', { 'class': 'edge', d: e.d }, $('gEdges')); });
 	NODES.forEach(function (n) {
 		var g = el('g', { 'class': 'node', transform: 'translate(' + n.x + ',' + n.y + ')', style: '--cc:' + COLORS[n.cluster], tabindex: '0', role: 'button', 'aria-label': n.label }, $('gNodes'));
 		el('circle', { 'class': 'halo', r: NODE_R }, g);
@@ -580,9 +961,29 @@ function buildWorld() {
 		el('text', { 'class': 'you-tag', y: -NODE_R - 10 }, g).textContent = 'YOUR TURN';
 		g.addEventListener('click', function (ev) { if (dragMoved) return; ev.stopPropagation(); select(n.id); });
 		g.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(n.id); } });
+		// A step under the pointer (or the keyboard focus) shows its own lines without opening it.
+		g.addEventListener('pointerenter', function (ev) { if (ev.pointerType !== 'touch') hover(n.id); });
+		g.addEventListener('pointerleave', function () { hover(null); });
+		g.addEventListener('focus', function () { hover(n.id); });
+		g.addEventListener('blur', function () { hover(null); });
 		nodeEls[n.id] = g;
 	});
 }
+
+function paintEdges() {
+	if (!snap) return;
+	NODES.forEach(function (n) { n.deps.forEach(function (d) {
+		var ts = nv(n.id).status, ss = nv(d).status, cls = 'edge';
+		if (ts === 'inactive' || ss === 'inactive') cls += ' off';
+		else if (ss === 'done' && ts === 'running') cls += ' flow';
+		else if (ss === 'done') cls += ' sat';
+		if (selected && (d === selected || n.id === selected)) cls += ' hi';
+		else if (hovered && (d === hovered || n.id === hovered)) cls += ' near';
+		else if (selected) cls += ' dim';
+		edgeEls[d + '>' + n.id].setAttribute('class', cls);
+	}); });
+}
+function hover(id) { if (hovered === id) return; hovered = id; paintEdges(); }
 
 function related(a, b) { return a === b || byId[b].deps.indexOf(a) >= 0 || byId[a].deps.indexOf(b) >= 0; }
 
@@ -596,14 +997,7 @@ function render() {
 		g.querySelector('.pr').setAttribute('stroke-dashoffset', C * (1 - v.progress / 100));
 		g.querySelector('.bp').setAttribute('d', st === 'done' ? ICONS.check : st === 'needs_you' ? 'M12 5v9M12 18h.01' : (v.redo || v.stalled) ? ICONS.redo : st === 'locked' ? ICONS.lockS : '');
 	});
-	NODES.forEach(function (n) { n.deps.forEach(function (d) {
-		var ts = nv(n.id).status, ss = nv(d).status, cls = 'edge';
-		if (ts === 'inactive' || ss === 'inactive') cls += ' off';
-		else if (ss === 'done' && ts === 'running') cls += ' flow';
-		else if (ss === 'done') cls += ' sat';
-		if (selected) cls += (d === selected || n.id === selected) ? ' hi' : ' dim';
-		edgeEls[d + '>' + n.id].setAttribute('class', cls);
-	}); });
+	paintEdges();
 	$('ringVal').setAttribute('stroke-dashoffset', 94.25 * (1 - view.percent / 100));
 	$('ringPct').textContent = view.percent + '%';
 	$('cDone').textContent = view.done + ' / ' + view.active + ' done';
