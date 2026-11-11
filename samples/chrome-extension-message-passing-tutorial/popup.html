@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<title>Marker</title>
+	<link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+	<form id="marker-form">
+		<input id="word" type="text" placeholder="Word to highlight" autocomplete="off" />
+		<button type="submit">Highlight</button>
+	</form>
+	<p id="status" role="status">Type a word, then hit Highlight.</p>
+	<button id="clear" type="button">Clear highlights</button>
+	<section id="live" hidden>
+		<h1>Live from the page</h1>
+		<ul id="feed"></ul>
+	</section>
+	<script src="popup.js"></script>
+</body>
+</html>

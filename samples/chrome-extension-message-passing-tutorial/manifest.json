@@ -1,0 +1,19 @@
+{
+	"name": "Marker",
+	"description": "Highlight any word on the page — a hands-on tour of extension message passing.",
+	"version": "1.0",
+	"manifest_version": 3,
+	"background": {
+		"service_worker": "sw.js"
+	},
+	"action": {
+		"default_popup": "popup.html",
+		"default_title": "Marker"
+	},
+	"content_scripts": [
+		{
+			"matches": ["http://*/*", "https://*/*"],
+			"js": ["content.js"]
+		}
+	]
+}
