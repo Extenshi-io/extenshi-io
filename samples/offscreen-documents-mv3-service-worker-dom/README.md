@@ -33,4 +33,14 @@ walks the lifecycle and the clipboard staging area.
 the hidden document, `clipboardWrite` for the paste-ready result. No host
 permissions.
 
+## Browser changes since this was written
+
+Checked on 2026-11-11 with `npx @extenshi/cli@latest advise .`:
+
+- **Chrome 150** documents `chrome.offscreen.hasDocument()`, which resolves to
+  a boolean telling whether the extension has an offscreen document. The sample
+  keeps the `chrome.runtime.getContexts()` check because its manifest sets no
+  minimum Chrome version, and that check also works on older releases. If you
+  set `minimum_chrome_version` to 150 or later, `hasDocument()` can replace it.
+
 MIT, like the rest of this repository.

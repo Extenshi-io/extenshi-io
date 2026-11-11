@@ -35,4 +35,15 @@ Pure blocking needs no host permissions at all, but this extension also
 *rewrites* links, and redirect/modify rules need host access for the origins
 involved — that's why `*://*/*` is declared.
 
+## Browser changes since this was written
+
+Checked on 2026-11-11 with `npx @extenshi/cli@latest advise .`:
+
+- **Chrome 157** (stable since 2026-11-03): navigations started from a site the
+  user put under "block all extensions on this site" no longer match
+  declarativeNetRequest rules, including link clicks from that site to other
+  sites. No error is raised. The rules in this sample are unchanged and still
+  apply everywhere else; do not promise that a blocker built on them sees every
+  navigation.
+
 MIT, like the rest of this repository.

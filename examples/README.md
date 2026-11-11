@@ -10,10 +10,10 @@ the file and open it locally.
 
 | Example | Produced by | View |
 | --- | --- | --- |
-| `scan-report.html` | `npx @extenshi/cli@latest scan dist.zip` | [view rendered](https://htmlpreview.github.io/?https://raw.githubusercontent.com/MaximStone/extenshi-io/main/examples/scan-report.html) · [source](./scan-report.html) |
+| `scan-report.html` | `npx @extenshi/cli@latest scan dist.zip` | [view rendered](https://htmlpreview.github.io/?https://raw.githubusercontent.com/Extenshi-io/extenshi-io/main/examples/scan-report.html) · [source](./scan-report.html) |
 | `scan-report.md` | `npx @extenshi/cli@latest scan dist.zip --report report.md` | [read on GitHub](./scan-report.md) |
 | `scan-report.json` | `npx @extenshi/cli@latest scan dist.zip --json` | [source](./scan-report.json) |
-| `icon-preview.html` | `npx @extenshi/cli@latest icon preview icon.svg --name "Tab Tidy"` | [view rendered](https://htmlpreview.github.io/?https://raw.githubusercontent.com/MaximStone/extenshi-io/main/examples/icon-preview.html) · [source](./icon-preview.html) |
+| `icon-preview.html` | `npx @extenshi/cli@latest icon preview icon.svg --name "Tab Tidy"` | [view rendered](https://htmlpreview.github.io/?https://raw.githubusercontent.com/Extenshi-io/extenshi-io/main/examples/icon-preview.html) · [source](./icon-preview.html) |
 | `icon.svg` | the input icon used for the preview above | [source](./icon.svg) |
 
 > **These are samples.** The scan example is rendered by the production renderer

@@ -1,7 +1,7 @@
 # extenshi.io
 
 > **The browser-extension intelligence platform.** A cross-store catalog of
-> **390,000+ extensions** (Chrome, Firefox, Edge) with security analysis, plus
+> **418,000+ extensions** (Chrome, Firefox, Edge) with security analysis, plus
 > developer tooling for analytics, pre-publish scanning, and multi-store
 > publishing.
 
@@ -23,7 +23,7 @@ analysis, pre-publish security scanning, and one-command multi-store publishing.
 
 | | |
 |---|---|
-| 🔎 **Catalog** | <https://catalog.extenshi.io> — search 390k+ extensions, filter by store / category / pricing / risk / permissions |
+| 🔎 **Catalog** | <https://catalog.extenshi.io> — search 418k+ extensions, filter by store / category / pricing / risk / permissions |
 | 📚 **Docs** | <https://docs.extenshi.io> — product guides + full CLI reference |
 | ✍️ **Blog** | <https://blog.extenshi.io> — extension security research, store-policy changes, and hands-on API tutorials (their code is in [`samples/`](./samples/)) |
 | 🟢 **Status** | <https://status.extenshi.io> — live uptime for every public service |
@@ -43,9 +43,13 @@ backend with your own API key — there's nothing to host.
 
 | Tool | Install | What it does |
 |---|---|---|
-| **`@extenshi/cli`** | `npx @extenshi/cli@latest` | **Security scanner**, **store-review predictor**, **store-listing draft**, **icon toolbar preview**, **message localization**, **Dojo project sync**, **bulk safety lookup**, and **multi-store publisher** for `.zip` / `.crx` / `.xpi` artifacts. Runs in CI. |
+| **`@extenshi/cli`** | `npx @extenshi/cli@latest` | **Security scanner**, **store-review predictor** for all three stores, **browser-change check**, **real-browser smoke and scenario tests**, **store-listing draft**, **icon toolbar preview and store artwork**, **per-locale store screenshots**, **message localization**, **Dojo project sync**, **bulk safety lookup**, and **multi-store publisher** for `.zip` / `.crx` / `.xpi` artifacts. Runs in CI. |
 | **`@extenshi/mcp`** | `npx @extenshi/mcp@latest` | **MCP server** that brings the catalog, your projects, and pre-publish scanning into Claude, Cursor, and other AI tools. |
 | **`@extenshi/guard`** | `npx @extenshi/guard@latest` | **Lists every extension installed** on this machine, then checks that list against the catalog and walks you through removing or disabling the ones you choose. |
+
+Also on npm: [`@extenshi/pay`](https://www.npmjs.com/package/@extenshi/pay), the
+SDK that puts a paywall into an extension and sells on your own Stripe account
+([guide](https://docs.extenshi.io/developers/pay-sdk)).
 
 → [**Full CLI command reference**](./tools/extenshi-cli/) — commands and flags
 → [**Guard**](./tools/extenshi-guard/) — what is installed on this machine
@@ -59,6 +63,8 @@ Most of the CLI is **free and offline** — only `scan` and `risk` spend credits
 ```bash
 npx @extenshi/cli@latest icon preview ./icon.svg --name "My Extension"   # free, offline
 npx @extenshi/cli@latest review-risk ./dist/my-extension.zip             # free, offline
+npx @extenshi/cli@latest advise .                                        # free, code stays local
+npx @extenshi/cli@latest test smoke ./dist/my-extension.zip --browser chromium   # free, local browser
 npx @extenshi/cli@latest generate-listing ./dist/my-extension.zip        # free, offline
 npx @extenshi/cli@latest publish ./dist/my-extension.zip                 # free, your own store creds
 npx @extenshi/guard@latest list                                          # free, offline
@@ -76,9 +82,9 @@ install pins whatever version you last remembered to upgrade.
   **Settings → Connectors → Add custom connector** and paste
   `https://mcp.extenshi.io/mcp`. You sign in with your Extenshi account in the
   browser; there is no API key to copy.
-- **Extenshi plugin** — the connector plus five skills: vetting one extension,
+- **Extenshi plugin** — the connector plus six skills: vetting one extension,
   auditing the ones you have installed, market research, store-review
-  readiness, and icon design. Its source is
+  readiness, icon design, and the build map. Its source is
   [`plugins/extenshi/`](./plugins/extenshi/); copy the skills you want from
   there (see [`skills/`](./skills/)).
 
@@ -111,8 +117,10 @@ Everything in this list works without signing up. Bookmark what's useful.
 | | |
 |---|---|
 | `npx @extenshi/cli@latest icon preview <icon>` | Your icon at 16 px in real Chrome / Firefox / Edge toolbars, contrast + canvas checks, PNG & ZIP export. Fully offline. [See the output →](./examples/) |
-| `npx @extenshi/cli@latest review-risk <artifact>` | Predicts the store review: what gets **rejected**, what causes **user attrition** on update, what triggers a **slow** manual review. Fully offline. |
-| `npx @extenshi/cli@latest generate-listing <artifact>` | Writes `CHROMEWEBSTORE.md` (listing copy, permission justifications, privacy questions) from the package. Fully offline. |
+| `npx @extenshi/cli@latest review-risk <artifact>` | Predicts the store review: what gets **rejected**, what causes **user attrition** on update, what triggers a **slow** manual review. Chrome Web Store by default, `--store firefox` or `--store edge` for the others. Fully offline. |
+| `npx @extenshi/cli@latest advise <path>` | Checks your code and manifest against recent and upcoming Chrome, Edge and Firefox changes, with the file and line of each match. Your code stays on your machine. |
+| `npx @extenshi/cli@latest test smoke <package>` | Installs the exact zip in Chromium, Edge or Firefox and checks that it boots without errors. `test run` runs your scenarios against it. |
+| `npx @extenshi/cli@latest generate-listing <artifact>` | Writes `CHROMEWEBSTORE.md`, `EDGE.md` or `AMO.md` (listing copy, permission justifications, privacy questions) from the package. Fully offline. |
 | `npx @extenshi/cli@latest localize` | Prepares, checks, and applies `_locales` message translations on your machine. Fully offline. |
 | `npx @extenshi/cli@latest publish <artifact>` | Publishes to Chrome / Firefox / Edge with *your own* store credentials — uploads go straight from your machine to the stores. |
 | `npx @extenshi/guard@latest list` | Every extension installed in Chrome, Firefox, Edge, and the other browsers on this machine. Fully offline. |
@@ -136,7 +144,7 @@ Everything in this list works without signing up. Bookmark what's useful.
 | [Pin guide](https://pin.extenshi.io) | An illustrated “find it and pin it” page, with your own icon, that you can host anywhere |
 | [Uninstall survey](https://uninstall.extenshi.io) | A hosted survey for `setUninstallURL`: churn reasons, by version |
 | [Pricing](https://pricing.extenshi.io) | The one-time free allowance, and prepaid packs for reads, scans, icons, and Guard |
-| [Catalog search](https://catalog.extenshi.io) | 390k+ extensions across three stores, with risk ratings |
+| [Catalog search](https://catalog.extenshi.io) | 418k+ extensions across three stores, with risk ratings |
 | [Methodology](https://docs.extenshi.io/methodology) | How the scanning and risk scoring actually work — and their limits |
 
 **Open data:** the [research reports](#-public-research) below are CC BY 4.0.
@@ -175,6 +183,7 @@ Whether it's in **our** platform or in an **extension** we list, see
 - `@extenshi/cli` — <https://www.npmjs.com/package/@extenshi/cli>
 - `@extenshi/mcp` — <https://www.npmjs.com/package/@extenshi/mcp>
 - `@extenshi/guard` — <https://www.npmjs.com/package/@extenshi/guard>
+- `@extenshi/pay` — <https://www.npmjs.com/package/@extenshi/pay>
 - Remote MCP connector — `https://mcp.extenshi.io/mcp` ([setup](https://docs.extenshi.io/developers/mcp))
 
 ## License

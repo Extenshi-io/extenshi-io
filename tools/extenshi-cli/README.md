@@ -55,11 +55,16 @@ Most of the CLI needs **no account and no network**. Two commands spend credits:
 | `extenshi icon preview <icon>` | **Free**, no API key | ✅ none — fully offline |
 | `extenshi review-risk <artifact>` | **Free**, no API key | Local checks, including `--listing`, stay on your machine. `--extension-id` also reads your last published manifest from the catalog, and that read is free |
 | `extenshi generate-listing <artifact>` | **Free**, no API key | ✅ none — fully offline |
+| `extenshi advise <path>` | **Free**, no API key | Your code stays on your machine. Each run downloads the public list of browser changes from `cli.extenshi.io`; `--offline` skips it |
 | `extenshi localize …` | **Free**, no API key | ✅ none — fully offline |
+| `extenshi pin-guide` | **Free**, no API key | ✅ none — fully offline |
+| `extenshi map` | **Free**, no API key | Serves the build map on `127.0.0.1`. With a bound project and an API key it reads that project's decisions and readiness from Dojo |
 | `extenshi publish <artifact>` | **Free**, no Extenshi key for the upload | Uploads go straight from your machine to the store APIs. An access check runs first (testing phase) |
 | `extenshi login` | **Free** | Opens extenshi.io in your browser and saves the key locally |
-| `extenshi package` / `test smoke` / `amo-source` / `icon store-assets` / `screenshots` | **Free**, no API key | Run on your machine (`test smoke` and `screenshots` drive a local browser) |
-| `extenshi page …` / `media upload` / `uninstall …` | **Free** of catalog credits; API key required | Talks to Dojo about your project's hosted pages. `page generate` and `page validate` run offline without a key |
+| `extenshi package` / `test smoke` / `test run` / `amo-source` / `icon store-assets` / `screenshots` | **Free**, no API key | Run on your machine (`test …` and `screenshots` drive a local browser and can download a browser build into a cache outside your project) |
+| `extenshi analytics init` | **Free**, no API key | Edits your project locally (dry run unless `--write`). One announced npm version check; `--offline` skips it |
+| `extenshi page …` / `media upload` / `uninstall …` / `feedback …` / `privacy …` / `brand-mentions` | **Free** of catalog credits; API key required | Talks to Dojo about your project's hosted pages. `page generate` and `page validate` run offline without a key. `privacy` needs a Pro project |
+| `extenshi pay …` | **Free** of catalog credits; API key with Pay access | Talks to Dojo about your Pay applications |
 | `extenshi domain …` | API key, Pro project | Talks to Dojo; DNS records are yours to add |
 | `extenshi doctor` / `project` / `release` / `evidence` | **Free** of catalog credits; API key required | Talks to Dojo about your project. See the [project sync guide](https://docs.extenshi.io/developers/project-sync) |
 | `extenshi risk [store-ids…]` | **1 read credit per call**, up to 40 extensions per call | Catalog read |
@@ -87,10 +92,14 @@ docs.extenshi.io are documented there with every flag.
 | --- | --- |
 | [`scan <artifact>`](#extenshi-scan-artifact) | Pre-publish security scan of a `.crx` / `.xpi` / `.zip`, with an HTML report |
 | [`review-risk <artifact>`](#extenshi-review-risk-artifact) | Predict store review outcomes: REJECTED / ATTRITION / SLOW, per store and per listing locale. Alias: `review` |
-| [`generate-listing <artifact>`](#extenshi-generate-listing-artifact) | Write `CHROMEWEBSTORE.md` from the package, with privacy answers derived from its data flows |
+| [`generate-listing <artifact>`](#extenshi-generate-listing-artifact) | Write `CHROMEWEBSTORE.md`, `EDGE.md` or `AMO.md` from the package, with privacy answers derived from its data flows |
+| [`advise <path>`](#extenshi-advise-path) | Check the code and manifest against recent and upcoming Chrome, Edge and Firefox changes, with the file and line of each match |
 | [`localize`](#extenshi-localize) | Prepare, check, and apply `_locales` translations |
 | [`package [dir]`](https://docs.extenshi.io/developers/cli#extenshi-package) | Build one reproducible store zip per browser and print each sha256 |
 | [`test smoke <package>`](https://docs.extenshi.io/developers/cli#extenshi-test-smoke) | Install the exact zip (or a build folder) in a real browser and check that it boots without errors; with `--site`, that its content scripts inject |
+| [`test run <package>`](https://docs.extenshi.io/developers/cli#extenshi-test-run) | Run the scenarios of `extenshi.tests.json` against the exact package: click, type, then check text, storage, console errors and requests |
+| [`test scenarios draft` / `prompt` / `migrate`](https://docs.extenshi.io/developers/cli#extenshi-test-scenarios) | Draft scenarios from what the extension shows, brief a coding agent to write them, or convert a `scenes.json` |
+| [`analytics init [dir]`](https://docs.extenshi.io/developers/cli#extenshi-analytics-init) | Prepare a project for `extenshi-collector` compatibility telemetry: SDK config, manifest permissions, the Firefox data-collection declaration and the privacy-policy text. Dry run unless `--write` |
 | `amo-source <project-dir>` | Produce the AMO source-code archive and `BUILD.md` reviewer instructions for a Firefox add-on; `--verify` rebuilds from the archive and compares SHA-256 |
 | [`risk [store-ids…]`](#extenshi-risk-store-ids) | Safety scores for extensions that are already published, in bulk, by store id |
 | [`icon preview <icon>`](#extenshi-icon-preview-icon) | Render an icon inside Chrome / Firefox / Edge toolbars, with contrast checks + PNG/ZIP export |
@@ -101,6 +110,12 @@ docs.extenshi.io are documented there with every flag.
 | [`domain add` / `status` / `verify` / `remove`](https://docs.extenshi.io/developers/cli#extenshi-domain) | Serve the homepage and hosted pages at your own domain (Pro project) |
 | [`media upload <files…>`](https://docs.extenshi.io/developers/cli#extenshi-media-upload) | Upload a logo or screenshot to the project's public media store and print its stable URL |
 | `uninstall list` / `get` / `update` / `preview` / `translations` | Read, preview, and change the project's hosted uninstall survey and its translations; the survey URL and responses stay |
+| `feedback …` | The same for the hosted feedback form your extension opens while installed |
+| [`privacy publish`](https://docs.extenshi.io/developers/cli#extenshi-privacy-publish) | Publish the hosted privacy policy of a Pro project |
+| `brand-mentions <names…>` | Find every hosted field (surveys, welcome and instructions pages, homepage, privacy policy) that still holds a name, with the command that fixes it |
+| [`pin-guide`](https://docs.extenshi.io/developers/cli#extenshi-pin-guide) | Write the illustrated "pin it to the toolbar" steps for Chrome, Edge and Firefox as files for a welcome page bundled in the extension |
+| [`map`](https://docs.extenshi.io/developers/cli#extenshi-map) | Open the build map: a local page that shows which build steps are done, which an agent is working on and which wait on you |
+| `pay list` / `create` / `get` / `readiness` / `payment-evidence` / `link` | Manage [Extenshi Pay](https://docs.extenshi.io/developers/pay-sdk) applications from the terminal |
 | [`project`](#extenshi-project-release-and-evidence) / [`release`](#extenshi-project-release-and-evidence) / [`evidence`](#extenshi-project-release-and-evidence) / [`doctor`](#extenshi-project-release-and-evidence) | Sync project metadata and release evidence with Dojo |
 | [`login`](#extenshi-login) | Sign in through the browser and save the API key to `~/.extenshi/config.json` |
 | [`telemetry`](#environment-variables) | Show or set anonymous usage reporting: `on`, `off`, `status` |
@@ -184,16 +199,18 @@ consequence:
 - **TRIGGERS SLOW REVIEW** — nothing fatal, but it routes you into manual review.
 
 Runs fully offline against the artifact's manifest. **No API key, no upload, no
-credits.**
+credits.** One run predicts one store: the Chrome Web Store by default,
+`--store firefox` or `--store edge` for the others.
 
 ```bash
 npx @extenshi/cli@latest review-risk ./dist/my-extension.zip
+npx @extenshi/cli@latest review-risk ./dist/my-extension-firefox.zip --store firefox
 ```
 
 | Option | Description |
 | --- | --- |
 | `--extension-id <id>` | Numeric catalog ID — enables the auto-disable diff against your **last published** manifest (Ownership tab in dojo). |
-| `--store <chrome\|firefox\|edge>` | Store to diff the manifest against (default: `chrome`). Permission sets differ per store. |
+| `--store <chrome\|firefox\|edge>` | Store whose review to predict (default: `chrome`). Sets the store-specific listing and review-process findings, the name and description length limits, and the published manifest the diff uses. |
 | `--catalog-url <url>` | Override the catalog API base URL (default: `https://bff.extenshi.io`). |
 | `--listing <file>` | JSON file with your store listing text (`name`, `shortDescription`, `description`). The package already has the localized name and short description; this adds the full description, which lives only in the developer dashboard. |
 | `--json` | Output raw JSON findings. |
@@ -215,8 +232,43 @@ npx @extenshi/cli@latest review-risk ./dist/my-extension.zip --listing CHROMEWEB
 
 | Option | Description |
 | --- | --- |
-| `--output <path>` | Where to write the markdown (default: `CHROMEWEBSTORE.md` in the current directory). |
+| `--store <chrome\|edge\|firefox>` | Which store to draft for (default: `chrome`). Writes `CHROMEWEBSTORE.md`, `EDGE.md` or `AMO.md`. |
+| `--output <path>` | Where to write the markdown (default: the per-store filename in the current directory). |
 | `--listing <file>` | JSON file with your listing text, so the generated markdown can include the full description. |
+| `--payment <required\|not-used>` | Overrides "requires payment" (AMO) and the payment notes, which otherwise follow the Pay SDK found in the package. |
+
+---
+
+## `extenshi advise <path>`
+
+Checks your extension against the Chrome, Edge and Firefox changes listed on
+[cli.extenshi.io/changes](https://cli.extenshi.io/changes): APIs that start
+throwing or return something else, events that stop arriving, manifest keys and
+permissions that work differently, and new APIs that replace a workaround. Each
+match comes with the file and line, what changed and in which browser version,
+and what to do.
+
+```bash
+npx @extenshi/cli@latest advise .
+npx @extenshi/cli@latest advise ./dist/my-extension.zip --json
+```
+
+`<path>` is a source directory or a `.zip` / `.crx` / `.xpi`. It runs locally
+and needs no API key; your code is not uploaded. Each run downloads the current
+list of changes (a public file) and keeps it for a day in `~/.extenshi/`.
+
+| Option | Description |
+| --- | --- |
+| `--json` | Print raw JSON: every advisory with its matches. |
+| `--browsers <list>` | Browsers to check for: `chrome,edge,firefox,safari`. Default: Chrome and Edge, plus Firefox when the manifest has `browser_specific_settings.gecko`. |
+| `--as-of <YYYY-MM-DD>` | Decide what has already shipped as of this date instead of today. |
+| `--include-watch` | Also report proposals that have not merged yet. |
+| `--offline` | Use the list this CLI version ships with; do not download the current one. |
+
+Each advisory is labelled **BREAKS**, **BEHAVIOR CHANGE**, **DEPRECATED** or
+**OPPORTUNITY**. `advise` always exits 0, and matching is textual: a call
+through an alias is not found, and a call you already guard is still listed.
+Read each match as a place to check.
 
 ---
 

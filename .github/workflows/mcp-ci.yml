@@ -16,18 +16,26 @@ on:
       - 'tools/extenshi-mcp/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 is the floor the package declares in "engines"; 24 is what the monorepo builds on.
+        node-version: [20, 24]
     defaults:
       run:
         working-directory: tools/extenshi-mcp
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
       - name: Install
         run: npm install --no-audit --no-fund --ignore-scripts
       - name: Build

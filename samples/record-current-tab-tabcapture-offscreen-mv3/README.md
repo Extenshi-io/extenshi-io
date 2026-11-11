@@ -79,6 +79,17 @@ Before publishing your own recorder, run it through the free pre-publish scan:
 npx @extenshi/cli@latest scan ./rec-tab
 ```
 
+## Browser changes since this was written
+
+Checked on 2026-11-11 with `npx @extenshi/cli@latest advise .`:
+
+- **Chrome 156** (stable since 2026-10-20): `chrome.tabCapture` refuses tabs
+  whose URL is blocked by enterprise policy or by the user's site restrictions,
+  and disconnects an active capture when the tab navigates to such a site. The
+  sample already catches a refused `getMediaStreamId()` call. A capture that
+  Chrome cuts off mid-recording was not tested here; in a recorder you ship,
+  check that path and that the part recorded so far is still saved.
+
 ## Credits
 
 Written for the extenshi.io blog; grounded in Google's Apache-2.0
