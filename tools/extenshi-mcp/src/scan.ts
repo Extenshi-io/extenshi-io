@@ -18,6 +18,7 @@ import path from 'node:path'
 import { FormData, fetch, type Response } from 'undici'
 import { parseSseFrames, type SseEvent } from './sse.js'
 import { assertValidArtifact } from './validate-artifact.js'
+import { assertInsideWorkspace, WorkspacePathError } from './workspace-path.js'
 
 const SCAN_TIMEOUT_MS = 240_000
 const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024
@@ -39,6 +40,8 @@ export interface ScanArtifactOptions {
 	extensionId?: string
 	/** Called for each upstream progress event so the caller can stream it. */
 	onProgress?: (p: ScanProgress) => void
+	/** Workspace the artifact must live inside (default: cwd). */
+	workspaceRoot?: string
 }
 
 /** A scan failure that carries the HTTP status and the backend's machine code. */
@@ -87,7 +90,18 @@ function assertScanReport(report: unknown): ScanReport {
 }
 
 export async function scanArtifact(opts: ScanArtifactOptions): Promise<ScanReport> {
-	const { artifactPath, apiKey, scanUrl, extensionId, onProgress } = opts
+	const { apiKey, scanUrl, extensionId, onProgress } = opts
+
+	// Confine to the workspace before touching the file: the path arrives
+	// as a tool argument, and uploading an arbitrary absolute path would
+	// exfiltrate any .zip/.crx on the disk under the user's key.
+	let artifactPath: string
+	try {
+		artifactPath = assertInsideWorkspace(opts.artifactPath, opts.workspaceRoot)
+	} catch (err) {
+		if (err instanceof WorkspacePathError) throw new ScanError(err.message)
+		throw err
+	}
 
 	if (!fs.existsSync(artifactPath)) {
 		throw new ScanError(`Artifact file not found: ${artifactPath}`)

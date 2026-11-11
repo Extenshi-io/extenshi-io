@@ -25,6 +25,7 @@ import {
 	type UniversalPublishResult,
 } from '@extenshi/publisher'
 import { assertValidArtifact } from './validate-artifact.js'
+import { assertInsideWorkspace, WorkspacePathError } from './workspace-path.js'
 
 export type StoreCredentials = EnvStoreCredentials
 
@@ -75,6 +76,8 @@ export interface PublishArgs {
 	artifactPath: string
 	stores?: StoreType[]
 	firefoxArtifactPath?: string
+	/** Workspace the artifacts must live inside (default: cwd). */
+	workspaceRoot?: string
 	/** Firefox: public release notes (en-US). Edge: notes for certification without reviewerNotes. Chrome: not sent. */
 	releaseNotes?: string
 	/** Reviewers only. Firefox: AMO approval notes. Edge: notes for certification. Chrome: not sent. */
@@ -191,6 +194,23 @@ export function loadFirefoxListing(listing: NonNullable<PublishArgs['firefoxList
 }
 
 export async function publishArtifact(args: PublishArgs): Promise<UniversalPublishResult> {
+	// Confine artifacts to the workspace before anything reads them: the
+	// paths arrive as tool arguments, and publishing an arbitrary build
+	// from elsewhere on disk (under the user's store credentials and
+	// trusted listings) is exactly the prompt-injection endgame. The
+	// resolved realpaths replace the raw inputs for everything below.
+	try {
+		args = {
+			...args,
+			artifactPath: assertInsideWorkspace(args.artifactPath, args.workspaceRoot),
+			...(args.firefoxArtifactPath
+				? { firefoxArtifactPath: assertInsideWorkspace(args.firefoxArtifactPath, args.workspaceRoot) }
+				: {}),
+		}
+	} catch (err) {
+		if (err instanceof WorkspacePathError) throw new PublishSetupError(err.message)
+		throw err
+	}
 	if (!fs.existsSync(args.artifactPath)) {
 		throw new PublishSetupError(`Artifact not found: ${args.artifactPath}`)
 	}

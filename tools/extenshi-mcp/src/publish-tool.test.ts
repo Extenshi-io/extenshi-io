@@ -51,8 +51,13 @@ const context = { reportProgress: vi.fn() }
 let dir: string
 let artifact: string
 
+const ORIGINAL_CWD = process.cwd()
+
 beforeEach(() => {
 	dir = mkdtempSync(join(tmpdir(), 'mcp-publish-'))
+	// publishArtifact confines artifacts to the workspace (cwd); run the
+	// tool the way a real session in the project directory would.
+	process.chdir(dir)
 	artifact = join(dir, 'ext.zip')
 	writeFileSync(artifact, 'zip')
 	vi.stubEnv('EDGE_PRODUCT_ID', 'prod')
@@ -61,6 +66,7 @@ beforeEach(() => {
 	vi.mocked(publishToStores).mockClear()
 })
 afterEach(() => {
+	process.chdir(ORIGINAL_CWD)
 	vi.unstubAllEnvs()
 	rmSync(dir, { recursive: true, force: true })
 })

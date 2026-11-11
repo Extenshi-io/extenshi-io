@@ -46,7 +46,15 @@ afterEach(() => {
 })
 
 const scan = (onProgress?: (p: unknown) => void) =>
-	scanArtifact({ artifactPath: artifact, apiKey: 'ek_test', scanUrl, onProgress })
+	scanArtifact({
+		artifactPath: artifact,
+		apiKey: 'ek_test',
+		scanUrl,
+		onProgress,
+		// The fixture zip lives in a tmpdir; name it as the workspace the
+		// way a real project directory would be.
+		workspaceRoot: path.dirname(artifact),
+	})
 
 describe('scanArtifact against a stubbed scan API', () => {
 	it('returns the SSE result event as the report, with progress along the way', async () => {
