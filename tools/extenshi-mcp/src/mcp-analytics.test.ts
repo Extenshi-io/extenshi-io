@@ -10,12 +10,14 @@ class FakeSession {
 }
 
 const instrument = vi.fn()
+const useSessionConsent = vi.fn()
 vi.mock('fastmcp', () => ({ FastMCPSession: FakeSession }))
 vi.mock('@posthog/mcp', () => ({ instrument }))
 vi.mock('./telemetry.js', () => ({
 	telemetryClient: () => ({}),
 	telemetryEnabled: () => true,
-	telemetryAnonymousId: () => 'anonymous-install',
+	telemetryAnonymousId: () => 'install-id',
+	useSessionConsent,
 }))
 
 type BeforeSend = (event: { event: string; properties: Record<string, unknown> }) => unknown
@@ -37,6 +39,7 @@ const toolCall = () => ({
 async function install(opts: { surface: string; perSessionConsent?: boolean }) {
 	vi.resetModules()
 	instrument.mockClear()
+	useSessionConsent.mockClear()
 	FakeSession.prototype.connect = async () => {}
 	FakeSession.prototype.updateAuth = () => {}
 	const { instrumentMcpAnalytics } = await import('./mcp-analytics.js')
@@ -86,7 +89,22 @@ describe('instrumentMcpAnalytics', () => {
 		expect(JSON.stringify(sent)).not.toContain('abcdefghijklmnop')
 	})
 
+	it('leaves the local server on the answer saved on this machine', async () => {
+		// stdio has no consent screen: telemetry.ts stays off until the CLI has
+		// recorded a yes. Only the hosted connector may switch the source.
+		await install({ surface: 'mcp' })
+		expect(useSessionConsent).not.toHaveBeenCalled()
+	})
+
 	describe('with perSessionConsent (hosted connector)', () => {
+		it('declares per-connection consent before any session can report', async () => {
+			await install({ surface: 'mcp-remote', perSessionConsent: true })
+			expect(useSessionConsent).toHaveBeenCalledTimes(1)
+			expect(useSessionConsent.mock.invocationCallOrder[0]).toBeLessThan(
+				instrument.mock.invocationCallOrder[0],
+			)
+		})
+
 		it('fails closed until the session auth has consented', async () => {
 			const { beforeSend } = await install({ surface: 'mcp-remote', perSessionConsent: true })
 			expect(beforeSend(toolCall())).toBeNull()

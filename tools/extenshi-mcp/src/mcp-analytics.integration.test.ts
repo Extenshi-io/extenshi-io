@@ -27,6 +27,7 @@ vi.mock('./telemetry.js', () => ({
 	telemetryClient: () => (telemetry.enabled ? { capture: telemetry.capture } : null),
 	telemetryAnonymousId: () => (telemetry.enabled ? telemetry.anonymousId : undefined),
 	telemetryEnabled: () => telemetry.enabled,
+	useSessionConsent: () => {},
 }))
 
 const ACCOUNT_A = '68390376-f922-4b3c-a292-f9b3c9e52ee'

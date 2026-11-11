@@ -1,6 +1,6 @@
 'use strict'
 /**
- * Anonymous install ping — VENDORED, kept byte-identical between @extenshi/cli
+ * Install ping — VENDORED, kept byte-identical between @extenshi/cli
  * and @extenshi/mcp (it figures out which one it is from its own package.json).
  *
  * Fires a single `cli_installed` / `mcp_installed` event when the package is
@@ -16,16 +16,16 @@
  * It self-skips (no event, no network) when:
  *   - the package is NOT under node_modules — i.e. our own monorepo workspace
  *     install (tools/<pkg>), so dev installs never inflate adoption counts;
- *   - ~/.extenshi/config.json does not hold "telemetry": true — consent must be
- *     RECORDED, not merely un-refused. A postinstall runs before the CLI can
- *     ask anything, so "no answer yet" is not permission (see the ACCEPTED-ONLY
- *     note below);
+ *   - ~/.extenshi/config.json does not record a yes to the CURRENT question
+ *     ("telemetry": true next to "telemetryConsentVersion": CONSENT_VERSION).
+ *     A postinstall runs before the CLI can ask anything, so "no answer yet"
+ *     is not permission (see the ACCEPTED-ONLY note below);
  *   - DO_NOT_TRACK is truthy or EXTENSHI_TELEMETRY is off;
  *   - CI is set (CI re-installs would massively inflate the count);
  *   - no ingestion key is configured.
  *
  * Privacy: sends only the package version, Node version, coarse os/arch, a
- * first-install-on-this-machine boolean, and an anonymous per-install UUID (the
+ * first-install-on-this-machine boolean, and the random per-install UUID (the
  * same id the runtime telemetry uses). Never any path, package contents, or
  * user input.
  *
@@ -72,6 +72,10 @@ function done() {
 	process.exit(0)
 }
 
+// A standalone script cannot import telemetry.ts, so this is a copy of its
+// TELEMETRY_CONSENT_VERSION.
+const CONSENT_VERSION = 2
+
 try {
 	const path = require('node:path')
 	const fs = require('node:fs')
@@ -97,7 +101,7 @@ try {
 		.toLowerCase()
 	if (['0', 'false', 'off', 'no'].includes(optOut)) return done()
 
-	// Anonymous per-install id, shared with the runtime telemetry module.
+	// The per-install id is shared with the runtime telemetry module.
 	const configPath = path.join(os.homedir(), '.extenshi', 'config.json')
 	let cfg = {}
 	try {
@@ -107,10 +111,13 @@ try {
 	// Positive consent only. An install happens before the CLI can put the
 	// question, so an absent answer is "not asked yet", never "yes" — this exits
 	// for a machine that declined AND for one that has never been asked. Every
-	// line below this point, including minting the anonymous id, is reached only
+	// line below this point, including minting the install id, is reached only
 	// with a recorded `true`, which is what stops a bare `npx` from creating an
-	// identity on a machine that never agreed to one.
-	if (!cfg || cfg.telemetry !== true) return done()
+	// identity on a machine that never agreed to one. The yes must also be to the
+	// current question: a `true` left by the old default-on `[Y/n]` prompt has no
+	// version next to it and does not count (telemetry.ts,
+	// TELEMETRY_CONSENT_VERSION — postinstall.test.ts keeps the two in step).
+	if (!cfg || cfg.telemetry !== true || cfg.telemetryConsentVersion !== CONSENT_VERSION) return done()
 
 	let anonId = cfg.anonId
 	// Retained for event-schema stability, but it no longer measures anything:

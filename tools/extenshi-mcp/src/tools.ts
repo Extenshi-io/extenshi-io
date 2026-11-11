@@ -428,7 +428,7 @@ export function isExpectedError(err: unknown, kind: string = classifyError(err))
 /**
  * Account identity comes from validated auth; connection identity comes from
  * FastMCP's server-owned transport, not the auth object refreshed on each POST.
- * Local stdio keeps captureEvent's anonymous per-install identity.
+ * Local stdio keeps captureEvent's per-install identity.
  */
 function attribution(session: unknown, sessionId: unknown): { userId?: string; sessionId?: string } {
 	const s = session && typeof session === 'object' ? (session as Record<string, unknown>) : {}
@@ -442,7 +442,8 @@ function attribution(session: unknown, sessionId: unknown): { userId?: string; s
  * Wrap a tool definition so every call is reported: which tool ran, how long it
  * took, and how it failed (coarse error_kind + sanitized exception). On the
  * hosted connector the report also carries WHO — the authenticated account id —
- * and which connection it belonged to; on local stdio it stays anonymous. Never
+ * and which connection it belonged to; on local stdio it carries only the
+ * install id, and only if the user turned reporting on. Never
  * the arguments, never the result. The generic preserves the Zod-inferred
  * `args` type — `parameters` fixes Params, so the inner execute stays as
  * strongly typed as before.

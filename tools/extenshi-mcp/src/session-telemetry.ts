@@ -6,7 +6,8 @@ export function bindSessionTelemetryGuard(auth: object, allowed: () => boolean):
 }
 
 export function canCaptureSessionTelemetry(auth: unknown): boolean {
-	if (!auth || typeof auth !== 'object') return true // Local stdio stays anonymous.
+	// Local stdio has no session auth: the saved answer in telemetry.ts decides.
+	if (!auth || typeof auth !== 'object') return true
 	if ((auth as { telemetry?: unknown }).telemetry === false) return false
 	return guards.get(auth)?.() ?? true
 }

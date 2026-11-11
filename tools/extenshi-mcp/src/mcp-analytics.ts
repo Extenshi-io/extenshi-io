@@ -10,8 +10,12 @@
  * served uninstrumented. The SDK also wraps `setRequestHandler`, so the tool
  * handlers FastMCP re-registers on `toolsListChanged` stay instrumented.
  *
- * It reuses the telemetry client, so the same opt-outs apply (DO_NOT_TRACK,
- * EXTENSHI_TELEMETRY, config `telemetry: false`) and flushTelemetry() drains it.
+ * It reuses the telemetry client, so the same gate applies — off unless the
+ * user agreed (telemetry.ts), and always off under DO_NOT_TRACK /
+ * EXTENSHI_TELEMETRY=0 — and flushTelemetry() drains it.
+ *
+ * Local stdio: consent is the answer saved in ~/.extenshi/config.json by the
+ * CLI. This server cannot prompt, so without that answer nothing is sent.
  *
  * Per-connection consent (hosted connector): the consent screen lets a user
  * decline analytics, recorded as `telemetry: false` on the session's auth (see
@@ -34,7 +38,7 @@
 import { instrument } from '@posthog/mcp'
 import { FastMCPSession } from 'fastmcp'
 import { bindSessionTelemetryGuard } from './session-telemetry.js'
-import { telemetryAnonymousId, telemetryClient, telemetryEnabled } from './telemetry.js'
+import { telemetryAnonymousId, telemetryClient, telemetryEnabled, useSessionConsent } from './telemetry.js'
 
 const DROPPED_PROPERTIES = [
 	'$mcp_parameters',
@@ -68,6 +72,10 @@ let installed = false
 export function instrumentMcpAnalytics(opts: Options): void {
 	if (installed) return
 	installed = true
+	// The hosted connector asks each connection itself and has no user machine
+	// to keep an answer on, so the saved-on-this-device gate does not apply to
+	// it. Declared before any session exists, i.e. before the first event.
+	if (opts.perSessionConsent) useSessionConsent()
 	const proto = FastMCPSession.prototype
 	const connect = proto.connect
 	proto.connect = function (this: FastMCPSession, ...args: Parameters<typeof connect>) {
@@ -141,7 +149,7 @@ function instrumentSession(session: FastMCPSession, opts: Options): void {
 					const anonymousId = telemetryAnonymousId()
 					if (!anonymousId) return null
 					event.distinct_id = anonymousId
-					// The install stays anonymous, with no identify or alias to an account.
+					// The install id is never identified or aliased to an account.
 					props.$process_person_profile = false
 				}
 				for (const key of DROPPED_PROPERTIES) delete props[key]

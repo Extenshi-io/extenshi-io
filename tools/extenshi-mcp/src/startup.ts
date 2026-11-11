@@ -24,8 +24,8 @@
  * Every read/scan tool refuses without a key (see MISSING_KEY_MESSAGE), so a
  * high started-but-keyless share is an onboarding problem, not a demand problem.
  *
- * Privacy is unchanged from ./telemetry.ts: one boolean on top of the anonymous
- * base properties. No path, no key, no user input.
+ * Privacy is unchanged from ./telemetry.ts: sent only with the user's consent,
+ * and one boolean on top of the base properties. No path, no key, no user input.
  */
 
 import { captureEvent } from './telemetry.js'
@@ -37,7 +37,7 @@ export const SERVER_STARTED_EVENT = 'mcp_server_started'
 type Capture = (event: string, properties: Record<string, unknown>) => void
 
 /**
- * Everything this event carries beyond the anonymous base properties. Declared
+ * Everything this event carries beyond the base properties. Declared
  * as a closed type rather than a `Record`, so "the payload is one boolean" is
  * enforced by the compiler instead of asserted in prose: a later edit that tries
  * to smuggle the key itself in here does not type-check.

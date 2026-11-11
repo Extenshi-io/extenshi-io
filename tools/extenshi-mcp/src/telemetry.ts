@@ -1,35 +1,35 @@
 /**
- * Anonymous, opt-out usage telemetry — VENDORED, kept byte-identical between
- * @extenshi/cli and @extenshi/mcp (same pattern as validate-artifact.ts). Edit
- * one, copy to the other.
+ * Opt-in usage telemetry — VENDORED, kept byte-identical between @extenshi/cli
+ * and @extenshi/mcp (same pattern as validate-artifact.ts). Edit one, copy to
+ * the other.
  *
- * Why it exists: we want to know which commands/tools are used most, which fail,
- * and what errors recur — without shipping a heavyweight client or leaking PII.
+ * Off unless the user said yes. Storing an ID on someone's machine and reading
+ * it back for analytics needs prior consent (LSSI art. 22.2 / ePrivacy 5(3)),
+ * so nothing is sent and no `anonId` is minted or read unless ONE of these holds:
+ *   - ~/.extenshi/config.json records a yes to the CURRENT question — both
+ *     "telemetry": true and "telemetryConsentVersion": TELEMETRY_CONSENT_VERSION
+ *     (written by the CLI's first-run question and by `extenshi telemetry on`);
+ *   - EXTENSHI_TELEMETRY is 1/true/on/yes — typed by hand, for one environment;
+ *   - the host called useSessionConsent(): the hosted connector, which runs on
+ *     our servers and asks every connection on its own consent screen.
+ * No answer, a timeout, no TTY, CI and a headless MCP server all mean off.
+ * DO_NOT_TRACK (https://consoledonottrack.com), EXTENSHI_TELEMETRY=0/false/off/no
+ * and an emptied key (EXTENSHI_POSTHOG_KEY='') win over all three.
  *
- * What it sends (and ONLY this):
- *   - command/tool name, surface ('cli' | 'mcp'), package + Node version,
- *     coarse os/arch, a CI bool
+ * What a report carries. TELEMETRY_PROMPT_TEXT (the CLI's telemetry-consent.ts)
+ * is what the user agreed to, so keep it in step with this list:
+ *   - command/tool name, surface, package + Node version, os/arch, a CI bool
  *   - the NAMES of CLI flags used (never their values — see flagsFromArgv)
- *   - a coarse error_kind classification + durations
- *   - a path-redacted exception signature (message + stack, $HOME stripped)
+ *   - outcome, duration, exit code and a coarse error_kind
+ *   - for an unexpected failure, the error message and stack trace: the home
+ *     directory replaced by `~` (sanitizeError), the attached source lines
+ *     removed (stripSourceContext). A message can still quote user input.
+ * Never artifact or file contents, manifest data, API keys or flag values.
  *
- * What it NEVER sends: file paths, artifact names/contents, API keys, manifest
- * data, or raw user input.
+ * Identity is a random per-install UUID in ~/.extenshi/config.json (`anonId`):
+ * an install, not a person, never linked client-side to the API key or account.
  *
- * Identity is an anonymous per-install UUID in ~/.extenshi/config.json
- * (`anonId`) — it identifies an install, not a person, and is never linked to
- * the API key client-side.
- *
- * On by default: the shared-project ingestion key is embedded (see
- * EMBEDDED_KEY), so telemetry is active unless the user opts out. Disabled
- * (no-op, never blocks the command) when ANY holds:
- *   - DO_NOT_TRACK is truthy (industry standard, https://consoledonottrack.com)
- *   - EXTENSHI_TELEMETRY in {0,false,off,no}
- *   - config file has "telemetry": false
- *   - the key is cleared (EMBEDDED_KEY emptied AND no EXTENSHI_POSTHOG_KEY)
- *
- * Everything here is fail-soft: any throw inside telemetry is swallowed so a
- * PostHog/network/disk problem can never break or slow the actual command.
+ * Fail-soft: a throw in here is swallowed and can never break the command.
  */
 
 import { randomUUID } from 'node:crypto'
@@ -50,9 +50,29 @@ const DEFAULT_HOST = 'https://eu.i.posthog.com'
 const CONFIG_PATH = path.join(os.homedir(), '.extenshi', 'config.json')
 const HOME = os.homedir()
 
+/**
+ * Which wording of the consent question a saved `telemetry: true` answers.
+ *
+ * Version 1 carried no marker at all: it was the default-on `[Y/n]` prompt,
+ * where an empty Enter counted as yes. That is not consent, so a `true` saved
+ * without this marker is treated as "never asked" — off, and the CLI asks again.
+ * A saved `false` needs no marker; a refusal stands whatever it was a refusal of.
+ *
+ * Bump it whenever the question changes what the user is agreeing to (a new
+ * kind of data, a new recipient). Compared with `===` on purpose: a yes to a
+ * later wording is not a yes to this one either.
+ */
+export const TELEMETRY_CONSENT_VERSION = 2
+
 interface TelemetryConfigFile {
 	anonId?: string
 	telemetry?: boolean
+	telemetryConsentVersion?: number
+}
+
+/** True only for a saved yes to the current question. See TELEMETRY_CONSENT_VERSION. */
+export function consentRecorded(cfg: { telemetry?: unknown; telemetryConsentVersion?: unknown }): boolean {
+	return cfg.telemetry === true && cfg.telemetryConsentVersion === TELEMETRY_CONSENT_VERSION
 }
 
 let surface = 'unknown'
@@ -60,11 +80,23 @@ let appVersion = '0.0.0'
 let client: PostHog | null = null
 let triedInit = false
 let cachedAnonId: string | null = null
+let consentSource: 'device' | 'session' = 'device'
 
 /** Record the surface + version once at process startup. */
 export function initTelemetry(opts: { surface: string; version: string }): void {
 	surface = opts.surface
 	appVersion = opts.version
+}
+
+/**
+ * Declare that consent is collected per connection by the host, not saved on
+ * this machine. For the hosted connector only: it runs on our own servers, so
+ * there is no user device to store an ID on, and every event it sends is gated
+ * on that connection's answer to its consent screen (mcp-analytics.ts,
+ * session-telemetry.ts). Must be called before the first event of the process.
+ */
+export function useSessionConsent(): void {
+	consentSource = 'session'
 }
 
 function telemetryKey(): string {
@@ -100,13 +132,18 @@ function isTruthy(v: string | undefined): boolean {
 	return t === '1' || t === 'true' || t === 'yes' || t === 'on'
 }
 
+/**
+ * Off by default. The order is the contract: the switches that turn reporting
+ * OFF are read first, so no way of turning it on can override a refusal.
+ */
 export function telemetryEnabled(): boolean {
 	if (!telemetryKey()) return false
 	if (isTruthy(process.env.DO_NOT_TRACK)) return false
 	const t = (process.env.EXTENSHI_TELEMETRY ?? '').trim().toLowerCase()
 	if (t === '0' || t === 'false' || t === 'off' || t === 'no') return false
-	if (readConfig().telemetry === false) return false
-	return true
+	if (isTruthy(t)) return true
+	if (consentSource === 'session') return true
+	return consentRecorded(readConfig())
 }
 
 function anonId(): string {
@@ -124,8 +161,37 @@ function anonId(): string {
 
 /** The existing install identity, without identifying or aliasing an account. */
 export function telemetryAnonymousId(): string | undefined {
-	// Do not create a config/identity when usage telemetry is disabled.
+	// Without consent the id is neither minted nor read back from the config.
 	return telemetryEnabled() ? anonId() : undefined
+}
+
+const SOURCE_CONTEXT_KEYS = ['pre_context', 'context_line', 'post_context']
+
+/**
+ * posthog-node opens the source file behind every stack frame and attaches the
+ * lines around it to the report. A stack trace is what the user agreed to send;
+ * the contents of files on their disk are not, so those lines are removed from
+ * every event before it is queued. If that ever fails the event is dropped —
+ * losing a crash report is the cheaper mistake.
+ */
+export function stripSourceContext<T extends { properties?: Record<string | number, unknown> }>(
+	event: T,
+): T | null {
+	try {
+		const exceptions = event.properties?.$exception_list
+		if (!Array.isArray(exceptions)) return event
+		for (const exception of exceptions) {
+			const frames = (exception as { stacktrace?: { frames?: unknown } } | null)?.stacktrace?.frames
+			if (!Array.isArray(frames)) continue
+			for (const frame of frames) {
+				if (!frame || typeof frame !== 'object') continue
+				for (const key of SOURCE_CONTEXT_KEYS) delete (frame as Record<string, unknown>)[key]
+			}
+		}
+		return event
+	} catch {
+		return null
+	}
 }
 
 function getClient(): PostHog | null {
@@ -140,7 +206,12 @@ function getClient(): PostHog | null {
 		// Batch events; the 2–3 events a CLI run emits flush together on
 		// flushTelemetry()/shutdown(). The MCP server (long-running) also gets a
 		// periodic interval flush.
-		client = new PostHog(telemetryKey(), { host: telemetryHost(), flushAt: 20, flushInterval: 5000 })
+		client = new PostHog(telemetryKey(), {
+			host: telemetryHost(),
+			flushAt: 20,
+			flushInterval: 5000,
+			before_send: stripSourceContext,
+		})
 	} catch {
 		client = null
 	}
@@ -150,7 +221,7 @@ function getClient(): PostHog | null {
 /**
  * The shared posthog-node client, or null when telemetry is disabled. Exposed so
  * the MCP package's PostHog MCP Analytics instrumentation (mcp-analytics.ts)
- * rides this same client: one opt-out, one flush path (flushTelemetry).
+ * rides this same client: one consent gate, one flush path (flushTelemetry).
  */
 export function telemetryClient(): PostHog | null {
 	return getClient()
@@ -267,21 +338,27 @@ export function classifyError(err: unknown): string {
 	return 'unexpected'
 }
 
+const FLAG_NAME = /^--[A-Za-z][A-Za-z0-9-]{0,63}$/
+
 /**
  * The NAMES of long flags the user passed, with values stripped. `--out=/x`
  * becomes `--out`; the separate-token value of `--output /x` is never a `--`
- * token, so it is never collected. No flag VALUE can leak through here.
+ * token, so it is never collected. A token is kept only when what is left looks
+ * like a flag name (letters, digits, dashes), so a value that happens to start
+ * with `--` — a path, a URL, free text — is dropped rather than reported.
  */
 export function flagsFromArgv(argv: string[] = process.argv.slice(2)): string[] {
 	const flags = new Set<string>()
 	for (const tok of argv) {
-		if (tok.startsWith('--')) flags.add(tok.split('=')[0])
+		if (!tok.startsWith('--')) continue
+		const name = tok.split('=')[0]
+		if (FLAG_NAME.test(name)) flags.add(name)
 	}
 	return [...flags]
 }
 
 /**
- * `distinctId` overrides the per-install anonymous id. The CLI never passes it —
+ * `distinctId` overrides the per-install id. The CLI never passes it —
  * one install IS one identity there. The hosted MCP connector must: it is one
  * process serving many accounts, so the install id would collapse every user of
  * the service into a single person and re-mint on each redeploy. It passes the

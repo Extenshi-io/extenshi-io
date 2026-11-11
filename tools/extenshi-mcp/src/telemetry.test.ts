@@ -15,20 +15,23 @@ afterEach(() => {
 	process.env = { ...SAVED }
 })
 
-describe('telemetryEnabled', () => {
-	it('is enabled by default — the shared-project key is embedded', () => {
-		delete process.env.EXTENSHI_POSTHOG_KEY
-		expect(telemetryEnabled()).toBe(true)
-	})
-
-	it('stays enabled with an explicit key override and no opt-out signals', () => {
+describe('telemetryEnabled — environment switches', () => {
+	// Whether a SAVED answer turns reporting on is covered in
+	// telemetry-identity.test.ts, which runs against a throwaway home directory.
+	// These read no config: each variable below decides before the file is opened.
+	it('is switched on by an explicit EXTENSHI_TELEMETRY=1 / true / on / yes', () => {
 		process.env.EXTENSHI_POSTHOG_KEY = 'phc_test'
-		expect(telemetryEnabled()).toBe(true)
+		for (const v of ['1', 'true', 'on', 'yes', ' ON ']) {
+			process.env.EXTENSHI_TELEMETRY = v
+			expect(telemetryEnabled()).toBe(true)
+		}
 	})
 
-	it('honors DO_NOT_TRACK=1', () => {
+	it('honors DO_NOT_TRACK=1, also over an explicit EXTENSHI_TELEMETRY=1', () => {
 		process.env.EXTENSHI_POSTHOG_KEY = 'phc_test'
 		process.env.DO_NOT_TRACK = '1'
+		expect(telemetryEnabled()).toBe(false)
+		process.env.EXTENSHI_TELEMETRY = '1'
 		expect(telemetryEnabled()).toBe(false)
 	})
 
@@ -38,6 +41,12 @@ describe('telemetryEnabled', () => {
 			process.env.EXTENSHI_TELEMETRY = v
 			expect(telemetryEnabled()).toBe(false)
 		}
+	})
+
+	it('stays off with the key emptied, whatever else is set', () => {
+		process.env.EXTENSHI_POSTHOG_KEY = ''
+		process.env.EXTENSHI_TELEMETRY = '1'
+		expect(telemetryEnabled()).toBe(false)
 	})
 })
 
