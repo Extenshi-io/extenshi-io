@@ -102,7 +102,8 @@ export function registerFeedbackFormTools(
 			'where it comes from (`headline`, or `default` built from `title`, the store listing name or the ' +
 			'project name), translation status per project language {translated, missing, outdated}, and ' +
 			'`openSnippet`: the extension-side openFeedbackForm(src, extra) helper that opens the form with the ' +
-			'parameters it reads (site only from the popup\'s "Doesn’t work on this site?"). ' +
+			'parameters it reads (site only from the popup\'s "Doesn’t work on this site?", and in the URL ' +
+			'fragment, so it is sent only when the person presses Send). ' +
 			'Requires project.read. FREE.',
 		parameters: z.object(ids),
 		annotations: { title: 'Read a feedback form', ...READ_ONLY },
