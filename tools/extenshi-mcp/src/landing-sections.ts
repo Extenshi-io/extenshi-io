@@ -49,6 +49,7 @@ import {
 	landingPageWarnings,
 	safeHref,
 	safeImageSrc,
+	safeStoreHref,
 	safeSupportHref,
 	str,
 } from './landing-page.js'
@@ -1111,15 +1112,19 @@ function renderV2(
 			!s.hidden &&
 			(LANDING_SECTION_TYPES as readonly string[]).includes(s.type),
 	)
-	const stores = STORE_ORDER.filter((b) => storeUrl(form, b))
-	const primaryStore = stores[0] ? safeHref(storeUrl(form, stores[0])) : ''
+	// Store CTAs clamp to the official store host per browser (safeStoreHref):
+	// an install button on a hosted page must never point at an arbitrary
+	// https download. Pricing-plan ctaUrl below stays a plain safeHref — it is
+	// the author's own checkout link, not a store badge.
+	const stores = STORE_ORDER.filter((b) => safeStoreHref(b, storeUrl(form, b)))
+	const primaryStore = stores[0] ? safeStoreHref(stores[0], storeUrl(form, stores[0])) : ''
 
 	const badges = (browsers: LandingBrowser[]) =>
 		browsers
-			.filter((b) => storeUrl(form, b))
+			.filter((b) => safeStoreHref(b, storeUrl(form, b)))
 			.map(
 				(b, i) =>
-					`<a class="cta${i === 0 ? ' primary' : ''}" href="${safeHref(storeUrl(form, b))}" rel="noopener">${esc(ui(STORE_UI[b]))}<span class="cta-sub">${esc(BROWSER_NAMES[b])}</span></a>`,
+					`<a class="cta${i === 0 ? ' primary' : ''}" href="${safeStoreHref(b, storeUrl(form, b))}" rel="noopener">${esc(ui(STORE_UI[b]))}<span class="cta-sub">${esc(BROWSER_NAMES[b])}</span></a>`,
 			)
 			.join('\n')
 

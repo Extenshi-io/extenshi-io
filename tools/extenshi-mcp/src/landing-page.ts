@@ -206,6 +206,38 @@ export function safeSupportHref(raw: string): string {
 	return MAILTO.test(u) ? esc(u) : safeHref(u)
 }
 
+/** Official store hosts per browser — the only places an install CTA may point. */
+export const STORE_HOSTS: Record<LandingBrowser, string> = {
+	chrome: 'chromewebstore.google.com',
+	firefox: 'addons.mozilla.org',
+	edge: 'microsoftedge.microsoft.com',
+}
+
+/**
+ * Store-CTA clamp: https on the browser's OFFICIAL store host, else ''.
+ *
+ * A hosted landing is served from extenshi.io's reputation
+ * (page.extenshi.io, author custom domains), so an «Add to Chrome» button
+ * pointing at an arbitrary https URL is a phishing/malware-download kit
+ * with our name on it — scheme-only clamping (safeHref) still admitted
+ * any host. Exact host match, no subdomains: none of the three stores
+ * serves listings from one.
+ */
+/** True when `raw` is an https URL on the browser's official store host. */
+export function isOfficialStoreUrl(browser: LandingBrowser, raw: string): boolean {
+	const u = raw.trim()
+	if (!HTTPS_URL.test(u)) return false
+	try {
+		return new URL(u).hostname.toLowerCase() === STORE_HOSTS[browser]
+	} catch {
+		return false
+	}
+}
+
+export function safeStoreHref(browser: LandingBrowser, raw: string): string {
+	return isOfficialStoreUrl(browser, raw) ? esc(raw.trim()) : ''
+}
+
 const HTTPS_URL = /^https:\/\/[^\s"'<>\\]+$/i
 const DATA_IMAGE_URL = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/
 // A path relative to the page: no scheme (`javascript:`, `data:`, `http:`), not
@@ -298,22 +330,32 @@ export const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/
  */
 export function landingPageWarnings(input: LandingPageInput): string[] {
 	const out: string[] = []
-	const links: [string, unknown][] = [
-		['chromeUrl', input.storeUrls.chrome],
-		['firefoxUrl', input.storeUrls.firefox],
-		['edgeUrl', input.storeUrls.edge],
-		['privacyPolicyUrl', input.privacyPolicyUrl],
-	]
+	const links: [string, unknown][] = [['privacyPolicyUrl', input.privacyPolicyUrl]]
 	for (const [field, value] of links) {
 		const v = str(value)
 		if (v && safeHref(v) === '#') out.push(`${field} is not an http(s) URL; its link points to "#".`)
+	}
+	const storeFields: [string, LandingBrowser][] = [
+		['chromeUrl', 'chrome'],
+		['firefoxUrl', 'firefox'],
+		['edgeUrl', 'edge'],
+	]
+	for (const [field, browser] of storeFields) {
+		const v = str(input.storeUrls[browser])
+		if (v && !safeStoreHref(browser, v)) {
+			out.push(`${field} is not an official ${STORE_HOSTS[browser]} URL; its install button is omitted.`)
+		}
 	}
 	const support = str(input.supportUrl)
 	if (support && safeSupportHref(support) === '#') {
 		out.push('supportUrl is not an http(s) URL or a single mailto: address; its link points to "#".')
 	}
-	if (!(Object.keys(STORE_CTA_LABELS) as LandingBrowser[]).some((b) => str(input.storeUrls[b]))) {
-		out.push('No store URL is set, so the page has no install button.')
+	if (
+		!(Object.keys(STORE_CTA_LABELS) as LandingBrowser[]).some((b) =>
+			safeStoreHref(b, str(input.storeUrls[b])),
+		)
+	) {
+		out.push('No official store URL is set, so the page has no install button.')
 	}
 	if (str(input.accentColor) && !HEX_COLOR.test(str(input.accentColor))) {
 		out.push(`accentColor is not a hex colour; ${DEFAULT_ACCENT} is used.`)
@@ -372,10 +414,11 @@ export function buildLandingPage(input: LandingPageInput): string {
 		: `<div class="logo monogram" aria-hidden="true">${esc(monogram)}</div>`
 
 	const ctas = (Object.keys(STORE_CTA_LABELS) as LandingBrowser[])
-		.filter((b) => str(input.storeUrls[b]))
+		.map((b) => ({ browser: b, href: safeStoreHref(b, str(input.storeUrls[b])) }))
+		.filter(({ href }) => href)
 		.map(
-			(b) =>
-				`<a class="cta${b === 'chrome' ? ' primary' : ''}" href="${safeHref(str(input.storeUrls[b]))}" rel="noopener">${STORE_CTA_LABELS[b]}<span class="cta-sub">${esc(BROWSER_LABELS[b])}</span></a>`,
+			({ browser: b, href }) =>
+				`<a class="cta${b === 'chrome' ? ' primary' : ''}" href="${href}" rel="noopener">${STORE_CTA_LABELS[b]}<span class="cta-sub">${esc(BROWSER_LABELS[b])}</span></a>`,
 		)
 		.join('\n\t\t\t')
 
@@ -419,7 +462,14 @@ export function buildLandingPage(input: LandingPageInput): string {
 			extensionName: rawName,
 			tagline: str(input.tagline),
 			description,
-			storeUrls: input.storeUrls,
+			// JSON-LD downloadUrl gets the same official-store clamp as the
+			// visible CTA — schema.org consumers must not be pointed at an
+			// arbitrary host either.
+			storeUrls: Object.fromEntries(
+				(Object.keys(STORE_CTA_LABELS) as LandingBrowser[])
+					.filter((b) => isOfficialStoreUrl(b, str(input.storeUrls[b])))
+					.map((b) => [b, str(input.storeUrls[b]).trim()]),
+			),
 			features: featureList
 				.filter((f) => str(f?.title))
 				.map((f) => ({ title: str(f.title), description: str(f.description) })),
