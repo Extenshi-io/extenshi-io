@@ -372,7 +372,7 @@ export async function updateMapState(
 			const read = await readMapState(home)
 			if (read.problem) throw new Error(`Cannot update the build map: ${read.problem}`)
 			const next = change(read.state) ?? read.state
-			await writeJsonAtomic(mapPath(home, MAP_STATE_FILE), next)
+			await writeJsonAtomic(mapPath(home, MAP_STATE_FILE), next, 0o600)
 			return next
 		},
 		{ what: `${MAP_DIR}/${STATE_LOCK}` },
