@@ -164,6 +164,81 @@ export function registerUninstallFormTools(
 		},
 	})
 	add({
+		name: 'get_uninstall_offer',
+		description:
+			"The discounted offer of one uninstall survey: after an answer whose reason is in the offer's list, the " +
+			'survey shows the project plans at a discount and takes the payment on the page; the buyer then installs ' +
+			'the extension again and restores the purchase by email. Returns `offer` {status, reasons, items [{sku, ' +
+			'percentOff}], discountDuration, claimTtlHours, maxRedemptions, revision} (revision 0 = none yet; pass it ' +
+			'back as expectedRevision), `blockers` (what still stops buyers from seeing it: not_premium, ' +
+			'form_disabled, no_pay_application, seller_not_ready, recovery_unavailable, no_reasons, no_plans, ' +
+			'not_active; no_install_page only removes the install link after payment), `plans` (the active Pay ' +
+			'offers a discount may be set on) and `stats` {shown, checkoutStarted, redeemed}. Requires ' +
+			'project.read. FREE.',
+		parameters: z.object(ids),
+		annotations: { title: "Read an uninstall survey's discounted offer", ...READ_ONLY },
+		execute: async (args, context) => {
+			try {
+				return JSON.stringify(await bff(context).getUninstallOffer(args))
+			} catch (err) {
+				return fail(err)
+			}
+		},
+	})
+	add({
+		name: 'update_uninstall_offer',
+		description:
+			'Set the discounted offer of an uninstall survey. Send the WHOLE offer every time. `reasons` are the ' +
+			'answers that show it, from one to all of the survey’s reasons: a reason key, `custom:<label>` or ' +
+			'`other` (read them with get_uninstall_form). `items` give a whole percentage from 1 to 99 per plan SKU ' +
+			'(from `plans` of get_uninstall_offer); a discounted price below 0.50 in the plan currency is refused. ' +
+			'discountDuration: first_payment (renewals at the regular price) or forever. status: active ' +
+			'shows it, paused stops new offers while the ones already shown stay valid until they expire. ' +
+			'expectedRevision is `offer.revision` from get_uninstall_offer; an offer changed since is refused ' +
+			'(CONFLICT). dryRun: true checks everything, returns {before, after, blockers, requiresPro} and writes ' +
+			'nothing. Saving needs a Pro project. A discount is a price: on the hosted connector this returns ' +
+			'status "pending_approval" with an approvalUrl and nothing changes until the owner approves it in Dojo ' +
+			'(get_approval reports the outcome); with a local API key the offer is saved at once. Set it only on ' +
+			'the owner’s instruction. Requires pay.write.',
+		parameters: z.object({
+			...ids,
+			expectedRevision: z.number().int().min(0).describe('`offer.revision` from get_uninstall_offer.'),
+			status: z.enum(['draft', 'active', 'paused']),
+			reasons: z.array(z.string().min(1).max(80)).max(16),
+			items: z
+				.array(
+					z.object({
+						sku: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,39}$/),
+						percentOff: z.number().int().min(1).max(99),
+					}),
+				)
+				.max(10),
+			discountDuration: z.enum(['first_payment', 'forever']),
+			claimTtlHours: z.number().int().min(1).max(720).describe('How long a shown offer waits for the buyer.'),
+			maxRedemptions: z
+				.number()
+				.int()
+				.min(1)
+				.nullable()
+				.describe('Stop after this many purchases; null = no limit.'),
+			dryRun: z.boolean().optional(),
+		}),
+		annotations: {
+			title: "Set an uninstall survey's discounted offer",
+			readOnlyHint: false,
+			idempotentHint: true,
+			destructiveHint: false,
+			openWorldHint: true,
+		},
+		execute: async (args, context) => {
+			try {
+				return JSON.stringify(await bff(context).updateUninstallOffer(args))
+			} catch (err) {
+				return fail(err)
+			}
+		},
+	})
+	add({
 		name: 'preview_uninstall_form',
 		description:
 			'What the live survey shows in one language, built by the functions the page uses: heading, ' +

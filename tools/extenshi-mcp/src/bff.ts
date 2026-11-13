@@ -206,6 +206,21 @@ export interface Bff extends PayBff {
 		confirmPrivacyChange?: boolean
 		proposedBy?: string
 	}): Promise<unknown>
+	/** The survey's discounted offer: settings + revision, blockers, the project's plans, counts. */
+	getUninstallOffer(input: { projectId: string; formId: string }): Promise<unknown>
+	/** Set the whole offer; dryRun checks it. Requires pay.write; the connector proposes, a key saves. */
+	updateUninstallOffer(input: {
+		projectId: string
+		formId: string
+		expectedRevision: number
+		status: 'draft' | 'active' | 'paused'
+		reasons: string[]
+		items: Array<{ sku: string; percentOff: number }>
+		discountDuration: 'first_payment' | 'forever'
+		claimTtlHours: number
+		maxRedemptions: number | null
+		dryRun?: boolean
+	}): Promise<unknown>
 	/** The page and after-submit screens in one language; records nothing. */
 	previewUninstallForm(input: { projectId: string; formId: string; locale?: string }): Promise<unknown>
 	/** Survey answers, newest first, with reason/version breakdowns (uninstallFeedback.agentListResponses). */
@@ -399,6 +414,8 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		listUninstallForms: (input) => client.uninstallFeedback.agentListForms.query(input),
 		getUninstallForm: (input) => client.uninstallFeedback.agentGetForm.query(input),
 		updateUninstallForm: (input) => client.uninstallFeedback.agentUpdateForm.mutate(input),
+		getUninstallOffer: (input) => client.uninstallFeedback.agentGetOffer.query(input),
+		updateUninstallOffer: (input) => client.uninstallFeedback.agentUpdateOffer.mutate(input),
 		previewUninstallForm: (input) => client.uninstallFeedback.agentPreviewForm.query(input),
 		listUninstallResponses: (input) => client.uninstallFeedback.agentListResponses.query(input),
 		listFeedbackForms: (input) => client.feedbackForm.agentListForms.query(input),

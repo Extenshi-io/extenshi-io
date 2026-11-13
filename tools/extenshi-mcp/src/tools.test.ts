@@ -155,6 +155,8 @@ const READ_TOOLS = [
 	'list_uninstall_forms',
 	'get_uninstall_form',
 	'update_uninstall_form',
+	'get_uninstall_offer',
+	'update_uninstall_offer',
 	'preview_uninstall_form',
 	'list_uninstall_responses',
 	'list_feedback_forms',
@@ -848,6 +850,8 @@ describe('directory tool annotations', () => {
 			'rollback_license_terms',
 			// Edits an existing uninstall survey (hosted.write); its URL and responses stay.
 			'update_uninstall_form',
+			// The survey's discounted offer (pay.write): a proposal on the connector, like a price.
+			'update_uninstall_offer',
 			// Same for a feedback form.
 			'update_feedback_form',
 			'upload_project_media',

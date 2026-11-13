@@ -156,6 +156,8 @@ export const DEVELOPMENT_SERVICES = [
 			'list_uninstall_forms',
 			'get_uninstall_form',
 			'update_uninstall_form',
+			'get_uninstall_offer',
+			'update_uninstall_offer',
 			'preview_uninstall_form',
 			'list_uninstall_responses',
 			'list_feedback_forms',
