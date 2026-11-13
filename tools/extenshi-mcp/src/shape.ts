@@ -76,6 +76,15 @@ function primaryCategory(snap: Obj): unknown {
 	return undefined
 }
 
+/** Names of the extracted features that matched the query, if any. */
+function matchedFeatureNames(item: Obj): string[] | undefined {
+	if (!Array.isArray(item.matchedFeatures)) return undefined
+	const names = item.matchedFeatures
+		.map((feature) => (isObj(feature) && typeof feature.name === 'string' ? feature.name.slice(0, 120) : ''))
+		.filter((name) => name.length > 0)
+	return names.length > 0 ? names : undefined
+}
+
 /** Curate one search-result cluster via its primary (first) snapshot. */
 function shapeSearchItem(item: unknown): Obj {
 	if (!isObj(item)) return { value: compact(item) }
@@ -102,6 +111,7 @@ function shapeSearchItem(item: unknown): Obj {
 		safetyScore: toSafetyScore(riskAssessment?.overallScore ?? security?.overallScore),
 		shortDescription:
 			typeof snap.shortDescription === 'string' ? snap.shortDescription.slice(0, 200) : undefined,
+		matchedFeatures: matchedFeatureNames(item),
 	})
 }
 

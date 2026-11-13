@@ -46,7 +46,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 
 | Tool | What it does | Cost |
 | --- | --- | --- |
-| `search_extensions` | Hybrid search across Chrome/Firefox/Edge with filters (store, category, pricing, rating, risk, permissions) | 1 read |
+| `search_extensions` | Search across Chrome/Firefox/Edge by name, description and extracted features, with filters (store, category, pricing, rating, risk, permissions) | 1 read |
 | `get_extension` | Full catalog detail for one extension — by numeric catalog ID **or** by its store id (see below) | 1 read |
 | `get_reviews` | Paginated Firefox/Edge user reviews (rating, short excerpt, date, language) + a store-level aggregate (rating, count, reviews link) — Chrome Web Store review rows excluded (aggregate is the only public content for Chrome); reviewer identity omitted; sort by recent or rating | 1 read |
 | `get_security` | Risk score + finding counts + top grouped findings (reads existing scans) | 3 reads |

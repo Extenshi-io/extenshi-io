@@ -2088,7 +2088,11 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'search_extensions',
 			description:
-				'Search the cross-store extension catalog (Chrome, Firefox, Edge) with hybrid relevance. ' +
+				'Search the cross-store extension catalog (Chrome, Firefox, Edge). A free-text query matches ' +
+				'the listing name and description, and also the features extracted for the extension ' +
+				'(what it does). A result that matched through a feature lists it in `matchedFeatures`. ' +
+				'Features are extracted for part of the catalog, so a result without `matchedFeatures` ' +
+				'may still have the function. ' +
 				'All filters (rating/reviews thresholds, store, category, pricing, risk, permissions, ' +
 				'freshness, manifest version, trader status) are applied server-side by the catalog ' +
 				'database, so a filtered request returns only the matching subset. `skip` pages through ' +
@@ -2096,7 +2100,10 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				`${describeStoreConstraints()} ` +
 				'Returns a compact list for market research and competitive analysis.',
 			parameters: z.object({
-				query: z.string().optional().describe('Free-text search query (name, description, keywords).'),
+				query: z
+					.string()
+					.optional()
+					.describe('Free-text search query: a name, keywords, or a function such as "picture in picture".'),
 				stores: z
 					.array(z.enum(['CHROME', 'FIREFOX', 'EDGE']))
 					.optional()

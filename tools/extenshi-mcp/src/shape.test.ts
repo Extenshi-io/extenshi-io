@@ -157,6 +157,34 @@ describe('safety-score parity with the website', () => {
 		expect(item.riskScore).toBeUndefined()
 	})
 
+	it('shapeSearch lists the features a result matched through, by name', () => {
+		const out = shapeSearch(
+			{
+				items: [
+					{
+						id: 1,
+						slug: 'x',
+						snapshots: [{ name: 'X' }],
+						matchedFeatures: [
+							{ name: 'emoji shortname conversion', description: 'Converts :smile: to an emoji.' },
+							{ name: '', description: null },
+							'not an object',
+						],
+					},
+					{ id: 2, slug: 'y', snapshots: [{ name: 'Y' }] },
+					{ id: 3, slug: 'z', snapshots: [{ name: 'Z' }], matchedFeatures: [] },
+				],
+				total: 3,
+			},
+			10,
+		)
+		const items = out.items as Record<string, unknown>[]
+		expect(items[0].matchedFeatures).toEqual(['emoji shortname conversion'])
+		// A listing-text match carries no field at all, not an empty array.
+		expect('matchedFeatures' in items[1]).toBe(false)
+		expect('matchedFeatures' in items[2]).toBe(false)
+	})
+
 	it('shapeSecurity summary reports safetyScore from the raw risk summary', () => {
 		const out = shapeSecurity(null, { overallScore: 10, riskCategory: 'LOW' }, undefined)
 		const summary = out.summary as Record<string, unknown>
