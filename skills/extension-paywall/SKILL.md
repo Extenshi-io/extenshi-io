@@ -11,6 +11,10 @@ description: >
 
 # Extension paywall
 
+**Extenshi Pay is in beta.** Prepare the integration or demonstrate the paywall in
+mock mode. Seller agreement acceptance and live payments are currently unavailable
+to third-party developers.
+
 Turn a feature of a browser extension into a paid one with `@extenshi/pay`.
 The paywall is compiled into the extension bundle (no iframe, no remote code,
 store approval is not guaranteed), the checkout is a hosted Stripe page in a new
@@ -32,7 +36,7 @@ a live agreement and completed provider onboarding before checkout can be enable
 With authorized `pay.read` / `pay.write` access, use `create_pay_app`,
 `get_pay_readiness`, `connect_pay_seller`, `set_pay_seller_profile` and
 `upsert_pay_offer`. Use the author's approved identity, prices and terms. Return
-onboarding and agreement URLs for the author to complete in their browser.
+the onboarding URL for the author to complete in their browser.
 To change an existing offer's text, send `upsert_pay_offer` with `appId`, `sku`
 and only the new `title` or `description`: omitted fields keep their stored
 values, so the price, features and paywall order stay as they are.

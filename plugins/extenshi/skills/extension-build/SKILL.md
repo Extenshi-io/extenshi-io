@@ -139,6 +139,35 @@ is done while the map shows it otherwise. Before a store submission, name the
 steps that rest only on the author's word (`basis: author`) so they can check
 them once more.
 
+**Skills for a step.** Every step an agent works on names the published skills
+that hold the instructions for it: the foundation steps name
+`extension-planning`, the scaffold and manifest `extension-scaffold`, the
+service worker, pages and unit tests `extension-surfaces`, the icon steps
+`extension-icon-design`, permissions and listing copy
+`extension-store-readiness`, builds, screenshots and the browser matrix
+`extension-testing`, localization `extension-localization`, niche research and
+the pricing comparison `extension-market-research`, the data inventory, policy
+and declarations `extension-compliance`, the scan, its fixes and CI
+`extension-security-scan`, analytics and errors `extension-analytics`, the
+welcome page, uninstall survey and feedback form
+`extension-onboarding-feedback`, payments `extension-paywall`, packaging and
+store submission `extension-release`. Only the three store account steps, which
+the author does, name none.
+
+- `skills` in `map status --json` (and in `get_build_map`) lists them for every
+  step that is not done: `steps` maps a step id to skill names, `index` gives
+  each skill's `teaches` line and the `url` of its `SKILL.md`.
+- `map step <step> start` (`report_build_step` with `state: "start"`) answers
+  with the skills of that step, so report the start first, then load them.
+- Load a skill before you work on the step. When your client has it installed
+  (this plugin ships every one of them), use that copy. Otherwise download the
+  `SKILL.md` at its `url` and follow it; saving it into your skills directory
+  (`.claude/skills/<name>/SKILL.md` in Claude Code) keeps it for later sessions.
+- Subagents get the skill too: name it, or pass its `url`, in the brief of the
+  subagent that takes the step.
+- A step that names no skill is done from its description and the tool behind
+  it. A skill never overrides what the map shows or what the author decided.
+
 **Steps the author did themselves or skipped.** On the map the author can give
 their own result where the tool behind a step is Extenshi's (a privacy policy,
 uninstall survey or feedback form link; permission reasons; the stores to ship

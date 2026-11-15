@@ -58,6 +58,17 @@ and cannot show revenue.
    access is a differentiation opening for a narrower extension; say so only
    when the feature set does not need that access.
 
+## The pricing comparison
+
+When the question is how to charge (on the Build Map, the `pricing` step), run
+the pricing part of the workflow for the closest incumbents and lay the result
+out per model: free, paid once, subscription, with or without a trial. For each
+model say who uses it, how those extensions are rated and what their reviews
+say about the price. The catalog shows the model an extension uses, not what it
+earns, so the comparison supports the choice and does not make it. The author
+chooses. In a Dojo project the choice is the owner decision `pricing`: propose
+the author's answer with `propose_decision`, and the owner confirms it in Dojo.
+
 ## How to report
 
 Write a one-page brief:
