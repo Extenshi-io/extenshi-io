@@ -161,6 +161,58 @@ describe('build map tools on the local server (phase 2)', { timeout: 30_000 }, (
 		)
 	})
 
+	it('names the skills of the steps ahead, and of a step when an agent starts it', async () => {
+		const home = await project()
+		const agent = buildMapAgent(home)
+		const url =
+			'https://raw.githubusercontent.com/Extenshi-io/extenshi-io/main/plugins/extenshi/skills/extension-icon-design/SKILL.md'
+
+		const map = (await agent.getMap()) as Record<string, any>
+		expect(map.skills.how).toMatch(/before you work on it/)
+		expect(map.skills.map).toMatchObject({ name: 'extension-build' })
+		expect(map.skills.steps[ICONS]).toEqual(['extension-icon-design'])
+		expect(map.skills.steps.cwsAccount).toBeUndefined()
+		expect(map.skills.index['extension-icon-design']).toMatchObject({ url })
+
+		const started = (await agent.reportStep(undefined, {
+			step: ICONS,
+			agent: 'icons agent',
+			state: 'start',
+		})) as Record<string, any>
+		expect(started.skills).toEqual([
+			{ name: 'extension-icon-design', teaches: expect.stringContaining('16 px'), url },
+		])
+		expect(started.skillsHow).toBe(map.skills.how)
+
+		// A step that names no skill, and a report that is not a start, carry none.
+		const plain = (await agent.reportStep(undefined, {
+			step: 'cwsAccount',
+			agent: 'main agent',
+			state: 'start',
+		})) as Record<string, any>
+		expect(plain.skills).toBeUndefined()
+		const stopped = (await agent.reportStep(undefined, {
+			step: ICONS,
+			agent: 'icons agent',
+			state: 'stop',
+		})) as Record<string, any>
+		expect(stopped.skills).toBeUndefined()
+
+		// A done step leaves the list: its instructions are no longer needed.
+		expect(map.skills.steps.research).toEqual(['extension-market-research'])
+		await updateMapState(home, (state) => ({
+			...state,
+			nodes: {
+				...state.nodes,
+				idea: { ti: 3, updatedAt: new Date().toISOString() },
+				research: { ti: 3, updatedAt: new Date().toISOString() },
+			},
+		}))
+		const later = (await agent.getMap()) as Record<string, any>
+		expect(later.steps.research.status).toBe('done')
+		expect(later.skills.steps.research).toBeUndefined()
+	})
+
 	it('tells the map which steps it knows, and says what to do when the map draws older ones', async () => {
 		const home = await project()
 		const hellos: { token?: string; client?: string }[] = []

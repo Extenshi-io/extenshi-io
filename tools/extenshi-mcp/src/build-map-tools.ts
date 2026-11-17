@@ -35,11 +35,14 @@ import {
 } from '@extenshi/contracts'
 import {
 	answerReview,
+	mapSkills,
 	mapUpdateNote,
 	openReview,
 	reportStep,
 	reviewAnswer,
+	SKILLS_HOW,
 	serverSnapshot,
+	skillsOfStep,
 	stepUrl,
 	type VariantInput,
 } from './build-map-agent.js'
@@ -124,6 +127,8 @@ function summary(view: BuildMapView) {
 		running: view.running.map((id) => ({ id, agent: view.nodes[id]?.agent })),
 		next: view.next,
 		byHand: view.byHand,
+		/** Published skills with the instructions for the steps not done yet, and how to load them. */
+		skills: mapSkills(view),
 	}
 }
 
@@ -250,12 +255,15 @@ export function buildMapAgent(cwd: string = process.cwd(), client?: MapClient): 
 			).catch(refusal)
 			const step = buildNodeById(input.step)
 			const update = skewNote(running?.server)
+			// The moment an agent takes a step is when it needs the step's instructions.
+			const skills = input.state === 'start' ? skillsOfStep(input.step) : []
 			return {
 				step: input.step,
 				tasksDone: result.record?.ti ?? 0,
 				tasks: step?.todos.length ?? 0,
 				checked: result.checked,
 				inputsChecked: Boolean(view),
+				...(skills.length ? { skills, skillsHow: SKILLS_HOW } : {}),
 				...(view ? {} : { note: NOT_RUNNING }),
 				...(update ? { update } : {}),
 			}

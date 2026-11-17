@@ -40,7 +40,14 @@
  * contain backticks or `${`, so it concatenates strings.
  */
 
-import { BUILD_CLUSTERS, BUILD_MAP_REVIEWS, BUILD_NODES, BUILD_WORLD } from '@extenshi/contracts'
+import {
+	BUILD_CLUSTERS,
+	BUILD_MAP_REVIEWS,
+	BUILD_NODES,
+	BUILD_SKILLS,
+	BUILD_WORLD,
+	buildSkillRef,
+} from '@extenshi/contracts'
 import { MAP_PROTOCOL } from './build-map-store.js'
 
 /** Line icons (24×24 path data) the nodes and the inspector draw. */
@@ -513,6 +520,13 @@ export function buildMapPage(options: {
 		world: BUILD_WORLD,
 		icons: ICONS,
 		mapReviews: BUILD_MAP_REVIEWS,
+		// Skill name → what it teaches and its folder on GitHub, for the steps that name one.
+		skills: Object.fromEntries(
+			BUILD_SKILLS.flatMap((skill) => {
+				const ref = buildSkillRef(skill.name)
+				return ref ? [[ref.name, { teaches: ref.teaches, page: ref.page }]] : []
+			}),
+		),
 		edges: buildMapEdges().map(({ from, to, d }) => ({ from, to, d })),
 	})
 	const session = scriptJson({
@@ -748,6 +762,8 @@ button { font: inherit; color: inherit; }
 .hist .note { color: var(--fg); font-style: italic; }
 .tool { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11.5px; padding: 4px 8px; border-radius: 6px; background: var(--bg-2); border: 1px solid var(--line); color: var(--fg-2); max-width: 100%; }
 .tool code { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skill { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--fg-3); }
+.skill a { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg); }
 h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--fg-3); }
 .sec { display: flex; flex-direction: column; gap: 8px; }
 .todos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -1077,6 +1093,10 @@ function renderPanel(id) {
 	if (v.stalled) h += '<div class="ask muted"><h4>No report for a while</h4><p>' + esc(v.agent) + ' last reported ' + esc(ago(v.updatedAt)) + '. Another agent can pick the step up.</p></div>';
 	h += '<p class="desc">' + esc(n.desc) + '</p>';
 	if (n.tool) h += '<div class="tool"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + ICONS.wrench + '"/></svg><code>' + esc(n.tool) + '</code></div>';
+	(n.skills || []).forEach(function (name) {
+		var sk = (G.skills || {})[name];
+		if (sk) h += '<div class="skill"><span>Agent skill</span><a href="' + esc(sk.page) + '" target="_blank" rel="noopener noreferrer" title="' + esc(sk.teaches) + '">' + esc(name) + '</a></div>';
+	});
 	var writable = Boolean(snap && (APP ? snap.app && snap.app.writable : SESSION.token));
 	var busy = pending && pending.node === id;
 	var routeFailed = writeError && writeError.node === id && writeError.kind === 'route' ? writeError.message : '';

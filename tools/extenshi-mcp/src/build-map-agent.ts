@@ -24,12 +24,15 @@ import { realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import {
 	answerBuildReview,
+	BUILD_MAP_SKILL,
 	type BuildEvidenceWhere,
 	type BuildMapView,
 	type BuildNodeRecord,
 	type BuildReview,
 	type BuildStepReport,
 	buildReviewLocationValid,
+	buildSkillRef,
+	buildStepSkills,
 	openBuildReview,
 	reportBuildStep,
 } from '@extenshi/contracts'
@@ -231,6 +234,52 @@ export function mapUpdateNote(
 
 /** The address that opens one step on the map. */
 export const stepUrl = (url: string, node: string) => `${url.replace(/#.*$/, '')}#node=${node}`
+
+/** A published skill as an agent is told about it: what it teaches and the file to download. */
+export type StepSkill = { name: string; teaches: string; url: string }
+
+/** How an agent uses the skills a step names; said wherever skills are listed. */
+export const SKILLS_HOW =
+	'Load the skills of a step before you work on it. Use the copy your client has installed when there is one (the Extenshi plugin ships them all); otherwise download the SKILL.md at `url` and follow it.'
+
+/** The skills with the instructions for a step's work (the graph's `skills`), in the step's order. */
+export function skillsOfStep(node: string): StepSkill[] {
+	return buildStepSkills(node).map(({ name, teaches, url }) => ({ name, teaches, url }))
+}
+
+export type MapSkills = {
+	how: string
+	/** The skill for working on the map itself, whatever the step. */
+	map?: StepSkill
+	/** Step id → skill names, for every step this extension needs that is not done yet. */
+	steps: Record<string, string[]>
+	/** Skill name → what it teaches and the file to download, for the names in `steps`. */
+	index: Record<string, { teaches: string; url: string }>
+}
+
+/**
+ * The skills of the steps still ahead, for `map status --json` and
+ * get_build_map: an agent choosing a step from `next` sees which instructions
+ * to load first. Done and switched-off steps are left out.
+ */
+export function mapSkills(view: BuildMapView): MapSkills {
+	const steps: MapSkills['steps'] = {}
+	const index: MapSkills['index'] = {}
+	for (const node of Object.values(view.nodes)) {
+		if (node.status === 'inactive' || node.status === 'done') continue
+		const skills = skillsOfStep(node.id)
+		if (!skills.length) continue
+		steps[node.id] = skills.map((skill) => skill.name)
+		for (const { name, teaches, url } of skills) index[name] = { teaches, url }
+	}
+	const map = buildSkillRef(BUILD_MAP_SKILL)
+	return {
+		how: SKILLS_HOW,
+		...(map ? { map: { name: map.name, teaches: map.teaches, url: map.url } } : {}),
+		steps,
+		index,
+	}
+}
 
 export type StepInput = Omit<BuildStepReport, 'at' | 'where' | 'checked'> & {
 	/** Files that show the task done: hashed, so the entry is checked. */

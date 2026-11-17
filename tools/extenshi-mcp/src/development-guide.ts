@@ -66,6 +66,7 @@ export const DEVELOPMENT_SERVICES = [
 			'get_project_scaffold',
 			'get_decisions',
 			'propose_decision',
+			'set_store_listing',
 			'get_project_workspace',
 			'import_manifest',
 			'diff_project_state',
@@ -470,6 +471,8 @@ const BUILD_MAP = {
 		'Visual choices (iconConcepts, screenshots, listing) are made on the map: the agent offers 1–8 variants, each a preview page or image inside the project or an https address (an `npx @extenshi/cli icon preview` page fits icons), with `map review` (request_build_review). The step then waits on the author, who opens each preview, picks one, or says what to change for another round. `map wait` returns the answer; get_build_map shows it under reviews. A pick that differs from an earlier one sends the steps built from the old pick back to run again. An agent never makes the pick for the author.',
 	offer:
 		'The map is an offer to the author, not a required step. It is offered once, after the extension idea is clear and before the first step that needs the author, in the author’s language and with a plain yes or no; the server starts only after a yes. After a no, the map comes up once more at the first visual choice (usually the icon), and after a second no it is not offered again. The answer is recorded in .extenshi/build-map.json (offer: count, acceptedAt, declinedAt): `map` records a yes and `map decline` a no, so a later agent session reads the answer instead of asking again.',
+	skills:
+		'Steps name the published agent skills that hold the instructions for their work: the foundation steps name extension-planning, the scaffold and manifest extension-scaffold, the service worker, pages and unit tests extension-surfaces, icon steps extension-icon-design, permissions and listing copy extension-store-readiness, builds, screenshots and the browser matrix extension-testing, localization extension-localization, niche research and the pricing comparison extension-market-research, the data inventory, policy and declarations extension-compliance, the scan, its fixes and CI extension-security-scan, analytics and errors extension-analytics, the welcome page, uninstall survey and feedback form extension-onboarding-feedback, payments extension-paywall, packaging and store submission extension-release. `map status --json` and get_build_map list them under skills (steps: step id → skill names; index: name → what it teaches and the url of its SKILL.md), and `map step <step> start` (report_build_step with state start) answers with the skills of that step. An agent loads them before working on the step: the installed copy when the client has one (the Extenshi plugin ships them all), otherwise the SKILL.md at the url. Only the three store account steps name none: the author registers those accounts.',
 	versions:
 		'A running map keeps the @extenshi/cli release it started with. It asks npm for a newer one every few minutes, and every CLI or MCP call tells it the steps revision that program knows; while a newer release is out, the page shows an Update button. get_build_map carries map {version, graph} and, when the map and the agent differ or a newer release is out, update: one sentence on what to do. The switch is best made when no choice waits on the author; the new server takes the same port, the page reloads and the progress in .extenshi/build-map.json stays.',
 	withoutTheMap:

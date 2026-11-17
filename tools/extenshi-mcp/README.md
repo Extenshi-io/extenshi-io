@@ -69,7 +69,7 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `publish_landing_page` | Host the landing page at page.extenshi.io/{code} (or a custom domain root) from the Page generator form, v1 or schema v2 (versioned; registered as the homepage by default; `live.status` says whether the public URL serves it) | Requires hosted.write for OAuth |
 | `get_landing_page` | Hosted landing page code, live version, URL and a summary of the form; `view: "full"` (with optional `fields` / `locales`) returns the form | Free; identity required |
 | `unpublish_landing_page` | Take the hosted landing page offline (same URL on the next publish) | Requires hosted.write for OAuth |
-| `draft_landing_page` | Draft a schema-v2 homepage (sections, theme, SEO, locales) from project state, with sources and to-dos | Free; identity required |
+| `draft_landing_page` | Draft a schema-v2 homepage (sections, theme, SEO, locales) from project state, with sources and to-dos; install buttons come from live store listings | Free; identity required |
 | `preview_landing_page` | Validate and render a form exactly as publish would; every problem with a path and fix | Free; identity required |
 | `list_landing_page_versions` | Hosted landing page version history | Free; identity required |
 | `rollback_landing_page` | Restore an earlier version as a new version | Requires hosted.write for OAuth |
@@ -108,10 +108,11 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `upload_project_media` | Upload a PNG/JPEG/WebP logo or screenshot to the project's public media store and get a stable URL for `publish_landing_page` (metadata stripped, per-project quota; `filePath` inside the workspace on stdio, `dataBase64` everywhere) | Requires hosted.write for OAuth |
 | `record_project_evidence` | Store metadata bound to the exact artifact, input hash, browser and source revision | Requires evidence.write for OAuth |
 | `get_release_readiness` | Explain current, stale and missing release checks by browser and locale. With a linked Pay application, the payment check is derived from Extenshi's payment ledger (source `platform`); a live-mode purchase that reached an installation passes it | Pro project; project read access |
-| `list_my_projects` | Your projects, repository bindings and claimed listings | Free; identity required |
+| `list_my_projects` | Your projects, repository bindings, claimed listings and recorded store listings | Free; identity required |
 | `create_project` | Create a project through the Dojo wizard's service; idempotent per key; returns id, next steps and open owner decisions; the local server adds `buildMap` | Requires project.write for OAuth |
 | `get_decisions` | Owner decisions (AMO add-on id, license, seller identity, pricing, targets): status, suggested default, what each blocks | Free; identity required |
 | `propose_decision` | Propose a decision value with rationale; the owner decides in Dojo, and decided keys are refused | Requires project.write for OAuth |
+| `set_store_listing` | Record where the project is listed in one store (Chrome Web Store, Firefox AMO, Edge Add-ons): status planned / submitted / live, listing URL, store item id, Edge product id — also before the listing is public. Only live listings reach public pages | Requires project.write for OAuth |
 | `get_project_state` | Manifest summaries (imported or generated, digest, keys that differ from the imported files), selected types, saved-state index, hosted URLs and exact integration file; `manifests: "full"` returns the manifest bodies; the local server adds `buildMap` (whether the build map is open, its address, and whether the author declined it) | Free; identity required |
 | `get_project_scaffold` | Starter files for one project and target browser | Free; identity required |
 | `list_privacy_policy_versions` | Hosted policy version history | Pro project; no read credit |
@@ -126,9 +127,9 @@ stdio or CLI. See the [development workflow](https://docs.extenshi.io/developers
 | `generate_landing_page` | Static landing-page (homepage) HTML with no JavaScript — same generator as the cabinet Page generator; returns `{html, bytes, warnings, nextSteps}`. Host it on any HTTPS origin and register the URL with `upsert_hosted_page` (feeds `HOMEPAGE_URL`) | Free (no key) |
 | `scan_extension` | Pre-publish security scan of a local artifact (.zip/.crx/.xpi), with live progress | 1 scan |
 | `publish_extension` | Publish to Chrome/Firefox/Edge with your own store credentials (fully local) | Free |
-| `get_build_map` | The author's build map of `projectDir` (`npx @extenshi/cli map`): progress, steps waiting on the author, steps that can start now, every step's current task, and the variants offered with the author's answer. Local server only | Free (no key) |
+| `get_build_map` | The author's build map of `projectDir` (`npx @extenshi/cli map`): progress, steps waiting on the author, steps that can start now, every step's current task, the published agent skills with the instructions for the steps not done yet (`skills`), and the variants offered with the author's answer. Local server only | Free (no key) |
 | `show_build_map` | Draw the build map in the conversation in a client that shows MCP Apps (Claude), optionally open at one step, where the author picks variants, marks their own tasks or skips a step; elsewhere returns the link to the author's map. Local server only | Free (no key) |
-| `report_build_step` | Report on a build map step (start, progress, done with hashed file proof, stop), or record the author's answer from the chat (`choice` / `redo`). Local server only | Free (no key) |
+| `report_build_step` | Report on a build map step (start, which answers with the step's skills; progress; done with hashed file proof; stop), or record the author's answer from the chat (`choice` / `redo`). Local server only | Free (no key) |
 | `request_build_review` | Offer the author 1–8 variants to choose from on the map (icon concepts, screenshots, listing copy), each a preview page or image in the project; returns the link to the step. Local server only | Free (no key) |
 
 In a client that shows [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview), `show_build_map` draws the map in the conversation (the page `ui://extenshi/build-map`). The page calls three app-only tools, `build_map_view`, `build_map_answer` and `build_map_file`; the server keeps them from any client that does not advertise `io.modelcontextprotocol/ui`.

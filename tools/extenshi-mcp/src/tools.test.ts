@@ -115,6 +115,7 @@ const READ_TOOLS = [
 	'create_project',
 	'get_decisions',
 	'propose_decision',
+	'set_store_listing',
 	'get_project_workspace',
 	'get_release_readiness',
 	'connection_diagnostics',
@@ -820,6 +821,7 @@ describe('directory tool annotations', () => {
 			// Owner-scoped project writes (project.write): creation and proposals.
 			'create_project',
 			'propose_decision',
+			'set_store_listing',
 			'publish_privacy_policy',
 			'update_privacy_policy_with_ai',
 			'apply_project_patch',

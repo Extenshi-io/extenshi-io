@@ -40,6 +40,7 @@ import {
 	agentEvidenceSchema,
 	importManifestSchema,
 	proposeDecisionSchema,
+	setStoreListingSchema,
 	workspacePatchSchema,
 } from '@extenshi/contracts'
 import { type FastMCP, type FastMCPSessionAuth, type Tool, type ToolParameters, UserError } from 'fastmcp'
@@ -1384,6 +1385,30 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				}
 			},
 		})
+		add({
+			name: 'set_store_listing',
+			description:
+				'Record where this project is listed in one store and how far it got: status planned (not submitted), ' +
+				'submitted (sent for review, in review) or live (public). Works before the listing is public: an AMO URL ' +
+				'in review, a Chrome item id reserved in the Developer Dashboard, an Edge Partner Center productId before ' +
+				"any public URL exists. url is that store's listing page (chromewebstore.google.com/detail/…, " +
+				'addons.mozilla.org/…/addon/<slug>/, microsoftedge.microsoft.com/addons/detail/…); itemId is the public ' +
+				'store id (Chrome 32 letters a–p, AMO slug/number/GUID, Edge 32 letters a–z); productId is Edge-only; ' +
+				'submittedAt a date. A live listing needs url or itemId. The entry is replaced whole (fields you leave out ' +
+				'are removed); listing null removes it. Only live listings reach public pages: draft_landing_page fills ' +
+				'install buttons from them, not from planned or submitted ones. Read them back in get_project_state ' +
+				'workspace.document.storeListings or list_my_projects. Returns {listings, urls, publicUrls, pending, ' +
+				'revision}. Idempotent per idempotencyKey. Requires project.write.',
+			annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: true },
+			parameters: setStoreListingSchema,
+			execute: async (args, context) => {
+				try {
+					return JSON.stringify(await bff(context).setStoreListing(args), null, 2)
+				} catch (err) {
+					return readError(err, missingKeyMessage)
+				}
+			},
+		})
 		const reads = [
 			[
 				'get_project_workspace',
@@ -1464,7 +1489,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				name,
 				description: dryRun
 					? `Preview a three-way metadata diff against a server-held base revision. No writes.${PROVENANCE_HINT}`
-					: `Apply a typed project metadata patch with expectedRevision and idempotencyKey. Source and built manifests are stored separately, including unknown keys. Omitted fields are left unchanged; tombstones explicitly delete. No source upload or scaffold overwrite. patch.release records the release that get_release_readiness measures against. Requires project.write OAuth scope.${PROVENANCE_HINT}`,
+					: `Apply a typed project metadata patch with expectedRevision and idempotencyKey. Source and built manifests are stored separately, including unknown keys. Omitted fields are left unchanged; tombstones explicitly delete. No source upload or scaffold overwrite. patch.release records the release that get_release_readiness measures against; patch.storeListings records store listings per store (set_store_listing does the same for one store without the revision bookkeeping). Requires project.write OAuth scope.${PROVENANCE_HINT}`,
 				annotations: {
 					readOnlyHint: dryRun,
 					idempotentHint: true,
@@ -1631,8 +1656,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'translated for the languages Extenshi ships. Writes nothing. ' +
 				'Returns JSON {form, sources (field → where it came from), todos (what only you can supply — ' +
 				'features, how-it-works, real testimonials, translations), problems, previewUrl}. The form is ' +
-				'accepted as-is by preview_landing_page and publish_landing_page. storeUrls fills the install ' +
-				'buttons when the project does not know its listings yet; accentColor sets the brand colour ' +
+				'accepted as-is by preview_landing_page and publish_landing_page. The install buttons come from the ' +
+				"project's live store listings (set_store_listing); planned or submitted listings stay off the page and " +
+				'appear in todos instead. storeUrls overrides them for a store; accentColor sets the brand colour ' +
 				'(the server cannot see your Pay SDK theme). Requires project.read.',
 			parameters: z.object({
 				projectId: z.string().uuid(),
@@ -2500,7 +2526,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				"List the extension projects owned by the signed-in Extenshi account — the developer's own workspaces on " +
 				'extenshi.io. Returns id, name, status, target browsers, the bound GitHub repo (if any) and ' +
 				'the claimed store listing (if any). Applies when the developer refers to "my extension" or ' +
-				'"my project": the returned id is what get_project_state takes. FREE — reading your own ' +
+				'"my project": the returned id is what get_project_state takes. `storeListings` is where each ' +
+				'project is listed per store (planned / submitted / live — set_store_listing records it). FREE — reading your own ' +
 				'projects spends no credit.',
 			parameters: z.object({}),
 			execute: async (_args, context) => {
@@ -2521,7 +2548,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'browser, the files that type needs, live hosted URLs (uninstall survey), and an index of ' +
 				'every saved tool state with its size. It reflects the site configuration at the time of the ' +
 				'call; later changes on the site appear in a later read. The additive workspace envelope ' +
-				'holds revisioned local observations separately from these scaffold drafts. It also returns ' +
+				'holds revisioned local observations separately from these scaffold drafts; its ' +
+				'`document.storeListings` is where the project is listed per store (status planned / submitted / live, ' +
+				'url, itemId, Edge productId; set_store_listing records it). It also returns ' +
 				'the integration contract: `integration.file` is the exact content for `integration.path` ' +
 				'that wires the extension to this project. Those bytes carry a fingerprint extenshi.io uses ' +
 				"to tell the developer's edits from its own; a reassembled equivalent file lacks it, and the " +
@@ -3079,7 +3108,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'The author’s build map of the extension project in projectDir (npx @extenshi/cli map): progress, the steps ' +
 				'waiting on the author (needsYou), the steps that can start now (next, safe to run in parallel), who works on ' +
 				'what, every step with the task it is on, and the variants offered to the author with their answer ' +
-				'(reviews: waiting, picked, or redo with what to change). One map per project, shared by every agent and git ' +
+				'(reviews: waiting, picked, or redo with what to change). skills lists the published agent skills with the ' +
+				'instructions for the steps not done yet (steps: step id → skill names; index: name → what it teaches and ' +
+				'the url of its SKILL.md): load a step’s skills before working on it. One map per project, shared by every agent and git ' +
 				'worktree. While the author’s map runs, the answer carries the project facts and the release the map runs ' +
 				'(map); update, when present, says what to do because the map draws older or newer steps than this server ' +
 				'knows, or a newer release is out. Otherwise facts is false and steps proven only by project files look not ' +
@@ -3103,7 +3134,8 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'report_build_step',
 			description:
-				'Report on a build map step as an agent. state: start (you are on it), progress (with progress 0–1), done ' +
+				'Report on a build map step as an agent. state: start (you are on it; the answer names the step’s skills, ' +
+				'the published instructions to load before the work), progress (with progress 0–1), done ' +
 				'(closes the current task, or `task`; `files` are hashed into the evidence journal as proof) or stop. A step ' +
 				'whose inputs are not done is refused while the author’s map runs. The author’s choice between variants is ' +
 				'not closed by `done`: pass `choice` (the variant id the author picked in the chat) or `redo` (what to change, ' +

@@ -53,6 +53,11 @@ export interface Bff extends PayBff {
 	getDecisions(input: { projectId: string }): Promise<unknown>
 	/** Record a PROPOSAL; only the owner decides, in Dojo. Requires project.write. */
 	proposeDecision(input: import('@extenshi/contracts').ProposeDecision): Promise<unknown>
+	/**
+	 * Record or replace one store listing of the project (planned / submitted /
+	 * live), or remove it with `listing: null`. BFF ≥ 2026-11. Requires project.write.
+	 */
+	setStoreListing(input: import('@extenshi/contracts').SetStoreListing): Promise<unknown>
 	importManifest(input: import('@extenshi/contracts').ManifestImport): Promise<unknown>
 	getProjectWorkspace(input: { projectId: string }): Promise<unknown>
 	diffProjectWorkspace(input: import('@extenshi/contracts').WorkspacePatch): Promise<unknown>
@@ -362,6 +367,7 @@ export function makeBffWithAuth(bffUrl: string, authHeader: () => string | Promi
 		createProject: (input) => client.devProject.agentCreateProject.mutate(input),
 		getDecisions: (input) => client.devProject.agentGetDecisions.query(input),
 		proposeDecision: (input) => client.devProject.agentProposeDecision.mutate(input),
+		setStoreListing: (input) => client.devProject.agentSetStoreListing.mutate(input),
 		importManifest: (input) => client.devProject.agentImportManifest.mutate(input),
 		getProjectWorkspace: (input) => client.devProject.agentGetWorkspace.query(input),
 		diffProjectWorkspace: (input) => client.devProject.agentDiffWorkspace.mutate(input),
