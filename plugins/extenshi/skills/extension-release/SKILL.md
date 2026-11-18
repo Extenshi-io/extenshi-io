@@ -146,6 +146,18 @@ same.
   `--reviewer-notes` goes to reviewers only: say how to test the add-on and
   how to reach anything behind a sign-in. Rerunning after a partial failure
   resumes.
+
+  An update to an add-on that is already on AMO, with its listing left as it
+  is:
+
+  ```bash
+  npx @extenshi/cli@latest publish <zip> --stores firefox --source amo-source.zip --release-notes "<what changed>" --reviewer-notes "<how to build and test>"
+  ```
+
+  It creates the version with both notes, then uploads the source archive to
+  that version. The listing is not read or changed. If the source upload
+  fails, run the same command again: the archive goes to the version that
+  already exists.
 - **Edge Add-ons (`edge`).** The first submission is created by hand in Partner
   Center; give the author the values from `EDGE.md`. Later versions:
   `publish <zip> --stores edge`, which waits for the publish request to reach a
