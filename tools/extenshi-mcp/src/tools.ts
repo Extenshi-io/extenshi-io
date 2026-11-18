@@ -3247,7 +3247,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'listing_path turns the upload into a listed AMO submission with metadata: first-time add-on creation ' +
 				'(gated by allow_new_addon or the project decision), per-locale name/summary/description, categories, ' +
 				'license, homepage, support email and URL, privacy policy, release and reviewer notes, reviewer source ' +
-				'(source_path) and previews (screenshots_dir); the result lists each step. The artifact is not ' +
+				'(source_path) and previews (screenshots_dir); the result lists each step. source_path without ' +
+				'listing_path updates an existing AMO add-on: the version is created with release_notes and ' +
+				'reviewer_notes, the source archive is uploaded to it, and the listing stays as it is. The artifact is not ' +
 				'security-scanned by this tool (scanning is scan_extension).',
 			parameters: z.object({
 				artifact_path: z
@@ -3291,13 +3293,18 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				source_path: z
 					.string()
 					.optional()
-					.describe('Firefox: reviewer source archive (.zip/.tar.gz/.tgz/.tar.bz2) for the new version.'),
+					.describe(
+						'Firefox: reviewer source archive (.zip/.tar.gz/.tgz/.tar.bz2), uploaded to the new version after ' +
+							'it is created. With listing_path it is part of the listed submission. Without listing_path it ' +
+							'updates an add-on that already exists on AMO: the version is created with release_notes and ' +
+							'reviewer_notes, the archive is uploaded to it, and the listing is not read or changed.',
+					),
 				screenshots_dir: z
 					.string()
 					.optional()
 					.describe(
 						'Firefox: AMO previews in file-name order: a directory of .png/.jpg/.gif files, or the extenshi ' +
-							'screenshots output directory (its firefox/<locale>/ set, default locale first).',
+							'screenshots output directory (its firefox/<locale>/ set, default locale first). Needs listing_path.',
 					),
 				allow_new_addon: z
 					.boolean()
@@ -3364,11 +3371,13 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					}
 
 					let firefoxListing: PublishArgs['firefoxListing']
-					if (args.listing_path || args.source_path || args.screenshots_dir) {
-						if (!args.listing_path)
-							throw new UserError(
-								'source_path and screenshots_dir need listing_path, the AMO listing they belong to.',
-							)
+					if (args.screenshots_dir && !args.listing_path)
+						throw new UserError('screenshots_dir needs listing_path, the AMO listing the previews belong to.')
+					if (args.source_path && !args.listing_path) {
+						// Version-only upload to an existing add-on with the reviewer
+						// source attached; the listing is not read or changed.
+						firefoxListing = { sourcePath: args.source_path }
+					} else if (args.listing_path) {
 						let decision: { status: string; value: unknown } | null = null
 						if (args.project_id) {
 							const view = (await bff(context).getDecisions({ projectId: args.project_id })) as {

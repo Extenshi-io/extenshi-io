@@ -84,13 +84,19 @@ export interface PublishArgs {
 	reviewerNotes?: string
 	/** Explicit AMO add-on id; fills FIREFOX_ADDON_GUID when the environment has none. */
 	addonId?: string
-	/** Listed AMO submission with metadata instead of a version-only upload. */
+	/**
+	 * Firefox extras. With `listingPath`: a listed AMO submission with metadata
+	 * instead of a version-only upload. `sourcePath` alone: a version-only upload
+	 * to an existing add-on with the reviewer source attached to the new version;
+	 * the listing is not read or changed.
+	 */
 	firefoxListing?: {
-		listingPath: string
+		listingPath?: string
 		sourcePath?: string
+		/** Needs listingPath: the previews belong to the listing. */
 		screenshotsDir?: string
-		/** Resolved by amoCreateAllowed — creating an add-on fixes its id permanently. */
-		allowCreate: boolean
+		/** Resolved by amoCreateAllowed — creating an add-on fixes its id permanently. Listing only. */
+		allowCreate?: boolean
 		replaceScreenshots?: boolean
 	}
 }
@@ -162,19 +168,44 @@ export function requireReviewerNotesSupport(
 		)
 }
 
-/** Load the listing, source and screenshots for a listed AMO submission. */
-export function loadFirefoxListing(listing: NonNullable<PublishArgs['firefoxListing']>) {
-	if (typeof FirefoxAPI.submitListing !== 'function' || typeof FirefoxAPI.loadAmoListing !== 'function')
+/**
+ * An MCP installed with an older @extenshi/publisher would create the version and
+ * drop the source archive without a word (it ignores sourceFilePath without a
+ * listing), and AMO rejects a bundled version that has no source. Refuse instead.
+ */
+export function requireSourceWithoutListingSupport(
+	firefox: { AMO_SOURCE_WITHOUT_LISTING?: unknown } = FirefoxAPI,
+): void {
+	if (firefox.AMO_SOURCE_WITHOUT_LISTING !== true)
 		throw new PublishSetupError(
-			"This installation's @extenshi/publisher predates AMO listing submission. Reinstall @extenshi/mcp to update it.",
+			"This installation's @extenshi/publisher predates source_path without listing_path. Reinstall @extenshi/mcp to update it.",
 		)
+}
+
+/**
+ * Load the Firefox extras. With a listing: the listing, source and screenshots
+ * of a listed AMO submission. Source alone: only `sourceFilePath`, for the new
+ * version of an existing add-on.
+ */
+export function loadFirefoxListing(listing: NonNullable<PublishArgs['firefoxListing']>) {
+	if (listing.screenshotsDir && !listing.listingPath)
+		throw new PublishSetupError('screenshots_dir needs listing_path, the AMO listing the previews belong to.')
+	if (!listing.listingPath && !listing.sourcePath) return undefined
 	try {
-		const parsed = FirefoxAPI.loadAmoListing(path.resolve(listing.listingPath))
 		const sourceFilePath = listing.sourcePath ? path.resolve(listing.sourcePath) : undefined
 		if (sourceFilePath) {
 			if (!fs.existsSync(sourceFilePath)) throw new Error(`Source archive not found: ${listing.sourcePath}`)
 			FirefoxAPI.assertSourceArchive(sourceFilePath)
 		}
+		if (!listing.listingPath) {
+			requireSourceWithoutListingSupport()
+			return { sourceFilePath }
+		}
+		if (typeof FirefoxAPI.submitListing !== 'function' || typeof FirefoxAPI.loadAmoListing !== 'function')
+			throw new PublishSetupError(
+				"This installation's @extenshi/publisher predates AMO listing submission. Reinstall @extenshi/mcp to update it.",
+			)
+		const parsed = FirefoxAPI.loadAmoListing(path.resolve(listing.listingPath))
 		const screenshotPaths = listing.screenshotsDir
 			? FirefoxAPI.listScreenshots(path.resolve(listing.screenshotsDir), parsed.defaultLocale)
 			: undefined
@@ -184,7 +215,7 @@ export function loadFirefoxListing(listing: NonNullable<PublishArgs['firefoxList
 			listing: parsed,
 			sourceFilePath,
 			screenshotPaths,
-			allowCreate: listing.allowCreate,
+			allowCreate: listing.allowCreate ?? false,
 			replaceScreenshots: listing.replaceScreenshots ?? false,
 		}
 	} catch (err) {

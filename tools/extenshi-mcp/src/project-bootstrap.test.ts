@@ -300,14 +300,32 @@ describe('publish_extension with an AMO listing', () => {
 		expect(() => storeCredentialsFor(guid)).toThrow(/differs from FIREFOX_ADDON_GUID/)
 	})
 
-	it('needs a listing for source and screenshots', async () => {
+	it('needs a listing for screenshots', async () => {
 		const tool = toolsWith({}, ['publish']).publish_extension
 		await expect(
 			tool.execute(
-				{ artifact_path: '/build/reader.xpi', source_path: '/build/source.zip' },
+				{ artifact_path: '/build/reader.xpi', screenshots_dir: '/repo/screenshots' },
 				{ reportProgress: vi.fn() },
 			),
-		).rejects.toThrow(/need listing_path/)
+		).rejects.toThrow(/screenshots_dir needs listing_path/)
 		expect(publishArtifact).not.toHaveBeenCalled()
+	})
+
+	it('passes source_path alone as a source-only update, with no listing and no add-on decision read', async () => {
+		const getDecisions = vi.fn()
+		const tool = toolsWith({ getDecisions }, ['publish']).publish_extension
+		await tool.execute(
+			{
+				artifact_path: '/build/reader.xpi',
+				stores: ['firefox'],
+				source_path: '/build/source.zip',
+				project_id: projectId,
+			},
+			{ reportProgress: vi.fn() },
+		)
+		expect(getDecisions).not.toHaveBeenCalled()
+		expect(vi.mocked(publishArtifact).mock.calls[0][0].firefoxListing).toEqual({
+			sourcePath: '/build/source.zip',
+		})
 	})
 })
