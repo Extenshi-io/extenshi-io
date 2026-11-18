@@ -22,7 +22,7 @@
 
 import { createRequire } from 'node:module'
 import path from 'node:path'
-import { FastMCP, UserError } from 'fastmcp'
+import { FastMCP, FastMCPSession, UserError } from 'fastmcp'
 import { type Bff, makeBff } from './bff.js'
 import { buildMapApp, registerBuildMapApp } from './build-map-app.js'
 import { mapClient } from './build-map-store.js'
@@ -31,6 +31,7 @@ import { buildMapAgent } from './build-map-tools.js'
 import { BUILD_MAP_APP_TOOLS, clientShowsApps } from './build-map-ui.js'
 import { loadConfig } from './config.js'
 import { instrumentMcpAnalytics } from './mcp-analytics.js'
+import { registerSkills } from './skills.js'
 import { reportServerStarted } from './startup.js'
 import { flushTelemetry, initTelemetry } from './telemetry.js'
 import {
@@ -88,6 +89,8 @@ const stdioDeps: ToolDeps = {
 }
 
 registerTools(server, stdioDeps)
+// The agent skills as skill:// resources and the Skills extension (skills/list, skills/get); get_skill is the tool.
+registerSkills(server, FastMCPSession)
 
 // The build map in the chat (MCP Apps): show_build_map draws the page, and the page calls its own three
 // tools. They write the author's answers, so they answer only a client that said it shows apps, and a

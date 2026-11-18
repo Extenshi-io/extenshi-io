@@ -27,7 +27,7 @@ export const DEVELOPMENT_SERVICES = [
 	{
 		id: 'documentation',
 		purpose: 'Capabilities, extension shapes, exact CLI commands and reusable skill packages.',
-		tools: ['get_development_guide', 'search_docs', 'list_extension_templates'],
+		tools: ['get_development_guide', 'search_docs', 'get_skill', 'list_extension_templates'],
 		access: 'Free reference; no API key. Hosted transport still requires connector sign-in.',
 		urls: [docs('mcp'), DEVELOPMENT_GUIDE_URL, docs('agent-skills')],
 	},

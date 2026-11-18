@@ -188,6 +188,7 @@ const READ_TOOLS = [
 const DOCS_TOOLS = [
 	'get_development_guide',
 	'search_docs',
+	'get_skill',
 	'list_extension_templates',
 	'generate_icon_workflow',
 	'localize_workflow',

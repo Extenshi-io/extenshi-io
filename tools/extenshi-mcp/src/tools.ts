@@ -25,7 +25,7 @@
  *               get_security, get_risk_by_store_ids, market_overview,
  *               list_my_projects, get_project_state, get_project_scaffold,
  *               list/get/publish/update privacy policy (hosted; Pro)
- *   'docs'    → get_development_guide, search_docs, list_extension_templates, generate_icon_workflow,
+ *   'docs'    → get_development_guide, search_docs, get_skill, list_extension_templates, generate_icon_workflow,
  *               generate_welcome_page_workflow, generate_pin_guide, generate_landing_page,
  *               localize_workflow (free; no key)
  *   'scan'    → scan_extension             (local artifact; stdio only)
@@ -107,6 +107,7 @@ import {
 	shapeSecurity,
 	shapeStoreRiskBatch,
 } from './shape.js'
+import { SKILL_NAMES, skillSummaries, skillText } from './skills.js'
 import { captureError, captureEvent, classifyError } from './telemetry.js'
 import { renderExtensionTemplates } from './templates.js'
 import { registerUninstallFormTools } from './uninstall-form-tools.js'
@@ -678,6 +679,12 @@ const TOOL_ANNOTATIONS: Record<
 		readOnlyHint: true,
 		idempotentHint: true,
 		openWorldHint: true,
+	},
+	get_skill: {
+		title: 'Read an Extenshi agent skill',
+		readOnlyHint: true,
+		idempotentHint: true,
+		openWorldHint: false,
 	},
 	list_extension_templates: {
 		title: 'Extension types and their permissions',
@@ -2810,6 +2817,26 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 					if (err instanceof DocsError) throw userErrorFrom(err.message, err)
 					throw userErrorFrom(err instanceof Error ? err.message : String(err), err)
 				}
+			},
+		})
+
+		add({
+			name: 'get_skill',
+			description:
+				'Returns an Extenshi agent skill: the SKILL.md with the instructions for one kind of extension work ' +
+				'(extension-scaffold, extension-testing, extension-paywall and the others the development guide and the ' +
+				'build map name). Without a name it lists every skill with its description. These are the files the ' +
+				'Extenshi plugin installs, for a client that has no plugin; the same files are the skill:// resources of ' +
+				'this server. Free; no key or network request.',
+			parameters: z.object({
+				name: z
+					.enum(SKILL_NAMES as [string, ...string[]])
+					.optional()
+					.describe('The skill to return, e.g. "extension-scaffold". Omitted: the list of skills.'),
+			}),
+			execute: async (args) => {
+				const text = args?.name ? skillText(args.name) : undefined
+				return text ?? JSON.stringify({ skills: skillSummaries() }, null, 2)
 			},
 		})
 
