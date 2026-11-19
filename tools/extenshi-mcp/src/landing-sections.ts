@@ -103,6 +103,8 @@ interface SectionBase<T extends LandingSectionType> {
 	type: T
 	/** Kept in the form, left out of the page. */
 	hidden?: boolean
+	/** Optional owner override for informational sections on regional landing pages. */
+	audience?: 'all' | 'standard' | 'regional_free'
 	/** Section heading; each type has a default (LANDING_UI_DEFAULTS). */
 	title?: string
 	intro?: string
@@ -412,7 +414,7 @@ function mergeText(base: unknown, over: unknown): unknown {
 		if (!over || typeof over !== 'object' || Array.isArray(over)) return base
 		const out: Record<string, unknown> = { ...(base as Record<string, unknown>) }
 		for (const [key, value] of Object.entries(over as Record<string, unknown>)) {
-			if (key === 'id' || key === 'type') continue
+			if (key === 'id' || key === 'type' || key === 'audience') continue
 			if (key in out) out[key] = mergeText(out[key], value)
 			else if (typeof value === 'string') out[key] = value
 		}
@@ -625,6 +627,9 @@ export function landingFormProblems(form: LandingForm): LandingProblem[] {
 		} else if (ids.has(s.id)) {
 			err(`${p}.id`, `duplicate section id "${s.id}"`, 'Give every section a unique id.')
 		} else ids.add(s.id)
+		if (s.audience !== undefined && !['all', 'standard', 'regional_free'].includes(s.audience)) {
+			err(`${p}.audience`, 'unknown section audience', 'Use all, standard or regional_free.')
+		}
 		textLimit(out, `${p}.title`, s.title, LANDING_V2_LIMITS.title)
 		textLimit(out, `${p}.intro`, s.intro, LANDING_V2_LIMITS.intro)
 		sectionProblems(s, p, err, warn, form)
@@ -1031,6 +1036,8 @@ export interface LandingRenderOffer {
 }
 
 export interface RenderLandingOptions {
+	/** Localized access statement for the free-country installation page. */
+	regionalFreeMessage?: string
 	/** Locale to render; default the form's default locale. */
 	locale?: string
 	/**
@@ -1046,12 +1053,43 @@ export interface RenderLandingOptions {
  * CLI generate). A v1 form goes to buildLandingPage untouched.
  */
 export function renderLandingForm(form: LandingForm, opts: RenderLandingOptions = {}): string {
-	if (form.schemaVersion !== 2) return buildLandingPage(landingFormToInput(form))
+	if (form.schemaVersion !== 2) {
+		const input = landingFormToInput(form)
+		return buildLandingPage(
+			opts.regionalFreeMessage ? { ...input, tagline: opts.regionalFreeMessage, description: '' } : input,
+		)
+	}
 	const def = landingDefaultLocale(form)
 	const locales = landingLocales(form)
 	const requested = normalizeLandingLocale(opts.locale)
 	const locale = requested && locales.includes(requested) ? requested : def
-	return renderV2(localizeLandingForm(form, locale), form, locale, locales, def, opts.payOffers ?? [])
+	const localized = localizeLandingForm(form, locale)
+	if (opts.regionalFreeMessage) {
+		// Historical published pages can mention a trial in custom FAQ, steps, copy and metadata.
+		// Render an install-focused view using the same published product, translations and store URLs.
+		const sections = (localized.sections ?? []).filter(
+			(s) =>
+				!s.hidden &&
+				s.type !== 'hero' &&
+				s.type !== 'pricing' &&
+				(s.audience
+					? s.audience !== 'standard'
+					: ['features', 'screenshots', 'testimonials', 'store-badges'].includes(s.type)),
+		)
+		const free: LandingForm = {
+			...localized,
+			tagline: opts.regionalFreeMessage,
+			description: opts.regionalFreeMessage,
+			seo: { ...localized.seo, title: localized.extensionName, description: opts.regionalFreeMessage },
+			sections: [{ type: 'hero', id: 'hero' }, ...sections],
+		}
+		return renderV2(free, form, locale, locales, def, [])
+	}
+	const standard = {
+		...localized,
+		sections: localized.sections?.filter((s) => s.audience !== 'regional_free'),
+	}
+	return renderV2(standard, form, locale, locales, def, opts.payOffers ?? [])
 }
 
 /**
