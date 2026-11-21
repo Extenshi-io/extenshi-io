@@ -118,6 +118,9 @@ whole history.
   API key, release evidence and readiness. Commands run with `--evidence`
   (`scan`, `review-risk`, `generate-listing`, `test smoke`, `screenshots`) and
   `extenshi release prepare` feed it;
+- records two commands leave in `.extenshi/` where a map lives: `extenshi scan`
+  (the scan and fix steps) and `extenshi ai-visibility` (the AI visibility step;
+  pass `--url <homepage>` once the Homepage step is done);
 - reports agents write into the state file. If `npx @extenshi/cli@latest map
   --help` lists a `step` command, report your work with it:
   `map step <step> start --agent "<your label>"` when you begin,
