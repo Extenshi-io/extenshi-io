@@ -104,7 +104,7 @@ describe('the build map in a chat (MCP Apps, phase 4)', { timeout: 30_000 }, () 
 			routes: {},
 			reviews: {},
 		})
-		expect(Object.keys(first.snapshot.view.nodes)).toHaveLength(56)
+		expect(Object.keys(first.snapshot.view.nodes)).toHaveLength(58)
 		expect(await app.view(undefined, first.etag)).toEqual({ etag: first.etag, unchanged: true })
 		await offerIcons(home)
 		const next = (await app.view(undefined, first.etag)) as { etag: string; snapshot: Record<string, any> }

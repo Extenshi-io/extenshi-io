@@ -1,6 +1,6 @@
 {
   "name": "@extenshi/mcp",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "description": "Extenshi MCP server — bring the extension catalog (search, security, market research) and pre-publish scanning into your AI tools",
   "type": "module",
   "license": "MIT",
@@ -70,7 +70,7 @@
     "prepublishOnly": "yarn build"
   },
   "dependencies": {
-    "@extenshi/contracts": "^0.2.14",
+    "@extenshi/contracts": "^0.2.15",
     "@extenshi/publisher": "^0.11.0",
     "@posthog/mcp": "0.26.0",
     "@trpc/client": "^11.25.0",

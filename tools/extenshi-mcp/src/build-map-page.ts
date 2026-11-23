@@ -71,6 +71,8 @@ const ICONS: Record<string, string> = {
 	sidebar: 'M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM15 3v18',
 	lang: 'M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6',
 	box: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16zM3.3 7 12 12l8.7-5M12 22V12',
+	home: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+	bot: 'M12 3v4M5 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM9 12v2M15 12v2',
 	shuffle: 'M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5',
 	image:
 		'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8.5 7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM21 15l-5-5L5 21',
@@ -567,7 +569,7 @@ const DARK_TOKENS = `
 	--node-fill: oklch(0.21 0.02 150); --node-locked: oklch(0.18 0.015 150);
 	--edge: oklch(0.42 0.02 150 / 0.55); --edge-on: oklch(0.66 0.02 150 / 0.6);
 	--c-found: oklch(0.78 0.12 60); --c-scaf: oklch(0.74 0.11 240); --c-vis: oklch(0.76 0.13 340); --c-comp: oklch(0.74 0.14 145);
-	--c-tele: oklch(0.72 0.14 300); --c-money: oklch(0.8 0.14 90); --c-qa: oklch(0.74 0.11 200); --c-rel: oklch(0.6731 0.1624 144.2);
+	--c-tele: oklch(0.72 0.14 300); --c-money: oklch(0.8 0.14 90); --c-qa: oklch(0.74 0.11 200); --c-grow: oklch(0.74 0.13 20); --c-rel: oklch(0.6731 0.1624 144.2);
 	--cluster-alpha: 10%; --shadow: 0 10px 30px oklch(0 0 0 / 0.45);
 	color-scheme: dark;
 `
@@ -583,7 +585,7 @@ const STYLE = `
 	--node-fill: oklch(0.995 0.004 80); --node-locked: oklch(0.93 0.01 78);
 	--edge: oklch(0.74 0.02 70 / 0.55); --edge-on: oklch(0.5 0.03 40 / 0.5);
 	--c-found: oklch(0.72 0.14 45); --c-scaf: oklch(0.62 0.12 250); --c-vis: oklch(0.68 0.15 340); --c-comp: oklch(0.6 0.13 150);
-	--c-tele: oklch(0.58 0.16 300); --c-money: oklch(0.72 0.15 85); --c-qa: oklch(0.6 0.12 200); --c-rel: oklch(0.7234 0.1783 41.15);
+	--c-tele: oklch(0.58 0.16 300); --c-money: oklch(0.72 0.15 85); --c-qa: oklch(0.6 0.12 200); --c-grow: oklch(0.62 0.15 20); --c-rel: oklch(0.7234 0.1783 41.15);
 	--cluster-alpha: 7%; --shadow: 0 10px 30px oklch(0.3 0.03 40 / 0.14);
 	--font-sans: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -910,7 +912,7 @@ const CLIENT = `
 'use strict';
 var G = JSON.parse(document.getElementById('graph').textContent);
 var ICONS = G.icons, WORLD = G.world, NODES = G.nodes, CLUSTERS = G.clusters, EDGES = G.edges;
-var COLORS = { found: 'var(--c-found)', scaf: 'var(--c-scaf)', vis: 'var(--c-vis)', comp: 'var(--c-comp)', tele: 'var(--c-tele)', money: 'var(--c-money)', qa: 'var(--c-qa)', rel: 'var(--c-rel)' };
+var COLORS = { found: 'var(--c-found)', scaf: 'var(--c-scaf)', vis: 'var(--c-vis)', comp: 'var(--c-comp)', tele: 'var(--c-tele)', money: 'var(--c-money)', qa: 'var(--c-qa)', grow: 'var(--c-grow)', rel: 'var(--c-rel)' };
 var byId = {}, children = {};
 NODES.forEach(function (n) { byId[n.id] = n; });
 NODES.forEach(function (n) { n.deps.forEach(function (d) { (children[d] = children[d] || []).push(n.id); }); });
@@ -944,7 +946,7 @@ function landed(p) {
 try { showInactive = localStorage.getItem('build-map.inactive') !== 'hidden'; } catch (e) {}
 
 function nv(id) { return snap && snap.view.nodes[id] || { status: 'locked', progress: 0, taskIndex: 0 }; }
-function agentLabel(n, v) { return v && v.agent ? v.agent : ({ found: 'orchestrator', scaf: 'code agent', vis: 'design agent', comp: 'compliance agent', tele: 'lifecycle agent', money: 'billing agent', qa: 'qa agent', rel: 'release agent' })[n.cluster]; }
+function agentLabel(n, v) { return v && v.agent ? v.agent : ({ found: 'orchestrator', scaf: 'code agent', vis: 'design agent', comp: 'compliance agent', tele: 'lifecycle agent', money: 'billing agent', qa: 'qa agent', grow: 'growth agent', rel: 'release agent' })[n.cluster]; }
 function ago(iso) {
 	var s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
 	if (!isFinite(s)) return '';
