@@ -28,6 +28,7 @@ how to prepare an extension for store review.
 | `extension-onboarding-feedback` skill | For developers: builds the welcome page and pin guide, tunes the uninstall survey and wires its URL, and opens the feedback form from the extension. |
 | `extension-release` skill | For developers: packages one zip per store, checks release readiness, submits to the stores after the author's approval, follows the review and confirms the public listing. |
 | `extension-build` skill | For developers building with Claude: offers a local build map once, a page that shows which build steps are done, which Claude is working on and which wait on you, keeps it current and hands you the decisions that are yours. One map per project, shared by every agent and git worktree. |
+| Build map reminder (hook, Claude Code) | When a Claude Code session starts in an Extenshi extension project (a repository with `src/extenshi.config.js` or `.extenshi/`) whose build map was never offered, it reminds Claude to offer the map once. It reads two local files and prints nothing anywhere else. |
 
 ## Install
 
@@ -109,6 +110,11 @@ opens a sign-in page for your Extenshi account.
     usage reports (command and flag names, versions, coarse OS and error kind;
     never file contents or flag values). It asks on the first interactive run; set `DO_NOT_TRACK=1` or
     `EXTENSHI_TELEMETRY=0` to turn it off.
+- **The build map reminder hook** checks whether `src/extenshi.config.js` or
+  `.extenshi/project.json` exists in the project you open, reads the `offer`
+  record in `.extenshi/build-map.json`, and runs `git rev-parse` to find the
+  main checkout of a worktree. It sends nothing, runs no npx and starts
+  nothing.
 - **The installed-extensions audit** sends only the store ids you provide.
   `npx @extenshi/guard@latest list`, which the skill can use to collect them,
   reads your browser profiles locally and sends nothing.

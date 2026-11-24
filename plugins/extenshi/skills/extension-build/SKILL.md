@@ -1,12 +1,16 @@
 ---
 name: extension-build
 description: >
-  Build a browser extension together with its author on the Extenshi build map,
-  a local page that shows which build steps are done, which an agent is working
-  on and which wait on the author. Covers offering the map once, opening it,
-  keeping it current as steps finish, and handing the author the steps only they
-  can do. Use when building or shipping an extension end to end with the user
-  ("build me an extension that…", "let's make a Chrome extension", "take my
+  Load first in any session on an Extenshi extension project (a repository with
+  src/extenshi.config.js or an .extenshi/ folder), before recommending next
+  steps: it decides whether to offer the author the build map now. The build
+  map is a local page that shows which build steps are done, which an agent is
+  working on and which wait on the author. Covers offering the map once,
+  opening it, keeping it current as steps finish, and handing the author the
+  steps only they can do. Use when building, continuing or shipping an
+  extension with the user, in any language ("build me an extension that…",
+  "let's make a Chrome extension", "let's work on my extension", "continue
+  with the extension", "what's next?", "what do you recommend?", "take my
   extension to the store", "show me the progress", "open the build map").
 ---
 
@@ -52,9 +56,12 @@ Check the record first, so a new session does not ask again:
 
 - **With the local Extenshi MCP server (`@extenshi/mcp`)**, `get_project_state`
   and `create_project` return `buildMap`: `running`, `url` while it runs,
-  `offered`, `declined`, `offers` (how many times the author answered) and
-  `home` (the directory the map belongs to). Pass `projectDir` when the
-  extension is not in the server's working directory.
+  `offered`, `declined`, `offers` (how many times the author answered),
+  `home` (the directory the map belongs to) and `next`, one sentence on what
+  to do about the offer now (`buildMap` then comes first in the answer).
+  While no map runs, `get_build_map` opens with `offer`, whose `next` is the
+  same sentence. Pass `projectDir` when the extension is not in the server's
+  working directory.
 - **Otherwise** (the hosted connector has no access to local files), read the
   `offer` object in `.extenshi/build-map.json` of the extension project in the
   main checkout. From a worktree, the main checkout is the directory that
@@ -67,14 +74,26 @@ Check the record first, so a new session does not ask again:
 | Accepted before, nothing running now | The author already said yes; the server stopped after an idle hour. Run `npx @extenshi/cli@latest map --no-open` when you next need the author and give the link. The old tab reconnects by itself. |
 | Declined, `offers` is 1 | Do not offer now. Mention the map once more at the first visual choice (usually the icon). |
 | Declined, `offers` is 2 or more | Do not offer again. Work in chat. |
-| Never offered | Offer it at the right moment (below). |
+| Never offered | Offer it now: in your first reply on an existing project, right after the idea step on a new one (below). |
 
 ## Offering the map
 
-The map is an offer, not a required step. Make it once, after you understand
-what the extension does and for whom, and before the first step that needs the
-author. Keep it short, in the author's language, about what they get, with a
-plain yes or no. For example:
+Offering the map is required; using it is the author's choice. Ask once, at a
+fixed moment:
+
+- **An existing project** (the repository already has a manifest,
+  `src/extenshi.config.js` or `.extenshi/`, or the author asks to continue,
+  what to do next or what you recommend): in your first reply about working on
+  it. When that reply also recommends next steps, the offer still comes as its
+  own question at the end, not as one of them.
+- **A new idea**: right after the idea step, once you understand what the
+  extension does and for whom, and before the first step that needs the
+  author.
+
+Make the offer its own yes/no question that ends the reply. Do not fold it
+into a list of recommendations or options, where it reads as one suggestion
+among many, and do not leave it for later. Keep it short, in the author's
+language, about what they get. For example:
 
 > While I build the extension, I can open a build map in your browser. It shows
 > what is done, what I am working on right now and where I need your decision.
@@ -83,8 +102,11 @@ plain yes or no. For example:
 > runs locally on your computer. Shall I open it? If not, we carry on here in
 > the chat.
 
-Do not run `map` before the author answers, do not say the build needs the map,
-and do not repeat the offer at every step.
+You run the commands below; never ask the author to run `map` themselves. Do
+not run `map` before the author answers, do not say the build needs the map,
+and do not repeat the offer at every step. If the author answers with another
+request and no yes or no, take that as no answer yet: carry on, and ask once
+more at the first visual choice.
 
 **If the author says yes,** run `npx @extenshi/cli@latest map` from the
 extension project directory (a worktree is fine). It starts the server, records
@@ -289,6 +311,10 @@ skips the step on the map.
 
 ## What this skill must not do
 
+- Recommend next steps on a project whose author was never asked about the
+  map without asking in the same reply.
+- Hide the offer inside a list of suggestions, or ask the author to run the
+  map command themselves.
 - Start the map before the author says yes, or offer it more than twice.
 - Show the map in the conversation to an author who declined it.
 - Start a second map, copy the state file, or edit it by hand.
