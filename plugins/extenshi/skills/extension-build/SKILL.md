@@ -112,7 +112,10 @@ whole history.
 - files in the main checkout: the manifest and the files it names, icons,
   builds, packages, the store folder (`CHROMEWEBSTORE.md`, screenshots, promo
   tiles), tests, CI workflows. Work on an agent branch shows up once it is
-  merged into the main checkout;
+  merged into the main checkout. The scaffold's placeholder icons and icons of
+  one colour do not count; a package counts while it carries the manifest's
+  version and is newer than the sources. The files never settle the modules
+  (`features`): the author confirms them;
 - the Dojo project the directory is bound to (`extenshi project bind`): owner
   decisions (`propose_decision`, then the owner decides in Dojo) and, with an
   API key, release evidence and readiness. Commands run with `--evidence`
@@ -125,16 +128,23 @@ whole history.
   --help` lists a `step` command, report your work with it:
   `map step <step> start --agent "<your label>"` when you begin,
   `map step <step> done --agent "<label>" --file <proof>` for each finished
-  task (the file is hashed into the step's evidence), `map step <step> stop`
-  when you hand a step back. On the local MCP server the same is
-  `report_build_step`. A refusal names its reason in brackets: `(locked)` means
+  task (the file is hashed into the step's evidence; a file in your worktree is
+  kept at the path it has in the main checkout), `map step <step> stop`
+  when you hand a step back. Each answer lists the step's `todos` (every task,
+  whose it is, closed or not) and `current`, the task it is on now. On the
+  local MCP server the same is `report_build_step`. A refusal names its reason in brackets: `(locked)` means
   an input of the step is not done yet, so work on that first. If there is no
   `step` command, the facts above are what the map shows.
 
 **Where things stand.** `npx @extenshi/cli@latest map status --json` reads the
 map without starting anything: `progress`, `needsYou` (steps waiting on the
 author), `running`, `next` (steps whose inputs are all done and that can run in
-parallel) and every step's status with the fact behind it. Each done step has a
+parallel), `steps` and `nodes`. `steps` has the shape `get_build_map` answers
+with: each step this extension needs, its `status`, the task it is on
+(`current`, with `byAuthor` when that task is the author's) and `decide` when
+the owner answers it in Dojo. `nodes` has every step in full, with the fact
+behind a done one. Without a running map, `get_build_map` reads the project
+files itself and says `facts: "files"`. Each done step has a
 `basis`: `project` or `dojo` (a file or a Dojo record proves it, with `where`),
 `author` (the author marked it) or `agent`; `evidence` holds each step's
 history. Use `next` to choose what to work on, and never tell the author a step
@@ -235,14 +245,20 @@ reach one:
 4. Decisions the server checks (store submission, data declarations, pricing
    and other money matters) go through Dojo: owner decisions and owner
    approvals. Give the author the Dojo link and never decide these yourself.
+   In a project bound to Dojo, `browsers` and `pricing` carry `decide` with the
+   decisions page: send the author there instead of asking again. Once you
+   propose a value (`propose_decision`), the step waits on the owner's answer,
+   and a paid model switches the payment steps on.
 5. Without the map, send the preview links in chat and take the answer there.
    Record what the author said with `map choose <step> <variant number>` or
    `map choose <step> --redo "<their words>"` (`report_build_step` with
    `choice` or `redo`). Never pick for the author.
-6. Store accounts (`cwsAccount`, `amoAccount`, `edgeAccount`) and creating the
-   feedback form in Dojo happen outside extenshi, and nothing in the project
-   shows them. The author marks them on the map with **Mark as done** (and can
-   undo it); never mark them yourself. Once marked, `extenshi map status` lists
+6. Store accounts (`cwsAccount`, `amoAccount`, `edgeAccount`), creating the
+   feedback form in Dojo and settling the modules (`features`) happen outside
+   extenshi, and nothing in the project proves them. The author marks them on
+   the map with **Mark as done** (and can undo it); never mark them yourself.
+   For the modules, go through the current choice with the author first; a
+   module they want switched on or off changes in the code, by you. Once marked, `extenshi map status` lists
    the step as done for every agent and worktree.
 7. When the author uploads to a store themselves, the store step on the map
    shows the package on disk, the values to paste and the dashboard; the author
