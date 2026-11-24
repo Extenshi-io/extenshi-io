@@ -25,23 +25,22 @@ extenshi keeps the ledger and takes 2% per charge. There is no backend to write.
 ## What you need from the developer
 
 Use the application's **publishable key** (`pk_ext_` + 32 hex characters) and
-its **entitlement public key** from [Payments](https://dojo.extenshi.io/payments).
-Create an independent Pay application: no development project is required. Both
+its **entitlement public key** from the Paywall integration section of the
+[author’s project](https://dojo.extenshi.io/projects). Both
 keys are public and safe to bundle. The verification key enables offline restarts.
 
 The SDK is published on npm as `@extenshi/pay`. Check the installed version's API
 before using examples from newer repository code. Connected sellers also require
 a live agreement and completed provider onboarding before checkout can be enabled.
 
-With authorized `pay.read` / `pay.write` access, use `create_pay_app`,
+With authorized `pay.read` / `pay.write` access, select the Pay application for that project and use
 `get_pay_readiness`, `connect_pay_seller`, `set_pay_seller_profile` and
 `upsert_pay_offer`. Use the author's approved identity, prices and terms. Return
 the onboarding URL for the author to complete in their browser.
 To change an existing offer's text, send `upsert_pay_offer` with `appId`, `sku`
 and only the new `title` or `description`: omitted fields keep their stored
 values, so the price, features and paywall order stay as they are.
-A development project can be linked later using `link_pay_app`; Pay data survives
-unlinking or project deletion. Existing API keys need explicit Pay grants in dojo.
+An existing application can be linked to the project using `link_pay_app`. Existing API keys need explicit Pay grants in dojo.
 
 - If the project was scaffolded through extenshi, look for
   `PAY_PUBLISHABLE_KEY` in `extenshi.config.js` first.
