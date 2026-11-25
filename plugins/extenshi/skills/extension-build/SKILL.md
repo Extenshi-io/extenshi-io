@@ -24,6 +24,33 @@ waiting on the author, locked, or not needed for this extension. The author
 sees progress at a glance and makes their choices there, such as picking an
 icon or approving screenshots.
 
+## First rule: ask what waits on the author, in the same reply
+
+Every time `map status` or `get_build_map` answers with a non-empty `needsYou`,
+the reply you write next puts each entry to the author. This holds for a
+status report, a "what's next?" answer and the end of a piece of work alike,
+and it comes before any list of what you plan to do.
+
+`needsYou` is a list of questions, not of step ids. Each entry has `question`,
+`about`, `options` with their current values, `current`, `answer` (where it is
+answered: `map`, `dojo` or `chat`), `link` to the step while the map runs,
+`url` for a Dojo decision, `record` (how you record the answer) and `blocks`
+(the steps it holds up). For each entry, say:
+
+1. what it decides and what waits for it (`blocks`);
+2. the options, with what is set now and where that comes from;
+3. your recommendation and the reason, in one or two sentences;
+4. where the author answers: the link to the step, or the Dojo page.
+
+Ask one decision at a time, through your client's question tool where it has
+one (buttons, `AskUserQuestion`), otherwise as a plain question that ends the
+reply. Ask the one that holds up the most steps first and name the others in
+one line each, so the author sees the whole queue.
+
+Naming only the step ids ("waiting on you: browsers, features, pricing") is
+not asking. Neither is deciding for the author because a default was already
+set: a default is nobody's choice.
+
 ## One map per project
 
 A project has exactly one map and one map server. That holds however many
@@ -137,7 +164,7 @@ whole history.
   merged into the main checkout. The scaffold's placeholder icons and icons of
   one colour do not count; a package counts while it carries the manifest's
   version and is newer than the sources. The files never settle the modules
-  (`features`): the author confirms them;
+  (`features`): the author switches and confirms them (see "Modules" below);
 - the Dojo project the directory is bound to (`extenshi project bind`): owner
   decisions (`propose_decision`, then the owner decides in Dojo) and, with an
   API key, release evidence and readiness. Commands run with `--evidence`
@@ -155,13 +182,18 @@ whole history.
   when you hand a step back. Each answer lists the step's `todos` (every task,
   whose it is, closed or not) and `current`, the task it is on now. On the
   local MCP server the same is `report_build_step`. A refusal names its reason in brackets: `(locked)` means
-  an input of the step is not done yet, so work on that first. If there is no
+  an input of the step is not done yet, so work on that first; `(unconfirmed)`
+  means the step belongs to an optional module the author has not confirmed, so
+  ask them about the modules first. If there is no
   `step` command, the facts above are what the map shows.
 
 **Where things stand.** `npx @extenshi/cli@latest map status --json` reads the
-map without starting anything: `progress`, `needsYou` (steps waiting on the
-author), `running`, `next` (steps whose inputs are all done and that can run in
-parallel), `steps` and `nodes`. `steps` has the shape `get_build_map` answers
+map without starting anything: `progress`, `needsYou` (the questions waiting on
+the author, see the first rule), `modules` (the optional modules), `running`,
+`next` (steps whose inputs are all done and that can run in parallel), `steps`
+and `nodes`. A step of a module that nobody settled (neither the code nor a
+Dojo decision asks for it, and the author has not confirmed the modules) is
+`locked` with `waitsOn: "features"` and never appears in `next`. `steps` has the shape `get_build_map` answers
 with: each step this extension needs, its `status`, the task it is on
 (`current`, with `byAuthor` when that task is the author's) and `decide` when
 the owner answers it in Dojo. `nodes` has every step in full, with the fact
@@ -173,6 +205,31 @@ history. Use `next` to choose what to work on, and never tell the author a step
 is done while the map shows it otherwise. Before a store submission, name the
 steps that rest only on the author's word (`basis: author`) so they can check
 them once more.
+
+**Modules.** The optional modules (`analytics`, `uninstall`, `feedback`,
+`i18n`, `monetization`, `onboarding`, `promo`, `research`, `ci`) are chosen on
+the `features` step. `modules.list` in `map status --json` and `get_build_map`
+has each one with:
+
+- `on` and `source`: `author` (they chose it), `code` (the code has it), `dojo`
+  (a Dojo decision asks for it) or `default`. A default is not a
+  recommendation and not a choice: with `unconfirmed: true` nobody decided it
+  yet. Analytics is off by default;
+- `steps` (what it adds to the map), `data` (what starts leaving the user's
+  device) and `stores` (what changes in the privacy policy and store forms);
+- `found`, when the code or Dojo has a module that is switched off: tell the
+  author, and remove it from the code if they confirm.
+
+Go through the modules with the author using the recommendation table of the
+`extension-planning` skill. Record each answer the author gives with
+`npx @extenshi/cli@latest map set features.<module> on|off --agent "<label>"`
+(`auto` hands the module back to what the code and Dojo suggest; on the local
+MCP server, `set_build_module`). The switch lands in the step's evidence
+history with who and when. Record only what the author said. They then confirm
+the whole set on the map, where the button names it ("Confirm: 4 modules, +9
+steps"); you never confirm for them. Until they do, the steps of a module stay
+locked unless the code already has the module or a Dojo decision asks for it,
+so do not start building analytics, a survey or a paywall "because it was on".
 
 **Skills for a step.** Every step an agent works on names the published skills
 that hold the instructions for it: the foundation steps name
@@ -279,14 +336,16 @@ reach one:
    feedback form in Dojo and settling the modules (`features`) happen outside
    extenshi, and nothing in the project proves them. The author marks them on
    the map with **Mark as done** (and can undo it); never mark them yourself.
-   For the modules, go through the current choice with the author first; a
-   module they want switched on or off changes in the code, by you. Once marked, `extenshi map status` lists
-   the step as done for every agent and worktree.
+   For the modules, go through the choice with the author first and switch what
+   they decide on the map with `map set features.<module> on|off` (see
+   "Modules"); the author can also press the switches there. Once marked,
+   `extenshi map status` lists the step as done for every agent and worktree.
 7. When the author uploads to a store themselves, the store step on the map
    shows the package on disk, the values to paste and the dashboard; the author
    presses **I submitted it for review** there. Do not mark it yourself.
 
-**The feedback form** is on by default (module `feedback`): a hosted page where
+**The feedback form** (module `feedback`, on by default until the author
+settles the modules) is a hosted page where
 people who still have the extension report a bug, a site it breaks on or an
 idea. Forms are created only in Dojo, so `feedbackForm` waits on the author.
 Say in one line what the form is for and link
@@ -311,6 +370,11 @@ skips the step on the map.
 
 ## What this skill must not do
 
+- Report a status with a non-empty `needsYou` without putting every entry to
+  the author in that same reply, or list step ids in place of the questions.
+- Treat a module that is on by default as chosen, or work on a step of a
+  module the author has not confirmed.
+- Switch a module the author did not ask for, or confirm the modules for them.
 - Recommend next steps on a project whose author was never asked about the
   map without asking in the same reply.
 - Hide the offer inside a list of suggestions, or ask the author to run the

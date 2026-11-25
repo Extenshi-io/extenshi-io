@@ -109,11 +109,38 @@ that still hold the old name.
 
 ## Optional modules (`features`)
 
-List what each module adds, so the author switches on only what they will
-maintain:
+The modules are the author's choice, and the steps of a module wait on the map
+until the author confirms the set (unless the code already has the module or a
+Dojo decision asks for it). A module that is on only by default is
+not chosen (`source: "default"`, `unconfirmed` in `modules.list` of
+`map status --json` and `get_build_map`). Analytics is off by default: it is
+the module with the widest consequences, so it is switched on by a decision.
+
+Make a recommendation table and show it to the author before you ask. One row
+per module, taken from `modules.list` (`on`, `source`, `steps`, `data`,
+`stores`) and from what you know about this extension:
+
+| Column | What goes in it |
+| --- | --- |
+| Module | Its name and what is set now, with the source (code, Dojo, the author, default). |
+| Cost | The steps it adds (`steps`), credits it spends, and what the author keeps up afterwards. |
+| Data | What starts leaving the user's device (`data`). "Nothing" is an answer too. |
+| Stores and policy | What changes in the privacy policy, the store data forms and the manifest (`stores`). |
+| Fits this extension? | How it sits with the brief and with the niche research, if `research` is done: what competitors promise, what their users complain about. |
+| Recommendation | On or off, with the reason in one sentence. |
+
+Name the conflicts outright. For example: "Analytics goes against the
+positioning 'nothing leaves your device': three of the five closest
+extensions sell exactly that promise, and switching it on means a consent
+toggle, a policy paragraph and the Firefox data declaration. Recommendation:
+off." Or the other way: "Without the uninstall survey you will not learn why
+people leave; it sends nothing from the extension. Recommendation: on."
+
+What each module brings, for the Cost column:
 
 - **Analytics:** the author's own PostHog project, a consent toggle in the
-  extension and a paragraph in the privacy policy.
+  extension, a paragraph in the privacy policy, the Chrome data-use form and
+  `data_collection_permissions` for Firefox.
 - **Uninstall survey and feedback form:** hosted pages the author creates in
   Dojo, and one link each in the extension.
 - **Localization:** `_locales` files, translated listing text and screenshots
@@ -122,6 +149,17 @@ maintain:
   completes in the browser, license terms and a paywall.
 - **Welcome page:** a page opened once after install.
 - **Promo tiles:** listing artwork, optional in every store.
+- **Niche research:** catalog reads, which spend credits; its result feeds the
+  "Fits this extension?" column, so when the author wants it, settle it first.
+- **CI evidence:** a workflow in the author's repository that sends scan
+  results of each build.
+
+Then ask, one module at a time where the answer is not obvious, starting with
+the ones that are on only by default. Record each answer with
+`npx @extenshi/cli@latest map set features.<module> on|off` (`set_build_module`
+on the local MCP server) and send the author to the `features` step to
+confirm the set. Do not confirm it for them, and do not start a module's steps
+before they do.
 
 ## How to report
 
@@ -131,6 +169,7 @@ maintain:
 - Stores, with what each one adds for this extension.
 - Match patterns, and why each is as wide as it is.
 - Name candidates with the collisions found, and the one chosen.
+- The module recommendation table, and which modules the author settled.
 - Decisions still open, each with the person who makes it.
 
 ## Stay accurate
