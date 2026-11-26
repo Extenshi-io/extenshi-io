@@ -106,7 +106,13 @@ describe('build map tools on the local server (phase 2)', { timeout: 30_000 }, (
 		expect(offered.url).toBeUndefined()
 
 		const map = (await agent.getMap()) as Record<string, any>
-		expect(map).toMatchObject({ home, facts: false, note: expect.stringMatching(/not running/) })
+		expect(map).toMatchObject({ home, facts: 'files', note: expect.stringMatching(/not running/) })
+		// Nobody asked the author yet: the answer opens with the offer, before the data caveats.
+		expect(map.offer).toMatchObject({ offered: false, declined: false, offers: 0 })
+		expect(Object.keys(map)[0]).toBe('offer')
+		expect(map.offer.next).toMatch(/has not been asked about the build map.*Ask in this reply/)
+		// `next` stays the steps that can start now.
+		expect(Array.isArray(map.next)).toBe(true)
 		expect(map.reviews[ICONS]).toMatchObject({
 			status: 'waiting',
 			round: 1,
@@ -130,6 +136,14 @@ describe('build map tools on the local server (phase 2)', { timeout: 30_000 }, (
 			files: ['concepts/letter.svg'],
 		})) as Record<string, unknown>
 		expect(done).toMatchObject({ tasksDone: 4, tasks: 4, checked: true, inputsChecked: false })
+		// The answer names every task and whose it is; with all of them closed there is no current one.
+		expect(done.todos).toEqual([
+			{ task: 0, t: 'Read name, tagline and audience', by: 'agent', done: true },
+			{ task: 1, t: 'Generate four concepts', by: 'agent', done: true },
+			{ task: 2, t: 'Pick a concept', by: 'author', done: true },
+			{ task: 3, t: 'Lock the concept for the set', by: 'agent', done: true },
+		])
+		expect(done.current).toBeUndefined()
 		const { state } = await readMapState(home)
 		expect(state.evidence[ICONS][0]).toMatchObject({ basis: 'agent', checked: true })
 		expect(state.evidence[ICONS][1]).toMatchObject({ basis: 'author', who: 'icons agent' })
@@ -142,6 +156,109 @@ describe('build map tools on the local server (phase 2)', { timeout: 30_000 }, (
 		).rejects.toThrow(/no such file/)
 	})
 
+	it('without the author’s map: reads the project files itself, so a written extension is not sent back to the idea', async () => {
+		const home = await project()
+		writeFileSync(
+			path.join(home, 'manifest.json'),
+			JSON.stringify({
+				manifest_version: 3,
+				name: 'UTM Builder',
+				version: '0.1.0',
+				background: { service_worker: 'background.js' },
+			}),
+		)
+		writeFileSync(path.join(home, 'background.js'), '')
+		const map = (await buildMapAgent(home).getMap()) as Record<string, any>
+		expect(map.facts).toBe('files')
+		expect(map.steps.idea).toMatchObject({ status: 'done', basis: 'project' })
+		expect(map.steps.bg).toMatchObject({ status: 'done', basis: 'project' })
+		expect(map.next).not.toContain('idea')
+		expect(map.next).toContain('perms')
+		// The modules are the author's to confirm, whatever the files suggest.
+		const features = map.needsYou.find((ask: { id: string }) => ask.id === 'features')
+		expect(features).toMatchObject({ answer: 'map', label: 'Modules' })
+		expect(features.options.map((option: { value: string }) => option.value)).toContain('features.analytics')
+		expect(map.needsYouHow).toContain('one at a time')
+		expect(map.modules.summary).toMatchObject({ confirmed: false })
+	})
+
+	it('records the author’s answer about a module; the author still confirms the set', async () => {
+		const home = await project()
+		const agent = buildMapAgent(home)
+		const set = (await agent.setModule(undefined, {
+			module: 'analytics',
+			value: 'on',
+			agent: 'planner',
+			note: 'wants usage numbers',
+		})) as Record<string, any>
+		expect(set.module).toMatchObject({ id: 'analytics', on: true, source: 'author', unconfirmed: true })
+		expect(set.module.data).toMatch(/consent/)
+		const { state } = await readMapState(home)
+		expect(state.settings.features).toEqual({ analytics: true })
+		expect(state.evidence.features[0]).toMatchObject({
+			basis: 'agent',
+			who: 'planner',
+			note: 'wants usage numbers',
+		})
+		const back = (await agent.setModule(undefined, {
+			module: 'analytics',
+			value: 'auto',
+			agent: 'planner',
+		})) as Record<string, any>
+		expect(back.module).toMatchObject({ on: false, source: 'default' })
+		await expect(
+			agent.setModule(undefined, { module: 'telemetry', value: 'on', agent: 'planner' } as never),
+		).rejects.toThrow(/unknown_setting/)
+	})
+
+	it('while the author’s map runs: answers with the module as it is after the write, not the map’s earlier view', async () => {
+		const home = await project()
+		// A map that reads the state file late: the first reads after the write still show the old view.
+		let reads = 0
+		const instance = 'instance-1'
+		const server = http.createServer((req, res) => {
+			res.writeHead(200, { 'content-type': 'application/json' })
+			if (req.url !== '/api/map') {
+				res.end(JSON.stringify({ instance, home, protocol: 6, version: 'test', clients: 1 }))
+				return
+			}
+			reads += 1
+			void (async () => {
+				const state = reads > 2 ? (await readMapState(home)).state : emptyBuildMapState()
+				res.end(
+					JSON.stringify({
+						view: deriveBuildMap(state, { done: {} }),
+						reviews: {},
+						evidence: state.evidence,
+					}),
+				)
+			})()
+		})
+		servers.push(server)
+		await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+		const port = (server.address() as AddressInfo).port
+		await writeJsonAtomic(mapPath(home, MAP_SERVER_FILE), {
+			pid: process.pid,
+			host: os.hostname(),
+			port,
+			url: `http://127.0.0.1:${port}/`,
+			instance,
+			token: 't',
+			protocol: 6,
+			version: 'test',
+			home,
+			startedAt: new Date().toISOString(),
+		})
+		const set = (await buildMapAgent(home).setModule(undefined, {
+			module: 'analytics',
+			value: 'on',
+			agent: 'planner',
+		})) as Record<string, any>
+		expect(reads).toBeGreaterThan(2)
+		expect(set.module).toMatchObject({ id: 'analytics', on: true, source: 'author' })
+		expect(set.summary).toMatchObject({ confirmed: false })
+	})
+
 	it('while the author’s map runs: reads its view, links the step, and refuses a step whose inputs are not done', async () => {
 		const home = await project()
 		const url = await runningMap(home)
@@ -149,6 +266,7 @@ describe('build map tools on the local server (phase 2)', { timeout: 30_000 }, (
 		const map = (await agent.getMap()) as Record<string, any>
 		expect(map).toMatchObject({ facts: true, url })
 		expect(map.note).toBeUndefined()
+		expect(map.offer).toBeUndefined()
 		await expect(
 			agent.requestReview(undefined, {
 				step: ICONS,

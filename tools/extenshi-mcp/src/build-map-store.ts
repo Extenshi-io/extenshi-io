@@ -47,7 +47,7 @@ const STATE_LOCK = 'build-map.lock'
 const SERVER_LOCK = 'build-map.server.lock'
 
 /** Bumped when the page/server protocol changes: a newer CLI replaces an older server instead of reusing it. */
-export const MAP_PROTOCOL = 7
+export const MAP_PROTOCOL = 8
 
 /** The record token, from the owner-only record file: authorizes /api/shutdown and a client's hello. */
 export const MAP_TOKEN_HEADER = 'x-extenshi-map-token'

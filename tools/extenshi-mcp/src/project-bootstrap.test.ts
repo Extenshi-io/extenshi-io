@@ -2,7 +2,7 @@ import * as contracts from '@extenshi/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bff } from './bff.js'
 import { amoCreateAllowed, publishArtifact, storeCredentialsFor } from './publish.js'
-import { BUILD_MAP_READ_MS, type Capability, registerTools } from './tools.js'
+import { BUILD_MAP_READ_MS, type Capability, HOSTED_BUILD_MAP, registerTools } from './tools.js'
 
 vi.mock('./telemetry.js', async (importOriginal) => ({
 	...(await importOriginal<typeof import('./telemetry.js')>()),
@@ -54,7 +54,10 @@ describe('buildMap in project answers (local server only)', () => {
 		offers: 1,
 		home: '/repo/ext',
 	}
-	function localTools(bff: Partial<Bff>, readBuildMap: (projectDir?: string) => Promise<typeof summary>) {
+	function localTools(
+		bff: Partial<Bff>,
+		readBuildMap: (projectDir?: string) => Promise<typeof summary & { next?: string }>,
+	) {
 		const tools: Record<string, any> = {}
 		const addTool = (t: { name: string }) => {
 			tools[t.name] = t
@@ -100,6 +103,38 @@ describe('buildMap in project answers (local server only)', () => {
 		})
 	})
 
+	it('a map that names a next step comes first in the answer, so it is read before the project', async () => {
+		const getMyProjectState = vi.fn(async () => ({
+			schemaVersion: 5,
+			integration: { path: 'src/extenshi.config.js' },
+		}))
+		const neverAsked = {
+			...summary,
+			running: false,
+			url: undefined,
+			offered: false,
+			offers: 0,
+			next: 'The author has not been asked about the build map for /repo/ext yet. Ask in this reply.',
+		}
+		const tool = localTools({ getMyProjectState }, async () => neverAsked).get_project_state
+		const out = await tool.execute(tool.parameters.parse({ projectId }), {})
+		expect(Object.keys(JSON.parse(out))).toEqual(['buildMap', 'schemaVersion', 'integration'])
+		expect(out.indexOf('"next"')).toBeLessThan(out.indexOf('"schemaVersion"'))
+		const created = localTools(
+			{ createProject: vi.fn(async () => ({ projectId, nextSteps: [] })) },
+			async () => neverAsked,
+		).create_project
+		const input = created.parameters.parse({ name: 'Reader', idempotencyKey: key })
+		expect(Object.keys(JSON.parse(await created.execute(input, {})))[0]).toBe('buildMap')
+		// With no step to take, the map stays a field at the end.
+		const running = localTools({ getMyProjectState }, async () => summary).get_project_state
+		expect(Object.keys(JSON.parse(await running.execute({ projectId }, {})))).toEqual([
+			'schemaVersion',
+			'integration',
+			'buildMap',
+		])
+	})
+
 	it('a map that cannot be read leaves the answer as it was', async () => {
 		const getMyProjectState = vi.fn(async () => ({ schemaVersion: 5 }))
 		const tool = localTools({ getMyProjectState }, async () => {
@@ -123,7 +158,7 @@ describe('buildMap in project answers (local server only)', () => {
 		}
 	})
 
-	it('without local files (the hosted connector) there is no projectDir and no buildMap', async () => {
+	it('without local files (the hosted connector) there is no projectDir, and buildMap only says where the offer record is', async () => {
 		const createProject = vi.fn(async () => ({ projectId }))
 		const getMyProjectState = vi.fn(async () => ({ schemaVersion: 5 }))
 		const tools = toolsWith({ createProject, getMyProjectState })
@@ -133,8 +168,18 @@ describe('buildMap in project answers (local server only)', () => {
 		expect(tools.get_project_state.parameters.parse({ projectId, projectDir: '.' })).not.toHaveProperty(
 			'projectDir',
 		)
-		expect(tools.get_project_state.description).not.toContain('buildMap')
-		expect(JSON.parse(await tools.get_project_state.execute({ projectId }, {}))).toEqual({ schemaVersion: 5 })
+		expect(tools.get_project_state.description).toContain('`buildMap.note`')
+		expect(tools.get_project_state.description).not.toContain('buildMap` {')
+		expect(JSON.parse(await tools.get_project_state.execute({ projectId }, {}))).toEqual({
+			schemaVersion: 5,
+			buildMap: HOSTED_BUILD_MAP,
+		})
+		expect(JSON.parse(await tools.create_project.execute({ name: 'R', idempotencyKey: key }, {}))).toEqual({
+			projectId,
+			buildMap: HOSTED_BUILD_MAP,
+		})
+		expect(HOSTED_BUILD_MAP.note).toContain('.extenshi/build-map.json')
+		expect(HOSTED_BUILD_MAP.note).toContain('extension-build')
 	})
 })
 

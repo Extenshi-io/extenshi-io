@@ -20,21 +20,30 @@
 
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { realpath, stat } from 'node:fs/promises'
+import { access, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import {
 	answerBuildReview,
 	BUILD_MAP_SKILL,
+	type BuildAsk,
 	type BuildEvidenceWhere,
+	type BuildMapState,
 	type BuildMapView,
+	type BuildModulesSummary,
+	type BuildModuleView,
 	type BuildNodeRecord,
+	type BuildNodeView,
 	type BuildReview,
 	type BuildStepReport,
+	buildAsks,
+	buildModulesSummary,
+	buildNodeById,
 	buildReviewLocationValid,
 	buildSkillRef,
 	buildStepSkills,
 	openBuildReview,
 	reportBuildStep,
+	setBuildSetting,
 } from '@extenshi/contracts'
 import {
 	type MapClient,
@@ -148,13 +157,50 @@ export async function reviewFileOnDisk(
 	}
 }
 
-/** Evidence files hashed: relative to `home` when inside it, absolute otherwise. Throws for a file that is not there. */
+/** Whether a directory between `home` and `file` has a `.git` of its own: a checkout nested in the main one. */
+async function nestedCheckout(home: string, file: string): Promise<boolean> {
+	for (let dir = path.dirname(file); inside(home, dir); dir = path.dirname(dir)) {
+		try {
+			await access(path.join(dir, '.git'))
+			return true
+		} catch {
+			// not this one
+		}
+	}
+	return false
+}
+
+/**
+ * Where an evidence file is, as the journal keeps it: relative to the project
+ * directory of the checkout that holds it. A file an agent wrote in a worktree
+ * gets the path it has in the main checkout once the work is merged
+ * (`src/manifest.json`, not `.claude/worktrees/<name>/src/manifest.json` or an
+ * absolute path that is gone with the worktree). Only a file outside every
+ * checkout of the project stays absolute.
+ */
+async function journalPath(home: string, real: string, roots: () => Promise<string[]>): Promise<string> {
+	// Asking git for the checkouts costs a process or two: only for a file outside the
+	// main checkout, or under a directory with a .git of its own (a worktree nested in it).
+	if (inside(home, real) && !(await nestedCheckout(home, real))) return path.relative(home, real)
+	const holder = (await roots()).filter((root) => inside(root, real)).sort((a, b) => b.length - a.length)[0]
+	return holder ? path.relative(holder, real) : real
+}
+
+/**
+ * Evidence files hashed, each where the journal keeps it (journalPath). Throws
+ * for a file that is not there.
+ */
 export async function evidenceFiles(
 	home: string,
 	from: string,
 	files: readonly string[],
 ): Promise<BuildEvidenceWhere[]> {
 	const where: BuildEvidenceWhere[] = []
+	let roots: Promise<string[]> | undefined
+	const checkouts = () => {
+		roots ??= checkoutRoots(home)
+		return roots
+	}
 	for (const given of files) {
 		const absolute = path.resolve(from, given)
 		let info: Awaited<ReturnType<typeof stat>>
@@ -169,7 +215,7 @@ export async function evidenceFiles(
 				`${given}: larger than ${EVIDENCE_FILE_MAX_BYTES / 1024 / 1024} MB; name a smaller file as proof.`,
 			)
 		const real = await realpath(absolute)
-		where.push({ file: inside(home, real) ? path.relative(home, real) : real, sha256: await sha256Of(real) })
+		where.push({ file: await journalPath(home, real, checkouts), sha256: await sha256Of(real) })
 	}
 	return where
 }
@@ -235,6 +281,56 @@ export function mapUpdateNote(
 /** The address that opens one step on the map. */
 export const stepUrl = (url: string, node: string) => `${url.replace(/#.*$/, '')}#node=${node}`
 
+/** A question waiting on the author, with the link that opens its step on the running map. */
+export type MapAsk = BuildAsk & { link?: string }
+
+/** What an agent does with `needsYou`; said wherever the list is given. */
+export const NEEDS_YOU_HOW =
+	'Each entry is a question for the author. Put every one to them in this same reply, one at a time: what it decides, the options with the current values, your recommendation, and the link. Never list step ids alone, and never answer for the author.'
+
+/**
+ * The steps waiting on the author as questions (`needsYou` of `map status
+ * --json` and get_build_map): what each decides, the options and their current
+ * values, where the author answers, and the steps it holds up. `url`: the
+ * running map, for a link to each step.
+ */
+export function needsYouOf(
+	view: BuildMapView,
+	reviews: Record<string, BuildReview> = {},
+	url?: string,
+): MapAsk[] {
+	return buildAsks(view, reviews).map((ask) => ({ ...ask, ...(url ? { link: stepUrl(url, ask.id) } : {}) }))
+}
+
+/**
+ * The optional modules for `map status --json` and get_build_map: each with
+ * its switch, where the value comes from and what it adds, and the set in
+ * numbers. Undefined for a map that runs a release without them.
+ */
+export function modulesOf(
+	view: BuildMapView,
+): { summary: BuildModulesSummary; list: BuildModuleView[] } | undefined {
+	const summary = buildModulesSummary(view)
+	return summary && view.modules ? { summary, list: view.modules } : undefined
+}
+
+/**
+ * Record the author's answer about a module from the chat: on, off, or back to
+ * what the project suggests (`on: null`). The author confirms the set on the map.
+ */
+export async function setModule(
+	home: string,
+	input: { setting: string; on: boolean | null; agent: string; note?: string },
+): Promise<string | undefined> {
+	const at = new Date().toISOString()
+	let before: BuildMapState | undefined
+	const after = await updateMapState(home, (current) => {
+		before = current
+		return setBuildSetting(current, { ...input, via: 'chat', at })
+	})
+	return after === before ? undefined : at
+}
+
 /** A published skill as an agent is told about it: what it teaches and the file to download. */
 export type StepSkill = { name: string; teaches: string; url: string }
 
@@ -279,6 +375,60 @@ export function mapSkills(view: BuildMapView): MapSkills {
 		steps,
 		index,
 	}
+}
+
+/** One task of a step's checklist, as an agent reads it. */
+export type StepTask = { task: number; t: string; by: 'author' | 'agent'; done: boolean }
+
+/** The task a step is on, by its number and text; `byAuthor` when only the author does it. */
+export type StepCurrent = { task: number; t: string; byAuthor?: true }
+
+/**
+ * A step's checklist with `ti` tasks closed: every task (whose it is, whether
+ * it is closed) and the one the step is on. `map step` and report_build_step
+ * answer with it, so an agent learns what task 1 is without reading the graph.
+ */
+export function stepTasks(id: string, ti: number): { todos: StepTask[]; current?: StepCurrent } {
+	const todos = buildNodeById(id)?.todos ?? []
+	const at = todos[ti]
+	return {
+		todos: todos.map((todo, task) => ({
+			task,
+			t: todo.t,
+			by: todo.a === 'you' ? ('author' as const) : ('agent' as const),
+			done: task < ti,
+		})),
+		...(at ? { current: { task: ti, t: at.t, ...(at.a === 'you' ? { byAuthor: true as const } : {}) } } : {}),
+	}
+}
+
+/**
+ * Every step this extension needs, for `map status --json` and get_build_map
+ * alike (`steps`): its status, the task it is on and whose that is, who works
+ * on it, a re-run, what a done step rests on, and where the owner decides it.
+ */
+export function stepsOf(nodes: Record<string, BuildNodeView>) {
+	return Object.fromEntries(
+		Object.values(nodes)
+			.filter((node) => node.status !== 'inactive')
+			.map((node) => {
+				const todo = node.status === 'done' ? undefined : buildNodeById(node.id)?.todos[node.taskIndex]
+				return [
+					node.id,
+					{
+						status: node.status,
+						...(todo
+							? { task: node.taskIndex, current: todo.t, ...(todo.a === 'you' ? { byAuthor: true } : {}) }
+							: {}),
+						...(node.agent ? { agent: node.agent } : {}),
+						...(node.redo ? { redo: true } : {}),
+						...(node.basis ? { basis: node.basis } : {}),
+						...(node.decide ? { decide: node.decide } : {}),
+						...(node.waitsOn ? { waitsOn: node.waitsOn } : {}),
+					},
+				]
+			}),
+	)
 }
 
 export type StepInput = Omit<BuildStepReport, 'at' | 'where' | 'checked'> & {

@@ -9,9 +9,10 @@
  * this server for it, tools the host keeps from the model (`visibility: app`):
  *
  *   - build_map_view: the snapshot the page draws. While the author's map server
- *     runs, its snapshot as it is (the project facts are read by the CLI only);
- *     otherwise one derived from the state file, which says it has no facts.
- *   - build_map_answer: the author's answers, the same three writes the map
+ *     runs, its snapshot as it is; otherwise one derived from the state file and
+ *     what the project files prove (build-map-files.ts, `facts: 'files'`),
+ *     without the scan, AI visibility and Dojo readiness records the CLI reads.
+ *   - build_map_answer: the author's answers, the same four writes the map
  *     server takes from its page (a mark, a route, a pick or another round),
  *     to the same state file under the same lock, checked the same way.
  *   - build_map_file: a variant's thumbnail as a data: URL, since the page in a
@@ -36,16 +37,25 @@ import {
 	BUILD_ROUTE_TEXT_MAX,
 	BuildConfirmError,
 	BuildRouteError,
+	BuildSettingError,
 	BuildStepError,
 	confirmBuildTask,
 	deriveBuildMap,
 	setBuildRoute,
+	setBuildSetting,
 } from '@extenshi/contracts'
 import type { FastMCP, ResourceResult } from 'fastmcp'
 import { z } from 'zod'
 import { reviewFileOnDisk, serverSnapshot } from './build-map-agent.js'
+import { readFileFacts } from './build-map-files.js'
 import { buildMapPage } from './build-map-page.js'
-import { MAP_PROTOCOL, readMapState, resolveMapHome, updateMapState } from './build-map-store.js'
+import {
+	MAP_PROTOCOL,
+	projectCheckouts,
+	readMapState,
+	resolveMapHome,
+	updateMapState,
+} from './build-map-store.js'
 import { BUILD_MAP_UI, MCP_APP_MIME } from './build-map-ui.js'
 
 /** A thumbnail larger than this shows as its number. */
@@ -60,6 +70,7 @@ const nodeField = z.string().min(1).max(64)
 
 /** The bodies the map server's /api/confirm, /api/route and /api/review take (build-map-server.ts). */
 const ANSWERS = {
+	setting: z.object({ setting: z.string().min(1).max(64), on: z.boolean().nullable(), note: noteField }),
 	confirm: z.object({ node: nodeField, task: z.number().int().min(0), done: z.boolean(), note: noteField }),
 	route: z.object({
 		node: nodeField,
@@ -147,12 +158,14 @@ export function buildMapApp(options: {
 			else {
 				const read = await readMapState(home)
 				const { state } = read
+				const checkouts = await projectCheckouts(home)
+				const facts = await readFileFacts(home, checkouts)
 				snapshot = {
 					protocol: MAP_PROTOCOL,
 					home,
-					project: { name: path.basename(home) },
-					checkouts: 1,
-					view: deriveBuildMap(state, { done: {} }),
+					project: { name: path.basename(home), ...facts.project },
+					checkouts: checkouts.length,
+					view: deriveBuildMap(state, facts),
 					reviews: state.reviews,
 					log: state.log,
 					evidence: state.evidence,
@@ -160,7 +173,7 @@ export function buildMapApp(options: {
 					offer: state.offer,
 					...(read.problem ? { problem: read.problem } : {}),
 					generatedAt: new Date().toISOString(),
-					app: { facts: false, writable },
+					app: { facts: 'files', writable },
 				}
 			}
 			const etag = etagOf(snapshot)
@@ -180,7 +193,10 @@ export function buildMapApp(options: {
 			const home = await homeOf(projectDir)
 			const at = new Date().toISOString()
 			try {
-				if (kind === 'confirm') {
+				if (kind === 'setting') {
+					const change = parsed.data as z.infer<(typeof ANSWERS)['setting']>
+					await updateMapState(home, (state) => setBuildSetting(state, { ...change, via: 'map', at }))
+				} else if (kind === 'confirm') {
 					const change = parsed.data as z.infer<(typeof ANSWERS)['confirm']>
 					await updateMapState(home, (state) => confirmBuildTask(state, { ...change, at }))
 				} else if (kind === 'route') {
@@ -198,6 +214,7 @@ export function buildMapApp(options: {
 					await updateMapState(home, (state) => answerBuildReview(state, view, { ...change, via: 'map', at }))
 				}
 			} catch (error) {
+				if (error instanceof BuildSettingError) return refused(400, error.code, error.message)
 				if (error instanceof BuildConfirmError)
 					return refused(error.code === 'out_of_order' ? 409 : 400, error.code, error.message)
 				if (error instanceof BuildRouteError)
@@ -264,7 +281,7 @@ export function registerBuildMapApp(server: FastMCP, app: BuildMapApp): void {
 	server.addTool({
 		name: 'build_map_answer',
 		description:
-			'The author answers on the build map page: marks a task, does a step themselves or skips it, picks a variant or asks for another round. Called by the page only, when the author clicks.',
+			'The author answers on the build map page: switches an optional module, marks a task, does a step themselves or skips it, picks a variant or asks for another round. Called by the page only, when the author clicks.',
 		annotations: {
 			title: 'Build map: the author’s answer',
 			readOnlyHint: false,
@@ -274,7 +291,7 @@ export function registerBuildMapApp(server: FastMCP, app: BuildMapApp): void {
 		_meta: appOnly,
 		parameters: z.object({
 			projectDir,
-			kind: z.enum(['confirm', 'route', 'review']),
+			kind: z.enum(['setting', 'confirm', 'route', 'review']),
 			body: z.record(z.string(), z.unknown()),
 		}),
 		execute: async (args) => json(await app.answer(args.projectDir, args.kind, args.body)),

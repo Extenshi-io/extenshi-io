@@ -177,15 +177,16 @@ export type McpAuth = 'api-key' | 'oauth'
  */
 export const SERVER_INSTRUCTIONS =
 	"Extenshi covers browser-extension development and operations: catalog and security data on other people's extensions, " +
-	"and the signed-in developer's own projects, hosted pages, Pay applications and privacy policy. " +
-	"get_development_guide (free) returns the workflow, this connection's tools, services and documentation links; " +
+	"and the signed-in developer's projects, hosted pages, Pay applications and privacy policy. " +
+	'get_development_guide (free) returns the workflow, tools, services and documentation links; ' +
 	'search_docs (free) returns current documentation and exact CLI flags. ' +
-	'get_credit_balance reports the remaining credits; get_risk_by_store_ids covers 40 store IDs per read, and get_security costs three reads. ' +
+	'get_credit_balance reports credits; get_risk_by_store_ids covers 40 store IDs per read, and get_security costs three reads. ' +
 	"list_my_projects returns the developer's projects (create_project adds one); get_project_state returns a project's configuration, including integration.file " +
-	'(the content for integration.path that links a repository to the project) and integration.unwired. ' +
-	'The build map (npx @extenshi/cli map) is one local page per project and its worktrees, where the author follows progress and makes choices. ' +
+	'(the integration.path content linking a repository), integration.unwired and buildMap. ' +
+	'The build map (npx @extenshi/cli map) is one local page per project, where the author follows progress and makes choices; ' +
+	'it is offered to them once, when work on the project begins (get_skill extension-build). ' +
 	'get_decisions lists owner decisions (AMO add-on id, license, seller, pricing); propose_decision proposes a value, and the owner decides it in Dojo. ' +
-	'Pay applications are separate from projects (list_pay_apps, create_pay_app, get_pay_readiness) and need the pay.read / pay.write scopes; ' +
+	'Pay applications are separate from projects (list_pay_apps, create_pay_app) and need the pay.read / pay.write scopes; ' +
 	'agreement and KYC happen in the browser, and only the publishable SDK key and the public verification key belong in extension code. ' +
 	'Hosted privacy-policy tools need a Pro project: publish_privacy_policy updates the live public page; update_privacy_policy_with_ai only proposes. ' +
 	'Registered tools prove neither account entitlements nor a completed release.'
@@ -315,10 +316,30 @@ export interface ToolDeps {
 /** How long a project answer waits for the build map (a slow `git`, a hung server) before going without it. */
 export const BUILD_MAP_READ_MS = 3_000
 
-/** Add `buildMap` to a JSON object answer; anything else, or no map, passes through unchanged. */
-function withBuildMap(result: unknown, buildMap: BuildMapSummary | undefined): unknown {
+/**
+ * `buildMap` on the hosted connector, which has no access to the author's files: where the answer to the
+ * build-map offer is kept, so work in the repository can read it there. Reference material (directory policy
+ * 2F/2G): a fact about the record, with no directive and no tool call. Pinned by tools.test.ts.
+ */
+export const HOSTED_BUILD_MAP = {
+	readable: false,
+	note:
+		"This connection cannot read the author's files. In the extension's repository, the author's answer to the " +
+		'build-map offer is the `offer` record in .extenshi/build-map.json of the main checkout; without that file the ' +
+		'author has not been asked yet. The build map (npx @extenshi/cli@latest map) is offered to the author once per ' +
+		'project, as a separate yes/no question, and the extension-build skill (get_skill) describes the offer.',
+} as const
+
+/**
+ * Add `buildMap` to a JSON object answer; anything else passes through unchanged. A map that names a next step
+ * goes first: a project answer runs to ~10 KB, and a step at its very end is read as a footnote.
+ */
+function withBuildMap(
+	result: unknown,
+	buildMap: BuildMapSummary | typeof HOSTED_BUILD_MAP | undefined,
+): unknown {
 	if (!buildMap || !result || typeof result !== 'object' || Array.isArray(result)) return result
-	return { ...result, buildMap }
+	return 'next' in buildMap && buildMap.next ? { buildMap, ...result } : { ...result, buildMap }
 }
 
 // ── Internal helpers (ported from index.ts, now deps-parametrized) ───────────
@@ -810,6 +831,13 @@ const TOOL_ANNOTATIONS: Record<
 		idempotentHint: true,
 		openWorldHint: false,
 	},
+	set_build_module: {
+		title: 'Record the author’s module choice',
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
 	request_build_review: {
 		title: 'Offer the author variants',
 		readOnlyHint: false,
@@ -1236,7 +1264,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 	}
 	// The build map is read next to the BFF call and never fails or holds up a project answer.
 	const readBuildMap = deps.readBuildMap
-	const buildMapOf = (projectDir?: string): Promise<BuildMapSummary | undefined> =>
+	const buildMapOf = (projectDir?: string): Promise<BuildMapSummary | typeof HOSTED_BUILD_MAP | undefined> =>
 		readBuildMap
 			? Promise.race([
 					readBuildMap(projectDir).catch(() => undefined),
@@ -1244,7 +1272,7 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 						setTimeout(() => resolve(undefined), BUILD_MAP_READ_MS).unref()
 					}),
 				])
-			: Promise.resolve(undefined)
+			: Promise.resolve(HOSTED_BUILD_MAP)
 	const projectDirParam = z
 		.string()
 		.min(1)
@@ -1255,10 +1283,12 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 				'which every agent and worktree of the project shares.',
 		)
 	const buildMapNote = readBuildMap
-		? ' On this local server the answer also carries `buildMap` {running, url (while running), offered, declined, offers, home} ' +
+		? ' On this local server the answer also carries `buildMap` {next, running, url (while running), offered, declined, offers, home} ' +
 			'for projectDir: the author’s build map (npx @extenshi/cli map), one per project for every agent and git worktree; ' +
+			'`next` is the step the offer of the map to the author is at, and buildMap comes first in the answer while it has one; ' +
 			'absent when the directory cannot be read.'
-		: ''
+		: ' The answer also carries `buildMap.note`: where the repository keeps the author’s answer to the build-map offer, ' +
+			'which this connection cannot read.'
 
 	// ── Read tools (free; key/identity required) ───────────────────────────────
 	if (caps.has('read')) {
@@ -3132,16 +3162,26 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 		add({
 			name: 'get_build_map',
 			description:
-				'The author’s build map of the extension project in projectDir (npx @extenshi/cli map): progress, the steps ' +
-				'waiting on the author (needsYou), the steps that can start now (next, safe to run in parallel), who works on ' +
+				'The author’s build map of the extension project in projectDir (npx @extenshi/cli map): progress, what ' +
+				'waits on the author (needsYou: one entry per step with the question, the options and their current ' +
+				'values, where it is answered — answer: map, dojo or chat — the link, and the steps it holds up in blocks; ' +
+				'put every entry to the author in the same reply, one question at a time, never as a list of step ids), ' +
+				'the optional modules (modules: each on or off, source author, code, dojo or default, the steps it adds, ' +
+				'the data that leaves the device and what changes for the stores; a default is not a recommendation), ' +
+				'the steps that can start now (next, safe to run in parallel; a step of a module the author has not ' +
+				'confirmed is locked with waitsOn), who works on ' +
 				'what, every step with the task it is on, and the variants offered to the author with their answer ' +
 				'(reviews: waiting, picked, or redo with what to change). skills lists the published agent skills with the ' +
 				'instructions for the steps not done yet (steps: step id → skill names; index: name → what it teaches and ' +
 				'the url of its SKILL.md): load a step’s skills before working on it. One map per project, shared by every agent and git ' +
-				'worktree. While the author’s map runs, the answer carries the project facts and the release the map runs ' +
-				'(map); update, when present, says what to do because the map draws older or newer steps than this server ' +
-				'knows, or a newer release is out. Otherwise facts is false and steps proven only by project files look not ' +
-				'done. Free; local files only.',
+				'worktree. A step the owner answers in the bound Dojo project carries decide: the decisions page and the ' +
+				'proposed value; send the author there instead of asking again. While the author’s map runs, the answer ' +
+				'carries all project facts and the release the map runs (map); update, when present, says what to do ' +
+				'because the map draws older or newer steps than this server knows, or a newer release is out. Otherwise ' +
+				'facts is "files": the steps come from the project files on this computer, without scans, AI visibility ' +
+				'checks and Dojo release readiness, and offer (first in the answer) says how offering the map to the author ' +
+				'went {next, offered, declined, offers}, where offer.next is one sentence on the step that offer is at. ' +
+				'Free; local files only.',
 			parameters: z.object({ projectDir: projectDirParam }),
 			execute: async (args) => run(() => buildMap.getMap(args.projectDir)),
 		})
@@ -3163,8 +3203,9 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			description:
 				'Report on a build map step as an agent. state: start (you are on it; the answer names the step’s skills, ' +
 				'the published instructions to load before the work), progress (with progress 0–1), done ' +
-				'(closes the current task, or `task`; `files` are hashed into the evidence journal as proof) or stop. A step ' +
-				'whose inputs are not done is refused while the author’s map runs. The author’s choice between variants is ' +
+				'(closes the current task, or `task`; `files` are hashed into the evidence journal as proof) or stop. The ' +
+				'answer lists the step’s todos (each task, whose it is, closed or not) and current, the task it is on now. ' +
+				'A step whose inputs are not done is refused while the author’s map runs. The author’s choice between variants is ' +
 				'not closed by `done`: pass `choice` (the variant id the author picked in the chat) or `redo` (what to change, ' +
 				'in the author’s words) to record the author’s answer. Never record a choice the author did not make. ' +
 				'Free; writes .extenshi/build-map.json in the project.',
@@ -3221,6 +3262,41 @@ export function registerTools(server: FastMCP, deps: ToolDeps): void {
 			execute: async (args) => {
 				const { projectDir, ...input } = args
 				return run(() => buildMap.reportStep(projectDir, input))
+			},
+		})
+		add({
+			name: 'set_build_module',
+			description:
+				'Record the author’s answer about an optional module of the build map: analytics, uninstall, feedback, ' +
+				'i18n, monetization, onboarding, promo, research or ci, on or off (auto: back to what the code and Dojo ' +
+				'suggest). Call it only with what the author said; the evidence journal keeps who switched what and when. ' +
+				'The author then confirms the whole set on the map (the answer carries the link), and the steps of a ' +
+				'module start after that. The answer has the module with the steps it adds, the data that leaves the ' +
+				'device and what changes for the stores. Free; writes .extenshi/build-map.json in the project.',
+			parameters: z.object({
+				projectDir: projectDirParam,
+				module: z
+					.enum([
+						'analytics',
+						'uninstall',
+						'feedback',
+						'i18n',
+						'monetization',
+						'onboarding',
+						'promo',
+						'research',
+						'ci',
+					])
+					.describe('The module, as get_build_map lists them under modules.'),
+				value: z
+					.enum(['on', 'off', 'auto'])
+					.describe('on, off, or auto: back to what the code and Dojo suggest.'),
+				agent: agentParam,
+				note: z.string().max(280).optional().describe('Why, in the author’s words.'),
+			}),
+			execute: async (args) => {
+				const { projectDir, ...input } = args
+				return run(() => buildMap.setModule(projectDir, input))
 			},
 		})
 		add({

@@ -219,7 +219,9 @@ describe('development guide discovery contract', () => {
 		expect(buildMap.oneMapPerProject).toContain('worktree')
 		expect(buildMap.offer).toContain('only after a yes')
 		expect(buildMap.offer).toContain('not offered again')
-		expect(buildMap.localServerField).toContain('buildMap {running')
+		expect(buildMap.offer).toContain('first reply')
+		expect(buildMap.offer).toContain('separate from any list')
+		expect(buildMap.localServerField).toContain('buildMap {next, running')
 		expect(buildMap.docs).toContain('docs.extenshi.io/developers/cli')
 		// Reference material, like the workflow stages.
 		for (const text of Object.values(buildMap).filter((v) => typeof v === 'string'))

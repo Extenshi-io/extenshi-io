@@ -21,6 +21,7 @@ import { captureError, captureEvent } from './telemetry.js'
 import {
 	type Capability,
 	getServerInstructions,
+	HOSTED_BUILD_MAP,
 	isExpectedError,
 	MAX_BATCH_EXTENSIONS,
 	type McpAuth,
@@ -1522,7 +1523,9 @@ describe('hosted landing page tools', () => {
 			includeToolStates: undefined,
 			manifests: 'summary',
 		})
-		expect(out).toBe('{"schemaVersion":5,"manifestView":"summary"}')
+		expect(out).toBe(
+			JSON.stringify({ schemaVersion: 5, manifestView: 'summary', buildMap: HOSTED_BUILD_MAP }),
+		)
 		await tools.get_project_state.execute({ projectId, includeToolStates: [], manifests: 'full' }, {})
 		expect(getMyProjectState).toHaveBeenLastCalledWith({
 			projectId,
@@ -2129,6 +2132,21 @@ describe('server instructions (Anthropic Software Directory Policy §2)', () => 
 		const text = getServerInstructions(capabilities, auth)
 		expect(text).not.toMatch(IMPERATIVE)
 		expect(text).not.toMatch(STEERING)
+	})
+
+	// The hosted connector's buildMap note is a static output read by directory review too (policy 2F/2G).
+	it('the hosted buildMap note states where the offer record is, without directives or tool calls', () => {
+		expect(HOSTED_BUILD_MAP.note).not.toMatch(IMPERATIVE)
+		expect(HOSTED_BUILD_MAP.note).not.toMatch(STEERING)
+		expect(HOSTED_BUILD_MAP.note).not.toMatch(/\b(you|your)\b/i)
+		expect(HOSTED_BUILD_MAP.note).not.toMatch(/\b(call|invoke|run the tool|use the tool)\s+`?[a-z]+_[a-z_]+/i)
+	})
+
+	it('names the build map and where its offer stands, as facts', () => {
+		const text = getServerInstructions(new Set<Capability>(['read', 'docs']), 'oauth')
+		expect(text).toContain('npx @extenshi/cli map')
+		expect(text).toContain('buildMap')
+		expect(text).toContain('extension-build')
 	})
 
 	it('names integration.file as content returned, never as a write to the repository', () => {

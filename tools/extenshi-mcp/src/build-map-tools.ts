@@ -9,9 +9,11 @@
  *
  * The project facts (manifest, icons, builds, the bound Dojo project) are read
  * by the CLI. While the author's map runs, its server has them, and these tools
- * check writes against its view. Without it they still write, but nothing is
- * refused for a step whose inputs are not done, and get_build_map says that
- * steps proven only by files look not done.
+ * check writes against its view. Without it, get_build_map reads what the
+ * project files prove itself (build-map-files.ts, a copy of the CLI's module;
+ * `facts: 'files'`), without the records of `extenshi scan` and `extenshi
+ * ai-visibility` or the live Dojo readiness; writes still go through, but
+ * nothing is refused for a step whose inputs are not done.
  *
  * Every call tells the running map which release and graph revision this MCP
  * server knows (probeServer with `client`). When the two differ, the answer
@@ -27,8 +29,8 @@
 import path from 'node:path'
 import {
 	type BuildMapView,
-	type BuildNodeView,
 	type BuildReview,
+	BuildSettingError,
 	BuildStepError,
 	buildNodeById,
 	deriveBuildMap,
@@ -37,22 +39,31 @@ import {
 	answerReview,
 	mapSkills,
 	mapUpdateNote,
+	modulesOf,
+	NEEDS_YOU_HOW,
+	needsYouOf,
 	openReview,
 	reportStep,
 	reviewAnswer,
 	SKILLS_HOW,
 	serverSnapshot,
+	setModule,
 	skillsOfStep,
+	stepsOf,
+	stepTasks,
 	stepUrl,
 	type VariantInput,
 } from './build-map-agent.js'
+import { readFileFacts } from './build-map-files.js'
 import {
 	type MapClient,
 	mapSkew,
+	projectCheckouts,
 	type RunningServer,
 	readMapState,
 	resolveMapHome,
 } from './build-map-store.js'
+import { buildMapNext, offerState } from './build-map-summary.js'
 
 export type BuildStepInput = {
 	step: string
@@ -71,20 +82,28 @@ export type BuildStepInput = {
 
 export type BuildReviewInput = { step: string; agent: string; variants: VariantInput[] }
 
+export type BuildModuleInput = { module: string; value: 'on' | 'off' | 'auto'; agent: string; note?: string }
+
 export type BuildMapAgent = {
 	getMap(projectDir?: string): Promise<unknown>
 	/** What the model gets back when the map is drawn in the chat: where it stands, and the step it opens. */
 	showMap(projectDir?: string, step?: string): Promise<unknown>
 	reportStep(projectDir: string | undefined, input: BuildStepInput): Promise<unknown>
 	requestReview(projectDir: string | undefined, input: BuildReviewInput): Promise<unknown>
+	/** Record the author's answer about an optional module; the author confirms the set on the map. */
+	setModule(projectDir: string | undefined, input: BuildModuleInput): Promise<unknown>
 }
 
 const NOT_RUNNING =
-	'The author’s map is not running, so steps only the project files prove look not done here, and nothing was refused for inputs that are not done. `npx @extenshi/cli map status --json` reads the files.'
+	'The author’s map is not running, so nothing was refused for inputs that are not done. The steps above are read from the project files on this computer; scans, AI visibility checks and Dojo release readiness count only while the map runs (`npx @extenshi/cli map status --json` reads them all).'
+
+/** How long set_build_module waits for the running map to show its write; the map polls about once a second. */
+const SNAPSHOT_WAIT_MS = 4_000
 
 /** A refusal reads as one sentence with its reason code; anything else passes through. */
 function refusal(error: unknown): never {
-	if (error instanceof BuildStepError) throw new Error(`${error.message} (${error.code})`)
+	if (error instanceof BuildStepError || error instanceof BuildSettingError)
+		throw new Error(`${error.message} (${error.code})`)
 	throw error
 }
 
@@ -97,33 +116,19 @@ function reviewsOf(reviews: Record<string, BuildReview>) {
 	)
 }
 
-/** Every step this extension needs: status, the task it is on, who works on it. */
-function stepsOf(nodes: Record<string, BuildNodeView>) {
-	return Object.fromEntries(
-		Object.values(nodes)
-			.filter((node) => node.status !== 'inactive')
-			.map((node) => {
-				const todo = node.status === 'done' ? undefined : buildNodeById(node.id)?.todos[node.taskIndex]
-				return [
-					node.id,
-					{
-						status: node.status,
-						...(todo
-							? { task: node.taskIndex, current: todo.t, ...(todo.a === 'you' ? { byAuthor: true } : {}) }
-							: {}),
-						...(node.agent ? { agent: node.agent } : {}),
-						...(node.redo ? { redo: true } : {}),
-						...(node.basis ? { basis: node.basis } : {}),
-					},
-				]
-			}),
-	)
-}
-
-function summary(view: BuildMapView) {
+function summary(view: BuildMapView, reviews: Record<string, BuildReview>, url?: string) {
+	const needsYou = needsYouOf(view, reviews, url)
+	const modules = modulesOf(view)
 	return {
 		progress: { done: view.done, active: view.active, percent: view.percent },
-		needsYou: view.needsYou,
+		/**
+		 * What waits on the author, as questions: what each decides, the options with their current
+		 * values, where it is answered (the map, Dojo, the chat) and the steps it holds up.
+		 */
+		needsYou,
+		...(needsYou.length ? { needsYouHow: NEEDS_YOU_HOW } : {}),
+		/** The optional modules: on or off, where that comes from, what each adds; and the set in numbers. */
+		...(modules ? { modules } : {}),
 		running: view.running.map((id) => ({ id, agent: view.nodes[id]?.agent })),
 		next: view.next,
 		byHand: view.byHand,
@@ -142,6 +147,19 @@ export function buildMapAgent(cwd: string = process.cwd(), client?: MapClient): 
 		const where = await resolveMapHome(dir)
 		const running = await serverSnapshot(where.home, client)
 		return { dir, home: where.home, running }
+	}
+	/**
+	 * Wait until the running map's snapshot has the module switch written at `at` (its entry in the
+	 * evidence journal of the Modules step). Gives up after a few seconds; no map running: nothing to wait for.
+	 */
+	const shows = async (home: string, at: string) => {
+		const until = Date.now() + SNAPSHOT_WAIT_MS
+		for (;;) {
+			const running = await serverSnapshot(home, client)
+			const journal = (running?.snapshot.evidence ?? {}) as Record<string, { t?: string }[] | undefined>
+			if (!running || journal.features?.some((entry) => entry.t === at) || Date.now() >= until) return
+			await new Promise((resolve) => setTimeout(resolve, 100))
+		}
 	}
 	/** On a write: only a difference in steps between the map and this server, which explains a refusal. */
 	const skewNote = (server: RunningServer | undefined) =>
@@ -164,18 +182,24 @@ export function buildMapAgent(cwd: string = process.cwd(), client?: MapClient): 
 					},
 					...(update ? { update } : {}),
 					facts: true,
-					...summary(snapshot.view),
+					...summary(snapshot.view, snapshot.reviews ?? {}, running.url),
 					reviews: reviewsOf(snapshot.reviews ?? {}),
 					steps: stepsOf(snapshot.view.nodes),
 				}
 			}
 			const read = await readMapState(home)
-			const view = deriveBuildMap(read.state, { done: {} })
+			const facts = await readFileFacts(home, await projectCheckouts(home))
+			const view = deriveBuildMap(read.state, facts)
+			// No map runs: say first where offering it to the author stands, so a never-asked author is asked.
+			// (`next` at the top level is the steps that can start now, so the sentence lives in `offer`.)
+			const state = offerState(read.state.offer, false)
+			const next = read.problem ? undefined : buildMapNext({ running: false, ...state, home })
 			return {
+				offer: { ...(next ? { next } : {}), ...state },
 				home,
-				facts: false,
+				facts: 'files',
 				note: NOT_RUNNING,
-				...summary(view),
+				...summary(view, read.state.reviews),
 				reviews: reviewsOf(read.state.reviews),
 				steps: stepsOf(view.nodes),
 				...(read.problem ? { problem: read.problem } : {}),
@@ -185,11 +209,12 @@ export function buildMapAgent(cwd: string = process.cwd(), client?: MapClient): 
 		async showMap(projectDir, step) {
 			const map = (await this.getMap(projectDir)) as {
 				home: string
-				facts: boolean
+				facts: boolean | 'files'
 				url?: string
 				note?: string
 				progress: unknown
-				needsYou: string[]
+				needsYou: unknown[]
+				needsYouHow?: string
 				steps: Record<string, unknown>
 				reviews: Record<string, unknown>
 			}
@@ -200,6 +225,7 @@ export function buildMapAgent(cwd: string = process.cwd(), client?: MapClient): 
 				...(map.url ? { url: step ? stepUrl(map.url, step) : map.url } : {}),
 				progress: map.progress,
 				needsYou: map.needsYou,
+				...(map.needsYouHow ? { needsYouHow: map.needsYouHow } : {}),
 				...(step
 					? {
 							step: {
@@ -261,11 +287,45 @@ export function buildMapAgent(cwd: string = process.cwd(), client?: MapClient): 
 				step: input.step,
 				tasksDone: result.record?.ti ?? 0,
 				tasks: step?.todos.length ?? 0,
+				// What each task is and whose, and the one the step is on now.
+				...stepTasks(input.step, result.record?.ti ?? 0),
 				checked: result.checked,
 				inputsChecked: Boolean(view),
 				...(skills.length ? { skills, skillsHow: SKILLS_HOW } : {}),
 				...(view ? {} : { note: NOT_RUNNING }),
 				...(update ? { update } : {}),
+			}
+		},
+
+		async setModule(projectDir, input) {
+			const { home } = await place(projectDir)
+			const setting = input.module.includes('.') ? input.module : `features.${input.module}`
+			const at = await setModule(home, {
+				setting,
+				on: input.value === 'auto' ? null : input.value === 'on',
+				agent: input.agent,
+				...(input.note ? { note: input.note } : {}),
+			}).catch(refusal)
+			// A running map reads the state file about once a second: answer from its view only once
+			// that view has this write, or the answer would be the module as it was before.
+			if (at) await shows(home, at)
+			// Read again: the running map's view when there is one, else what the files prove.
+			const map = (await this.getMap(projectDir)) as {
+				url?: string
+				modules?: ReturnType<typeof modulesOf>
+				needsYou: { id: string; link?: string }[]
+			}
+			const id = setting.split('.')[1]
+			const step = buildNodeById('features')
+			const waiting = map.needsYou.find((ask) => ask.id === step?.id)
+			return {
+				module: map.modules?.list.find((module) => module.id === id),
+				...(map.modules ? { summary: map.modules.summary } : {}),
+				...(waiting
+					? {
+							confirm: `The author confirms the modules on the map${waiting.link ? `: ${waiting.link}` : ' (show_build_map with step "features", or `npx @extenshi/cli map`)'}. The steps of a module start after that.`,
+						}
+					: {}),
 			}
 		},
 

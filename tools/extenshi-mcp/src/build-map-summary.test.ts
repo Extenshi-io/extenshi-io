@@ -12,7 +12,7 @@ import {
 	updateMapState,
 	writeJsonAtomic,
 } from './build-map-store.js'
-import { readBuildMapSummary } from './build-map-summary.js'
+import { buildMapNext, readBuildMapSummary } from './build-map-summary.js'
 
 const temps: string[] = []
 const servers: http.Server[] = []
@@ -60,15 +60,22 @@ async function fakeServer(home: string, instance = 'instance-1'): Promise<string
 }
 
 describe('readBuildMapSummary', () => {
-	it('a project with no map yet: not running, never offered', async () => {
+	it('a project with no map yet: not running, never offered, and next is the offer', async () => {
 		const dir = tempDir()
-		expect(await readBuildMapSummary(dir)).toEqual({
+		const summary = await readBuildMapSummary(dir)
+		expect(summary).toEqual({
+			next: expect.any(String),
 			running: false,
 			offered: false,
 			declined: false,
 			offers: 0,
 			home: dir,
 		})
+		// First key: the project answers spread it to the front of a long JSON answer.
+		expect(Object.keys(summary)[0]).toBe('next')
+		expect(summary.next).toContain(dir)
+		expect(summary.next).toContain('npx @extenshi/cli@latest map --no-open')
+		expect(summary.next).toContain('npx @extenshi/cli@latest map decline')
 	})
 
 	it('reads a decline the CLI recorded, and a later yes overrides it', async () => {
@@ -122,6 +129,27 @@ describe('readBuildMapSummary', () => {
 		expect(await readBuildMapSummary(home)).toMatchObject({ running: true, url, home })
 	})
 
+	it('next follows the offer: reopen after a yes, once more after one no, nothing after two or while it runs', async () => {
+		const dir = tempDir()
+		await updateMapState(dir, (state) => ({
+			...state,
+			offer: { count: 1, acceptedAt: '2026-11-03T10:00:00.000Z' },
+		}))
+		expect((await readBuildMapSummary(dir)).next).toMatch(/said yes.*map --no-open/)
+		await updateMapState(dir, (state) => ({
+			...state,
+			offer: { count: 1, declinedAt: '2026-11-03T10:00:00.000Z' },
+		}))
+		expect((await readBuildMapSummary(dir)).next).toMatch(/declined the build map once.*first visual choice/)
+		await updateMapState(dir, (state) => ({
+			...state,
+			offer: { count: 2, declinedAt: '2026-11-03T12:00:00.000Z' },
+		}))
+		expect((await readBuildMapSummary(dir)).next).toMatch(/not offered again/)
+		await fakeServer(dir)
+		expect(await readBuildMapSummary(dir)).not.toHaveProperty('next')
+	})
+
 	it('names a state file it cannot read instead of failing', async () => {
 		const dir = tempDir()
 		mkdirSync(path.join(dir, '.extenshi'))
@@ -129,5 +157,25 @@ describe('readBuildMapSummary', () => {
 		const summary = await readBuildMapSummary(dir)
 		expect(summary).toMatchObject({ running: false, offered: false })
 		expect(summary.problem).toContain(MAP_STATE_FILE)
+		// An unreadable record proves nothing about the offer, so it asks nothing.
+		expect(summary).not.toHaveProperty('next')
+	})
+})
+
+describe('buildMapNext', () => {
+	const base = { running: false, offered: false, declined: false, offers: 0, home: '/repo/ext' }
+
+	it('asks a never-asked author in this reply, as its own question, with both commands run here', () => {
+		const next = buildMapNext(base) ?? ''
+		expect(next).toContain('Ask in this reply')
+		expect(next).toContain('yes/no')
+		expect(next).toContain('separate from any list of next steps')
+		expect(next).toContain('yourself')
+		expect(next).toContain('show_build_map')
+		expect(next).toContain('extension-build')
+	})
+
+	it('says nothing while a map runs', () => {
+		expect(buildMapNext({ ...base, running: true, offered: true, offers: 1 })).toBeUndefined()
 	})
 })

@@ -11,8 +11,10 @@ import { describe, expect, it } from 'vitest'
  * the monorepo a moved or renamed canonical file fails here instead of silently
  * retiring the guard. To resync, copy tools/extenshi-cli/src/build-map-store.ts,
  * build-map-agent.ts (the agent's writes: step reports, review rounds and
- * answers, phase 2) and build-map-page.ts (the page, which this server draws in
- * a chat that shows MCP Apps, phase 4) over the files of the same name here.
+ * answers, phase 2), build-map-page.ts (the page, which this server draws in
+ * a chat that shows MCP Apps, phase 4), build-map-files.ts (what the project
+ * files prove, read here when the author's map is not running) and png.ts (which
+ * that one imports) over the files of the same name here.
  */
 const cliPackage = new URL('../../extenshi-cli/package.json', import.meta.url)
 const inMonorepo = fs.existsSync(cliPackage)
@@ -29,5 +31,10 @@ describe('synced copies of the CLI build-map modules', () => {
 
 	it.skipIf(!inMonorepo)('build-map-page.ts is byte-identical to the CLI module', () => {
 		expect(read('./build-map-page.ts')).toBe(read('../../extenshi-cli/src/build-map-page.ts'))
+	})
+
+	it.skipIf(!inMonorepo)('build-map-files.ts and png.ts are byte-identical to the CLI modules', () => {
+		expect(read('./build-map-files.ts')).toBe(read('../../extenshi-cli/src/build-map-files.ts'))
+		expect(read('./png.ts')).toBe(read('../../extenshi-cli/src/png.ts'))
 	})
 })

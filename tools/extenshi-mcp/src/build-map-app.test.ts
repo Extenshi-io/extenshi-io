@@ -100,7 +100,7 @@ describe('the build map in a chat (MCP Apps, phase 4)', { timeout: 30_000 }, () 
 		const first = (await app.view()) as { etag: string; snapshot: Record<string, any> }
 		expect(first.snapshot).toMatchObject({
 			home,
-			app: { facts: false, writable: true },
+			app: { facts: 'files', writable: true },
 			routes: {},
 			reviews: {},
 		})
@@ -252,7 +252,7 @@ describe('the build map in a chat (MCP Apps, phase 4)', { timeout: 30_000 }, () 
 		expect(show?._meta).toEqual({ ui: { resourceUri: BUILD_MAP_UI } })
 		const shown = JSON.parse((await show?.execute({ step: ICONS }, {})) ?? '{}')
 		expect(shown).toMatchObject({
-			facts: false,
+			facts: 'files',
 			step: { id: ICONS, byAuthor: true, review: { status: 'waiting', round: 1 } },
 		})
 		await expect(show?.execute({ step: 'nope' }, {})).rejects.toThrow(/unknown_step/)

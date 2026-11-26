@@ -6,6 +6,9 @@
  * exceptions, all posted with the page token (build-map-server.ts):
  *   - a task only the author can do outside extenshi (`confirm` in the graph,
  *     such as a store account) gets a "Mark as done" button (/api/confirm);
+ *   - the Modules step gets a switch per optional module, with where its
+ *     value comes from and what it adds (/api/setting), and a confirm button
+ *     that names the set: "Confirm: 4 modules, +9 steps";
  *   - a step the author can do themselves or skip (`manual` / `skip` in the
  *     graph) gets a form with what to give, and a skip button (/api/route).
  *     The store submits show what an upload by hand needs: the package on
@@ -836,6 +839,26 @@ h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .09em; text-t
 .opts li i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line-2); }
 .opts li.on i { background: var(--primary); border-color: var(--primary); }
 .opts li:not(.on) { color: var(--fg-3); }
+.mods { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mods li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.mods li.open { border-style: dashed; border-color: var(--warn); }
+.mods .top { display: flex; align-items: center; gap: 8px; }
+.mods .top b { font-weight: 600; flex: 1; }
+.mods .src { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--bg-2); color: var(--fg-2); white-space: nowrap; }
+.mods li.open .src { background: var(--warn-soft); color: var(--fg); }
+.mods .sw { width: 34px; height: 20px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--bg-2); position: relative; cursor: pointer; padding: 0; flex: none; }
+.mods .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg-3); transition: left .12s; }
+.mods .sw[aria-checked="true"] { background: var(--primary); border-color: var(--primary); }
+.mods .sw[aria-checked="true"]::after { left: 16px; background: var(--primary-fg); }
+.mods li.open .sw[aria-checked="true"] { background: var(--warn-soft); border-color: var(--warn); }
+.mods li.open .sw[aria-checked="true"]::after { background: var(--warn); }
+.mods .sw:disabled { opacity: .6; cursor: default; }
+.mods .sw:focus-visible, .mods .back:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.mods p { margin: 0; color: var(--fg-2); font-size: 12.5px; }
+.mods p.warn { color: var(--fg); background: var(--warn-soft); border-radius: 6px; padding: 4px 8px; }
+.mods .back { align-self: flex-start; border: 0; background: none; color: var(--primary); font: inherit; font-size: 12px; padding: 0; cursor: pointer; }
+.mods details summary { cursor: pointer; color: var(--fg-2); font-size: 12.5px; }
+.mods details p { margin-top: 4px; }
 .log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
 .log li { display: flex; gap: 8px; color: var(--fg-2); }
 .log li .t { font-family: var(--font-mono); font-size: 11px; color: var(--fg-3); flex: none; padding-top: 2px; }
@@ -941,7 +964,37 @@ function reviewKey(id) { var r = reviewOf(id); return r ? r.round + '|' + (r.rev
 // A write is in the snapshot once the step shows its result.
 function landed(p) {
 	if (p.review) { var r = reviewOf(p.node); return !r || r.round !== p.round || (r.revision || 1) !== p.revision || r.status !== p.status || (r.choice || null) !== p.before; }
+	if (p.setting) { var m = moduleOf(p.setting); return !m || (p.want === null ? m.source !== 'author' : m.on === p.want && m.source === 'author'); }
 	return p.route ? routeAt(p.node) !== p.since : nv(p.node).taskIndex === p.expect;
+}
+// The optional modules (the Modules step): absent in a snapshot of a map that runs a release without them.
+function modules() { return (snap && snap.view.modules) || []; }
+function moduleOf(id) { return modules().filter(function (m) { return m.id === id; })[0]; }
+var SOURCE_LABEL = { author: 'your choice', code: 'found in the code', dojo: 'Dojo decision', 'default': 'default, not confirmed' };
+function stepNames(ids) { return ids.map(function (d) { return byId[d] ? byId[d].label : d; }).join(', '); }
+function modulesTotal() {
+	var on = modules().filter(function (m) { return m.on; }), steps = {};
+	on.forEach(function (m) { m.steps.forEach(function (d) { steps[d] = 1; }); });
+	var count = Object.keys(steps).length;
+	return on.length + ' module' + (on.length === 1 ? '' : 's') + ', +' + count + ' step' + (count === 1 ? '' : 's');
+}
+// Each module with its switch, where its value comes from and what switching it on means.
+function modulesBox(confirmed, writable, busy) {
+	var h = '<ul class="mods">';
+	modules().forEach(function (m) {
+		var open = m.unconfirmed, source = m.source === 'default' && confirmed ? 'default, confirmed by you' : m.source === 'author' && open ? 'switched, not confirmed' : SOURCE_LABEL[m.source];
+		h += '<li class="' + (open ? 'open' : '') + (m.on ? ' on' : '') + '"><div class="top">';
+		h += writable
+			? '<button class="sw" role="switch" aria-checked="' + (m.on ? 'true' : 'false') + '" aria-label="' + esc(m.label) + '" data-module="' + esc(m.id) + '" data-on="' + (m.on ? '0' : '1') + '"' + (busy ? ' disabled' : '') + '></button>'
+			: '';
+		h += '<b>' + esc(m.label) + (writable ? '' : m.on ? ' · on' : ' · off') + '</b><span class="src">' + esc(source) + '</span></div>';
+		if (m.found && !m.on) h += '<p class="warn">' + (m.found === 'code' ? 'The code still has this module. Switched off here, it has to be removed from the code too.' : 'A Dojo decision asks for this module.') + '</p>';
+		h += '<p>' + (m.steps.length ? (m.on ? 'Adds ' : 'Would add ') + m.steps.length + ' step' + (m.steps.length === 1 ? '' : 's') + ': ' + esc(stepNames(m.steps)) + '.' : 'Adds no steps to this extension.') + '</p>';
+		h += '<details' + (m.on ? ' open' : '') + '><summary>Data and stores</summary><p><b>Leaves the device:</b> ' + esc(m.data) + '</p><p><b>Policy and store forms:</b> ' + esc(m.stores) + '</p></details>';
+		if (writable && m.source === 'author') h += '<button class="back" data-module="' + esc(m.id) + '" data-on="null"' + (busy ? ' disabled' : '') + '>Take my choice back</button>';
+		h += '</li>';
+	});
+	return h + '</ul>';
 }
 try { showInactive = localStorage.getItem('build-map.inactive') !== 'hidden'; } catch (e) {}
 
@@ -1107,10 +1160,13 @@ function renderPanel(id) {
 	else if (v.skippedBy) h += '<div class="ask muted"><h4>Off with a skipped step</h4><p>It only uses the result of <a href="#node=' + esc(v.skippedBy) + '">' + esc(byId[v.skippedBy] ? byId[v.skippedBy].label : v.skippedBy) + '</a>, which you skipped.</p></div>';
 	else if (st === 'inactive') h += '<div class="ask muted"><h4>Not needed for this extension</h4><p>' + esc(inactiveReason(n)) + '</p></div>';
 	// A stored route stays editable even once the project files prove the step (the agent wired the link).
+	if (v.waitsOn && st === 'locked') h += '<div class="ask muted"><h4>The module is not confirmed</h4><p>This step belongs to an optional module. It starts after you confirm the modules on <a href="#node=' + esc(v.waitsOn) + '">' + esc(byId[v.waitsOn] ? byId[v.waitsOn].label : v.waitsOn) + '</a>.</p></div>';
 	var stored = routeOf(id);
 	if (n.credits && snap && snap.account && st !== 'inactive' && st !== 'done' && v.route !== 'skip' && !v.skippedBy) h += creditBox(n, writable);
 	var ownRoute = v.route === 'self' || Boolean(stored && stored.how === 'self');
-	if (writable && n.manual && st !== 'inactive' && (st !== 'done' || ownRoute) && (ownRoute || selfOpen(n))) h += manualBox(id, n, v, busy);
+	// The owner answers this one in Dojo: lead there instead of asking again here.
+	if (v.decide && st !== 'done' && st !== 'inactive') h += decideBox(v.decide);
+	if (writable && n.manual && st !== 'inactive' && (st !== 'done' || ownRoute) && (ownRoute || selfOpen(n)) && !(v.decide && !ownRoute)) h += manualBox(id, n, v, busy);
 	if (writable && n.skip && st !== 'inactive' && st !== 'done') h += skipBox(n, busy);
 	if (writable && st === 'done' && stored && stored.how === 'skip') h += '<div class="ask muted"><h4>You skipped this step</h4><p>The project files show it done anyway, so the skip has no effect.</p><button class="act ghost" data-route="null"' + (busy ? ' disabled' : '') + '>' + (busy ? 'Saving…' : 'Take the skip back') + '</button></div>';
 	if (id === 'ready' && snap && snap.view.byHand.length) h += '<div class="ask muted"><h4>To do in the store dashboards</h4>' + byHandList(snap.view.byHand) + '</div>';
@@ -1120,16 +1176,29 @@ function renderPanel(id) {
 	var canMark = writable && st !== 'inactive' && st !== 'done' && cur && cur.confirm;
 	var canUndo = writable && st !== 'inactive' && !v.fact && !v.route && last >= 0 && n.todos[last] && n.todos[last].confirm;
 	var failed = writeError && writeError.node === id && writeError.kind === 'confirm' ? writeError.message : '';
-	if (canMark) {
+	var isModules = n.review === 'features' && modules().length > 0;
+	var settingFailed = writeError && writeError.node === id && writeError.kind === 'setting' ? writeError.message : '';
+	if (isModules) {
+		var open = modules().filter(function (m) { return m.unconfirmed; }).length;
+		h += '<div class="sec"><h3>Modules</h3>';
+		if (settingFailed) h += '<div class="ask muted"><p class="err">' + esc(settingFailed) + '</p></div>';
+		h += modulesBox(st === 'done', writable, busy) + '</div>';
+		if (canMark) {
+			h += '<div class="ask"><h4>' + esc(cur.t) + '</h4><p>' + (open ? open + ' module' + (open === 1 ? ' is' : 's are') + ' not confirmed: on or off by default, or switched and waiting for you. ' : '') + 'Switch the modules above, then confirm the set. The steps of every module wait for this.</p>';
+			if (failed) h += '<p class="err">' + esc(failed) + '</p>';
+			h += '<button class="act" data-confirm="1" data-task="' + v.taskIndex + '"' + (busy ? ' disabled' : '') + '>' + (busy ? 'Saving…' : 'Confirm: ' + esc(modulesTotal())) + '</button></div>';
+		} else if (st === 'needs_you' && cur) h += '<div class="ask"><h4>' + esc(cur.t) + '</h4><p>Now on: ' + esc(modulesTotal()) + '. Open this map on the computer with the project to switch and confirm.</p></div>';
+		else if (canUndo && failed) h += '<div class="ask muted"><p class="err">' + esc(failed) + '</p></div>';
+	} else if (canMark) {
 		h += '<div class="ask"><h4>' + esc(cur.t) + '</h4><p>Only you can do this. When it is done, mark it here: every agent working on this project sees it.</p>';
 		if (failed) h += '<p class="err">' + esc(failed) + '</p>';
 		h += '<input class="note" data-draft="' + id + '|note|' + v.taskIndex + '" maxlength="280" placeholder="Note for the history (optional), e.g. the publisher name" value="' + esc(draftFor(id, v.taskIndex)) + '"' + (busy ? ' disabled' : '') + '>';
 		h += '<span class="hint">Kept in the project&#39;s map file. Never put passwords or keys here.</span>';
 		h += '<button class="act" data-confirm="1" data-task="' + v.taskIndex + '"' + (busy ? ' disabled' : '') + '>' + (busy ? 'Saving…' : 'Mark as done') + '</button></div>';
 	} else if (st === 'needs_you' && cur && onMap && !review) h += '<div class="ask"><h4>' + esc(cur.t) + '</h4><p>The variants to choose from show up here when the agent offers them.</p></div>';
-	else if (st === 'needs_you' && cur && !(onMap && review)) h += '<div class="ask"><h4>' + esc(cur.t) + '</h4><p>The agent is waiting for your answer in the chat.</p></div>';
+	else if (st === 'needs_you' && cur && !(onMap && review) && !v.decide) h += '<div class="ask"><h4>' + esc(cur.t) + '</h4><p>The agent is waiting for your answer in the chat.</p></div>';
 	else if (canUndo && failed) h += '<div class="ask muted"><p class="err">' + esc(failed) + '</p></div>';
-	if (snap && OPTIONS[n.review]) {
+	if (snap && OPTIONS[n.review] && !isModules) {
 		var on = snap.view.settings[n.review];
 		h += '<div class="sec"><h3>Current choice</h3><ul class="opts">' + OPTIONS[n.review].map(function (o) { return '<li class="' + (on[o[0]] ? 'on' : '') + '"><i></i>' + o[1] + '</li>'; }).join('') + '</ul></div>';
 	}
@@ -1162,6 +1231,7 @@ function renderPanel(id) {
 	if (APP) loadThumbs();
 	body.querySelectorAll('[data-go]').forEach(function (b) { b.addEventListener('click', function () { focusNode(b.getAttribute('data-go')); select(b.getAttribute('data-go')); }); });
 	body.querySelectorAll('[data-confirm]').forEach(function (b) { b.addEventListener('click', function () { sendConfirm(id, Number(b.getAttribute('data-task')), b.getAttribute('data-confirm') === '1'); }); });
+	body.querySelectorAll('[data-module]').forEach(function (b) { b.addEventListener('click', function () { var on = b.getAttribute('data-on'); sendSetting(id, b.getAttribute('data-module'), on === 'null' ? null : on === '1'); }); });
 	body.querySelectorAll('[data-route]').forEach(function (b) { b.addEventListener('click', function () { var how = b.getAttribute('data-route'); sendRoute(id, how === 'null' ? null : how); }); });
 	body.querySelectorAll('[data-copy]').forEach(function (b) { b.addEventListener('click', function () { copyText(b); }); });
 	body.querySelectorAll('[data-login]').forEach(function (b) { b.addEventListener('click', function () { sendLogin(id); }); });
@@ -1181,6 +1251,13 @@ function renderPanel(id) {
 	});
 }
 
+// A decision the owner makes in the bound Dojo project (targetBrowsers, pricing): where, and what an agent proposed.
+function decideBox(d) {
+	var h = '<div class="ask"><h4>Decide it in Dojo</h4>';
+	h += d.proposed ? '<p>Proposed: <b>' + esc(d.proposed) + '</b>. It counts once you decide it there.</p>' : '<p>This project is bound to Dojo, and the owner makes this decision there.</p>';
+	if (d.url) h += '<p><a href="' + esc(d.url) + '" target="_blank" rel="noopener noreferrer">Open the decisions in Dojo</a></p>';
+	return h + '</div>';
+}
 // Doing a step by hand (plan phase 1f): what the author gives, and for a store submit what an upload by hand needs.
 var BS = String.fromCharCode(92);
 function absPath(file) {
@@ -1462,6 +1539,24 @@ function sendConfirm(id, task, done) {
 	});
 }
 
+// The author switches an optional module on or off, or takes the choice back.
+function sendSetting(id, key, on) {
+	if (pending) return;
+	pending = { node: id, setting: key, want: on, saved: false };
+	writeError = null;
+	renderPanel(id);
+	post('/api/setting', { setting: 'features.' + key, on: on }).then(function () {
+		var mine = pending;
+		if (landed(mine)) { pending = null; if (selected === id) renderPanel(id); return; }
+		mine.saved = true;
+		setTimeout(function () { if (pending === mine) { pending = null; render(); } }, 3000);
+	}, function (error) {
+		pending = null;
+		writeError = { node: id, kind: 'setting', message: (error && error.message) || 'The map server did not answer.' };
+		if (selected === id) renderPanel(id);
+	});
+}
+
 // The author does a step themselves, skips it, or takes that back. since: the route the page showed,
 // so a page behind another write gets 409 instead of overwriting it.
 function sendRoute(id, how) {
@@ -1541,7 +1636,7 @@ function showSnapshot(next, note) {
 	if (pending && pending.saved && landed(pending)) pending = null;
 	if (loginWait && JSON.stringify((snap.account && snap.account.login) || null) !== loginWait.before) loginWait = null;
 	// An error about a step that has moved on since describes a state the page no longer shows.
-	if (writeError && (writeError.kind === 'route' ? routeAt(writeError.node) !== writeError.at : writeError.kind === 'review' ? reviewKey(writeError.node) !== writeError.key : nv(writeError.node).taskIndex !== writeError.ti)) writeError = null;
+	if (writeError && writeError.kind === 'setting') { /* kept until the next write */ } else if (writeError && (writeError.kind === 'route' ? routeAt(writeError.node) !== writeError.at : writeError.kind === 'review' ? reviewKey(writeError.node) !== writeError.key : nv(writeError.node).taskIndex !== writeError.ti)) writeError = null;
 	// A restart that failed says why; the button offers it again.
 	if (updateWait && snap.update && !snap.update.updating && snap.update.problem) updateWait = null;
 	var issue = snap.problem || (snap.live && snap.live.problem) || (snap.update && snap.update.problem);
@@ -1626,6 +1721,7 @@ function connect() {
 var rpcSeq = 0, rpcWaiting = {}, hostCtx = {}, hostMode = 'inline', appArgs = {}, argsSeen = false, gotArgs = null;
 var appEtag = '', appTimer = null, appStopped = false;
 var NO_SERVER = 'The map server is not running, so the steps only the project files prove look not done here. It starts with <code>npx @extenshi/cli map</code> in the project, and this view fills in by itself.';
+var FILES_ONLY = 'The map server is not running: this view reads the project files, but scans, AI visibility checks and Dojo release readiness count only while it runs. It starts with <code>npx @extenshi/cli map</code> in the project, and this view fills in by itself.';
 var SKEW = 'The map server runs another version of <code>@extenshi/cli</code> than this view. If something looks off, restart it with <code>npx @extenshi/cli@latest map</code>.';
 function appSend(message) { window.parent.postMessage(message, '*'); }
 function appRequest(method, params) {
@@ -1690,9 +1786,9 @@ function appPoll() {
 	appTool('build_map_view', projectArgs(appEtag ? { since: appEtag } : {})).then(function (answer) {
 		if (answer.unchanged) return;
 		appEtag = answer.etag || '';
-		var next = answer.snapshot, facts = Boolean(next.app && next.app.facts);
-		setConn(facts ? 'live' : 'wait', facts ? 'live' : 'files not read');
-		showSnapshot(next, !facts ? NO_SERVER : next.protocol !== SESSION.protocol ? SKEW : '');
+		var next = answer.snapshot, facts = next.app && next.app.facts, live = facts === true;
+		setConn(live ? 'live' : 'wait', live ? 'live' : facts === 'files' ? 'files only' : 'files not read');
+		showSnapshot(next, !live ? (facts === 'files' ? FILES_ONLY : NO_SERVER) : next.protocol !== SESSION.protocol ? SKEW : '');
 	}, function () {
 		setConn('wait', 'reconnecting');
 	}).then(function () {
