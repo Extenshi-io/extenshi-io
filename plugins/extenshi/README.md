@@ -9,7 +9,7 @@ how to prepare an extension for store review.
 
 | Component | What it does |
 | --- | --- |
-| `extenshi` connector | A remote MCP server at `https://mcp.extenshi.io/mcp`. Search the catalog, read one extension's details and reviews, look up security scores, and get market figures. Signing in happens in the browser with OAuth; no API key is needed. |
+| `extenshi` connector | A remote MCP server at `https://mcp.extenshi.io/mcp`. It reads the catalog (search, one extension's details and reviews, security scores, market figures) and, for a signed-in developer, also changes their own Extenshi account: it publishes and takes down hosted pages, edits projects and survey forms, and prepares payment changes for the owner to approve. The full list is under [What the connector can change](#what-the-connector-can-change). Signing in happens in the browser with OAuth; no API key is needed. |
 | `extension-vetting` skill | For anyone choosing an extension: checks publisher, popularity, permissions in plain language, security score and reviews for one extension, and suggests alternatives. |
 | `installed-extensions-audit` skill | Looks up the safety score of every extension you have installed in one batch and ranks what to review first. |
 | `extension-market-research` skill | For developers: sizes a niche, finds incumbents and gaps, reads what users complain about and writes a short competitor brief. |
@@ -29,6 +29,57 @@ how to prepare an extension for store review.
 | `extension-release` skill | For developers: packages one zip per store, checks release readiness, submits to the stores after the author's approval, follows the review and confirms the public listing. |
 | `extension-build` skill | For developers building with Claude: offers a local build map once, a page that shows which build steps are done, which Claude is working on and which wait on you, keeps it current and hands you the decisions that are yours. One map per project, shared by every agent and git worktree. |
 | Build map reminder (hook, Claude Code) | When a Claude Code session starts in an Extenshi extension project (a repository with `src/extenshi.config.js` or `.extenshi/`) whose build map was never offered, it reminds Claude to offer the map once. It reads two local files and prints nothing anywhere else. |
+
+## What the connector can change
+
+Besides reading the catalog, the connector's tools act on the Extenshi account you
+sign in with. They touch only your own projects and Pay applications, each group
+needs a permission you grant on the sign-in page (`project.write`, `hosted.write`,
+`evidence.write`, `pay.write`).
+
+- **Publish.** `publish_landing_page` and `publish_install_instructions` put a
+  page on a public URL (`page.extenshi.io`, `dojo.extenshi.io/instructions`, or
+  your custom domain). `rollback_landing_page` makes an earlier version the live
+  one. `upload_project_media` stores an image at a public URL.
+  `upsert_hosted_page` registers your homepage or support URL.
+  `set_custom_domain` and `verify_custom_domain` start serving your pages on
+  your domain. `set_store_listing` records where the extension is listed; a
+  listing marked live appears on your public pages.
+- **Take down and remove.** `unpublish_landing_page` and
+  `unpublish_install_instructions` take a public page offline.
+  `remove_hosted_page` forgets a registered URL, and `remove_custom_domain`
+  stops serving your domain. `unlink_pay_app` removes the link between a Pay
+  application and a project. No tool deletes a project, an extension, a Pay
+  application or a payment record.
+- **Send.** A tool call sends its arguments to `mcp.extenshi.io`. For the write
+  tools that includes the content you are saving: page text and images, manifest
+  JSON and `_locales` messages (`import_manifest`), project metadata
+  (`create_project`, `apply_project_patch`), survey and feedback form text and
+  translations (`update_uninstall_form`, `update_feedback_form`,
+  `set_page_translations`), license terms answers (`save_license_terms_draft`),
+  and hashes and check results for a build (`record_project_evidence`). The
+  connector has no access to your files, so Claude sends only what it puts into
+  the call. `upsert_hosted_page` and `verify_hosted_artifact` make the server
+  fetch the public URL you name.
+- **Payments.** The connector never charges anyone and never moves money.
+  `create_pay_app`, `link_pay_app` and `save_license_terms_draft` save at once
+  and change nothing a buyer sees. `set_pay_offer_translations` saves at once
+  the translated offer text the paywall shows; prices and SKUs stay as they are. `connect_pay_seller` returns a link where you complete Stripe onboarding
+  yourself. The changes that affect what buyers pay or see are proposals:
+  `set_pay_enabled`, `upsert_pay_offer`, `archive_pay_offer`, `archive_pay_app`,
+  `set_pay_seller_profile`, `set_pay_trial`, `update_uninstall_offer`,
+  `publish_privacy_policy`, `set_legal_translations`,
+  `request_license_terms_publication` and `rollback_license_terms` take effect
+  only after you approve them in Dojo, and `get_approval` reports the outcome.
+  `export_pay_data` returns your customers' payment records into the
+  conversation.
+- **Access.** `create_ci_ingest_secret` creates or replaces the secret your CI
+  uses to send evidence to a project; it is shown once. `rotate_pay_key` issues
+  a new publishable SDK key, and earlier keys keep working. No tool changes who
+  can access your account, invites people or changes roles.
+
+The connector cannot scan or submit a package: those need files and store
+credentials on your machine and run through the CLI (see below).
 
 ## Install
 
@@ -52,7 +103,8 @@ opens a sign-in page for your Extenshi account.
 ## What it sends and where
 
 - **The connector (`mcp.extenshi.io`)** receives only the arguments of the tool
-  calls Claude makes (a search phrase, an extension or store id) and, after you
+  calls Claude makes (a search phrase, an extension or store id, or the content
+  of a change listed under "What the connector can change") and, after you
   sign in, your Extenshi account id and email. It does not receive your wider
   conversation, memory or files, and it does not read your browser or your
   installed extensions. Retention and processors are in the
