@@ -34,13 +34,14 @@ and it comes before any list of what you plan to do.
 `needsYou` is a list of questions, not of step ids. Each entry has `question`,
 `about`, `options` with their current values, `current`, `answer` (where it is
 answered: `map`, `dojo` or `chat`), `link` to the step while the map runs,
-`url` for a Dojo decision, `record` (how you record the answer) and `blocks`
-(the steps it holds up). For each entry, say:
+`url` for a decision in the bound Dojo project, `proposed` (a value already
+proposed for it), `record` (how you record the answer) and `blocks` (the steps
+it holds up). For each entry, say:
 
 1. what it decides and what waits for it (`blocks`);
 2. the options, with what is set now and where that comes from;
 3. your recommendation and the reason, in one or two sentences;
-4. where the author answers: the link to the step, or the Dojo page.
+4. where the author answers: the link to the step on the map.
 
 Ask one decision at a time, through your client's question tool where it has
 one (buttons, `AskUserQuestion`), otherwise as a plain question that ends the
@@ -195,8 +196,9 @@ and `nodes`. A step of a module that nobody settled (neither the code nor a
 Dojo decision asks for it, and the author has not confirmed the modules) is
 `locked` with `waitsOn: "features"` and never appears in `next`. `steps` has the shape `get_build_map` answers
 with: each step this extension needs, its `status`, the task it is on
-(`current`, with `byAuthor` when that task is the author's) and `decide` when
-the owner answers it in Dojo. `nodes` has every step in full, with the fact
+(`current`, with `byAuthor` when that task is the author's), `proposed` (an
+answer waiting for the author to save), `answer` (what the author gave) and
+`decide` when the bound Dojo project has a decision for it too. `nodes` has every step in full, with the fact
 behind a done one. Without a running map, `get_build_map` reads the project
 files itself and says `facts: "files"`. Each done step has a
 `basis`: `project` or `dojo` (a file or a Dojo record proves it, with `where`),
@@ -320,20 +322,31 @@ reach one:
    `iconConcepts`, `listing`, `screenshots`, `pricing`, `declarations`,
    `feedbackForm`, `cwsAccount`, `amoAccount`, `edgeAccount`, `cws`, `amo`,
    `edge`.
-4. Decisions the server checks (store submission, data declarations, pricing
-   and other money matters) go through Dojo: owner decisions and owner
-   approvals. Give the author the Dojo link and never decide these yourself.
-   In a project bound to Dojo, `browsers` and `pricing` carry `decide` with the
-   decisions page: send the author there instead of asking again. Once you
-   propose a value (`propose_decision`), the step waits on the owner's answer,
-   and a paid model switches the payment steps on.
+4. The idea, the surfaces, the stores and the pricing model (`idea`,
+   `surfaces`, `browsers`, `pricing`) are answered on the map, in a project
+   bound to Dojo too: the step has the field, the checkboxes or the options,
+   and the author saves the answer there. When the author told you the answer
+   in the chat, or you have a recommendation, propose it with
+   `map answer <step> <value>` (`report_build_step` with `answer`): a text for
+   `idea`, comma-separated ids for `surfaces` and `browsers`, `one-time`,
+   `subscription` or `both` for `pricing`. The step shows the value filled in
+   and counts once the author saves it; never treat a proposal as the answer.
+   Then wait: `map wait <step> --since <cursor>` returns what the author did on
+   the map (`get_build_map` with `since` and `waitSeconds` on the local MCP
+   server), and you carry on from `next`. `map wait` without a step returns
+   anything the author did on any step. In a bound project those steps also
+   carry `decide`: release readiness in Dojo reads the owner's decision there,
+   so propose it there as well (`propose_decision`). Submitting to a store
+   through Extenshi still needs the owner's approval in Dojo; never approve
+   it yourself.
 5. Without the map, send the preview links in chat and take the answer there.
    Record what the author said with `map choose <step> <variant number>` or
    `map choose <step> --redo "<their words>"` (`report_build_step` with
    `choice` or `redo`). Never pick for the author.
-6. Store accounts (`cwsAccount`, `amoAccount`, `edgeAccount`), creating the
-   feedback form in Dojo and settling the modules (`features`) happen outside
-   extenshi, and nothing in the project proves them. The author marks them on
+6. Store accounts (`cwsAccount`, `amoAccount`, `edgeAccount`), confirming the
+   data declarations you prepared (`declarations`), creating the feedback form
+   in Dojo and settling the modules (`features`) are the author's, and nothing
+   in the project proves them. The author marks them on
    the map with **Mark as done** (and can undo it); never mark them yourself.
    For the modules, go through the choice with the author first and switch what
    they decide on the map with `map set features.<module> on|off` (see
