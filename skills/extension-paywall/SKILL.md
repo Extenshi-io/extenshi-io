@@ -40,10 +40,10 @@ the onboarding URL for the author to complete in their browser.
 To change an existing offer's text, send `upsert_pay_offer` with `appId`, `sku`
 and only the new `title` or `description`: omitted fields keep their stored
 values, so the price, features and paywall order stay as they are.
-An existing application can be linked to the project using `link_pay_app`. Existing API keys need explicit Pay grants in dojo.
+An existing application can be linked to the project using `link_pay_app`. A connection made before Pay was added needs the Pay permissions granted in Dojo.
 
-- If the project was scaffolded through extenshi, look for
-  `PAY_PUBLISHABLE_KEY` in `extenshi.config.js` first.
+- The publishable key comes from `get_pay_seller` on the connector, or from
+  the developer. It is public and is the only key the extension holds.
 - If there is no key yet, build everything in **mock mode** (below) and leave
   a clear `TODO` where the key goes. Do not invent a key and do not ask for
   any Stripe secret — the extension never holds one.

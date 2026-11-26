@@ -166,8 +166,8 @@ whole history.
   version and is newer than the sources. The files never settle the modules
   (`features`): the author switches and confirms them (see "Modules" below);
 - the Dojo project the directory is bound to (`extenshi project bind`): owner
-  decisions (`propose_decision`, then the owner decides in Dojo) and, with an
-  API key, release evidence and readiness. Commands run with `--evidence`
+  decisions (`propose_decision`, then the owner decides in Dojo) and, once the
+  author is signed in, release evidence and readiness. Commands run with `--evidence`
   (`scan`, `review-risk`, `generate-listing`, `test smoke`, `screenshots`) and
   `extenshi release prepare` feed it;
 - records two commands leave in `.extenshi/` where a map lives: `extenshi scan`
@@ -280,11 +280,10 @@ to), or skip a step. In `map status --json`:
 author is signed in and what is left per pool (`scan`, `read`, `icon`). Every
 account gets free credits once.
 
-- Not signed in, or a command says there is no API key: do not ask the author
-  to paste a key. Link the step, for example
+- Not signed in, or a command says the author is not signed in: do not ask
+  the author to paste anything. Link the step, for example
   `http://127.0.0.1:<port>/#node=scan`: "Sign in on the map for the free
-  scans." The map runs the browser sign-in and saves the key where every
-  extenshi command finds it.
+  scans." The author signs in there, in the browser.
 - Run scans from the project directory. `extenshi scan` then leaves
   `.extenshi/scan.json`, and the map counts the scan while that package is
   unchanged; rebuild, and the scan step opens again.
@@ -360,10 +359,10 @@ skips the step on the map.
 
 - The map server listens only on `127.0.0.1` and reads the project's files
   locally; nothing from them is uploaded.
-- With a project bound through `extenshi project bind` and an API key, the
-  server reads that project's decisions and release readiness from the Extenshi
-  API (`bff.extenshi.io`) once a minute while it runs. With an API key it also
-  reads the author's credit balance there, and signing in from the map talks to
+- With a project bound through `extenshi project bind` and the author signed
+  in, the server reads that project's decisions and release readiness from the
+  Extenshi API (`bff.extenshi.io`) once a minute while it runs. It also reads
+  the author's credit balance there, and signing in from the map talks to
   the same host. `map status --no-live` skips both reads.
 - `npx` downloads the CLI from the npm registry. The CLI's optional usage
   reports are described in the plugin README.
